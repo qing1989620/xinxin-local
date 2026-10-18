@@ -530,6 +530,52 @@ def test_progress_survives_replay_but_is_not_saved_as_the_final_answer(
         assert "最终答复" in run["error"]
 
 
+def test_fabric_rerank_runs_before_the_agent_loop(client, monkeypatch):
+    client.put("/api/v1/settings", json={"model_api_key": "offline-rerank-key"})
+    router = client.app.state.router
+    monkeypatch.setattr(router, "rerank_enabled", True)
+    monkeypatch.setattr(router, "agent_mode", "fabric")
+
+    def provider(request):
+        body = request.content.decode("utf-8", errors="ignore")
+        if "候选技能卡" in body or '"decisions"' in body:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"message": {"content": '{"skills": [], "decisions": []}'}}
+                    ]
+                },
+            )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=frames(content="直接回答。").encode(),
+        )
+
+    client.app.state.manager.model_transport = httpx.MockTransport(provider)
+    response = client.post(
+        "/api/v1/runs",
+        json={
+            "task": "今天天气怎么样",
+            "permission": "read",
+            "max_calls": 3,
+            "request_key": "fabric-rerank-case",
+        },
+    )
+    run = wait_run(client, response.json()["id"])
+    assert run["status"] == "completed"
+    skills = [
+        event["data"]
+        for event in client.app.state.store.events(run["id"])
+        if event["kind"] == "skills"
+    ][0]
+    assert skills["components"]["llm_rerank"] is True
+    assert skills["selection"]["method"] == "task_utility"
+    assert skills["selection"]["abstained"] is True
+    assert skills["decision"] == "direct"
+
+
 @pytest.mark.parametrize("stage", ["tool-fragment", "direct-answer", "after-tool"])
 def test_disconnected_model_drafts_remain_progress_not_final_history(client, stage):
     client.put("/api/v1/settings", json={"model_api_key": "offline-disconnect-key"})

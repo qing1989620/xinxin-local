@@ -846,7 +846,39 @@ class TaskManager:
 
                     events.add_before_tool_call_handler(before)
                     events.add_after_tool_call_handler(after)
-                    matches = self.router.search(run["task"])
+                    matches = self.router.search(
+                        run["task"], mode=self.router.agent_mode
+                    )
+                    if (
+                        self.router.agent_mode == "fabric"
+                        and self.router.rerank_enabled
+                        and key
+                        and run["max_calls"] >= 2
+                    ):
+                        # Fabric 的 LLM 重排会多花一次模型调用；预算只够一次时
+                        # 跳过并按检索顺序执行，不把本轮预算吃光。
+                        try:
+                            messages = self.router.rerank_messages(run["task"], matches)
+                            if messages:
+                                reply = await gateway.apredict(
+                                    messages, stream=False, temperature=0.0
+                                )
+                                output = self.router.parse_rerank_output(
+                                    reply.get("content", "")
+                                )
+                                if output is None:
+                                    raise ValueError("重排输出不是合法 JSON")
+                                matches = self.router.apply_rerank(matches, output, k=4)
+                        except Exception as exc:  # noqa: BLE001 - 路由降级不应中断任务
+                            matches["components"]["llm_rerank"] = False
+                            matches["degraded"] = True
+                            matches["degraded_reason"] = (
+                                "llm_rerank skipped: " + type(exc).__name__
+                            )
+                    elif self.router.agent_mode == "fabric":
+                        matches["degraded_reason"] = (
+                            "llm_rerank skipped: no model key or max_calls < 2"
+                        )
                     self.store.event(ident, "skills", matches)
                     memories = self.store.all(
                         "SELECT content FROM memories ORDER BY created DESC LIMIT 20"

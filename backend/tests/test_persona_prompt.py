@@ -43,3 +43,42 @@ def test_short_prompt_keeps_full_skill_cards(tmp_path):
     prompt = build_system_prompt(_run(), matches, [], tmp_path)
     assert "scientific-plotting" in prompt
     assert '"query"' not in prompt
+
+
+def test_tool_evidence_survives_before_skill_compression(tmp_path):
+    # 16 candidates + long cards used to make the trimmer drop previous_work
+    # events (the evidence a resumed task depends on) before touching skills.
+    matches = {
+        "query": "继续核对",
+        "skills": [
+            {"id": f"skill-{i}", "description": "技能说明" * 600}
+            for i in range(10)
+        ],
+        "candidates": [
+            {"id": f"skill-{i}", "description": "候选卡" * 500} for i in range(16)
+        ],
+        "dependencies": [],
+    }
+    recovery = [
+        {
+            "run_id": "prev-run",
+            "task": "创建文件并核对内容",
+            "status": "failed",
+            "permission_then": "workspace",
+            "server_id_then": None,
+            "error": "预算用尽",
+            "events": [
+                {
+                    "seq": 7,
+                    "kind": "tool.started",
+                    "name": "write_file",
+                    "arguments": '{"path":"resume-marker.txt"}',
+                }
+            ],
+        }
+    ]
+    prompt = build_system_prompt(_run(), matches, [], tmp_path, recovery=recovery)
+    assert "resume-marker.txt" in prompt
+    assert "selected_ids" in prompt
+    # 候选审计数据不进提示
+    assert "候选卡" not in prompt

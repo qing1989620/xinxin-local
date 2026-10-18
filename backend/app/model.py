@@ -64,7 +64,7 @@ class ModelGateway:
         self.context_tokens = 0
         self.context_window_tokens = context_window_tokens
 
-    async def apredict(self, messages, tools=None, stream=False, **kwargs):
+    async def apredict(self, messages, tools=None, stream=False, temperature=None, **kwargs):
         if self.cancelled.is_set():
             raise RuntimeError("任务已取消")
         self.check_budget()
@@ -76,7 +76,7 @@ class ModelGateway:
             "messages": messages,
             "stream": stream,
             "max_tokens": min(16384, self.max_tokens - self.tokens),
-            "temperature": 0.5,
+            "temperature": 0.5 if temperature is None else max(0.0, min(1.0, float(temperature))),
             "thinking": {"type": "disabled"},
         }
         if tools:

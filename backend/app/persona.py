@@ -99,6 +99,10 @@ def build_system_prompt(
         "owner_memory": copy.deepcopy(memories),
     }
     context["candidate_skills"].pop("query", None)
+    # candidates / graph_added 是检索审计数据，模型只需要入选技能与顺序；
+    # 把它们塞进提示会挤掉前轮工具证据。
+    context["candidate_skills"].pop("candidates", None)
+    context["candidate_skills"].pop("graph_added", None)
 
     def render():
         return "\n\n".join(
@@ -115,18 +119,19 @@ def build_system_prompt(
         evidence = next((
             item for item in reversed(context["previous_work"]) if item["events"]
         ), None)
+        # 压缩顺序：记忆 -> 技能卡（保留 id）-> 前轮工具证据 -> 长文本摘录。
+        # 工具证据是续接任务的依据，必须比候选技能卡更晚被裁剪。
         if context["owner_memory"]:
             context["owner_memory"].pop()
-        elif evidence:
-            evidence["events"].pop(0)
-        elif context["candidate_skills"]:
+        elif context["candidate_skills"] and "selected_ids" not in context["candidate_skills"]:
             skills = context["candidate_skills"]
             # router.search() returns the picks under "skills"; keep their ids so
             # a compressed prompt still tells the model which skills were routed.
-            context["candidate_skills"] = (
-                {"selected_ids": [item["id"] for item in skills.get("skills", [])]}
-                if "selected_ids" not in skills else {}
-            )
+            context["candidate_skills"] = {
+                "selected_ids": [item["id"] for item in skills.get("skills", [])]
+            }
+        elif evidence:
+            evidence["events"].pop(0)
         elif any(len(item[key]) > 128 for item in context["previous_work"] for key in ("task", "error")):
             for item in context["previous_work"]:
                 for key in ("task", "error"):
