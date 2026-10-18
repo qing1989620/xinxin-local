@@ -102,13 +102,23 @@ if(-not(Test-Path -LiteralPath $pythonPath)){
   try{python -m venv .venv;if($LASTEXITCODE -ne 0){throw 'Python 3.12+ is required'};& $pythonPath -m pip install -r requirements.lock;if($LASTEXITCODE -ne 0){throw 'Backend dependency installation failed'}}finally{Pop-Location}
 }
 
-# 2. 前端依赖与生产构建（引用资产缺失时自动重建，保持 dist 为中性构建）
+# 2. 前端依赖与生产构建（缺资产或源码比构建产物新时自动重建）
 function Test-FrontendBuild{
   $index=Join-Path $frontendPath 'dist/index.html'
   if(-not(Test-Path -LiteralPath $index)){return $false}
   $html=Get-Content -LiteralPath $index -Raw
   foreach($m in [regex]::Matches($html,'(?:src|href)="(/assets/[^"]+)"')){
     if(-not(Test-Path -LiteralPath ($frontendPath + '\dist' + $m.Groups[1].Value))){return $false}
+  }
+  # 只看 dist 是否存在会漏掉「改了源码但没重建」：产物比源文件旧就必须重建
+  $built=(Get-Item -LiteralPath $index).LastWriteTimeUtc
+  $sources=@(Get-ChildItem -LiteralPath (Join-Path $frontendPath 'src') -Recurse -File -ErrorAction SilentlyContinue)
+  foreach($name in @('vite.config.ts','package.json','index.html')){
+    $item=Get-Item -LiteralPath (Join-Path $frontendPath $name) -ErrorAction SilentlyContinue
+    if($item){$sources+=$item}
+  }
+  foreach($item in $sources){
+    if($item.LastWriteTimeUtc -gt $built.AddSeconds(2)){return $false}
   }
   return $true
 }

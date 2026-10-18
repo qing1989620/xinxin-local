@@ -152,6 +152,7 @@ if isinstance(conversation, dict) and conversation.get("id"):
     call("DELETE", f"/api/v1/conversations/{cid}", headers=headers)
 
 call("GET", "/health")
+call("GET", "/openapi.json")
 
 print()
 print(f"failures: {len(failures)}")
