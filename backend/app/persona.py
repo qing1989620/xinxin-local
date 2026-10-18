@@ -121,8 +121,10 @@ def build_system_prompt(
             evidence["events"].pop(0)
         elif context["candidate_skills"]:
             skills = context["candidate_skills"]
+            # router.search() returns the picks under "skills"; keep their ids so
+            # a compressed prompt still tells the model which skills were routed.
             context["candidate_skills"] = (
-                {"selected_ids": [item["id"] for item in skills.get("selected", [])]}
+                {"selected_ids": [item["id"] for item in skills.get("skills", [])]}
                 if "selected_ids" not in skills else {}
             )
         elif any(len(item[key]) > 128 for item in context["previous_work"] for key in ("task", "error")):
