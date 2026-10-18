@@ -1,0 +1,1 @@
+"""Xinxin private platform."""

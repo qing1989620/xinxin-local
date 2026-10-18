@@ -1,0 +1,830 @@
+.lunar-explorer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(310px, 1fr);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.atlas-stage {
+  min-width: 0;
+  background: #181c1c;
+  color: #e7e8e1;
+  display: flex;
+  flex-direction: column;
+}
+.atlas-stage-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 27px 28px 0;
+  position: relative;
+  z-index: 1;
+}
+.atlas-kicker {
+  color: #aeb8b1;
+  font-size: 8px;
+  letter-spacing: 1.8px;
+}
+.atlas-stage-heading h2 {
+  font-size: 19px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  margin: 12px 0 0;
+}
+.atlas-live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+  color: #c5cbc6;
+  border: 1px solid #ffffff1b;
+  border-radius: 20px;
+  padding: 6px 9px;
+  font-size: 9px;
+  margin-top: 1px;
+}
+.atlas-live i,
+.atlas-model-status > i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #c2d2c5;
+}
+.atlas-live .atlas-running {
+  font-style: normal;
+  color: #ffe0a0;
+  border-left: 1px solid #ffffff1b;
+  padding-left: 7px;
+  margin-left: 1px;
+}
+.atlas-viewport {
+  position: relative;
+  aspect-ratio: 6/5;
+  width: 100%;
+  flex: none;
+  cursor: grab;
+  touch-action: pan-y;
+  outline-offset: -5px;
+  min-height: 0;
+  isolation: isolate;
+  overflow: hidden;
+}
+.atlas-viewport:active {
+  cursor: grabbing;
+}
+.atlas-viewport:focus-visible {
+  outline: 2px solid #d7e3d9;
+}
+.atlas-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.38;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 13% 27%, #cdd6ca 0 0.7px, transparent 1px),
+    radial-gradient(circle at 76% 16%, #cdd6ca 0 0.6px, transparent 0.9px),
+    radial-gradient(circle at 21% 73%, #cdd6ca 0 0.7px, transparent 1px),
+    radial-gradient(circle at 90% 64%, #cdd6ca 0 0.6px, transparent 0.9px);
+  background-size:
+    177px 183px,
+    203px 223px,
+    271px 193px,
+    227px 281px;
+}
+.atlas-particles,
+.atlas-orbits {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.atlas-orbit-line {
+  fill: none;
+  stroke: #aab9ad;
+  stroke-width: 0.6;
+  opacity: 0.23;
+  stroke-dasharray: 2 8;
+}
+.atlas-guide-ring {
+  fill: none;
+  stroke: #b2c1b5;
+  stroke-width: 0.5;
+  opacity: 0.16;
+}
+.atlas-crosshair {
+  fill: none;
+  stroke: #c4c8bc;
+  stroke-width: 0.6;
+  opacity: 0.4;
+}
+.atlas-far-node {
+  fill: #bdc4b6;
+  opacity: 0.25;
+}
+.atlas-edge {
+  fill: none;
+  stroke: #dde3d4;
+  stroke-width: 0.8;
+  opacity: 0.12;
+  stroke-dasharray: 3 4;
+}
+.atlas-edge.selected {
+  stroke: #e3e8dc;
+  stroke-width: 1.2;
+  stroke-dasharray: none;
+  opacity: 0.85;
+}
+.atlas-node {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: transparent;
+  z-index: 2;
+  touch-action: none;
+}
+.atlas-node-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e1e4db;
+  box-shadow: 0 0 0 4px #1d242246;
+  transition:
+    box-shadow 0.2s,
+    background 0.2s;
+  pointer-events: none;
+}
+.atlas-node.selected .atlas-node-dot {
+  background: #f0f4e8;
+  box-shadow:
+    0 0 0 5px #fff2,
+    0 0 0 6px #e5eadd7a,
+    0 0 25px #e0e9d84a;
+}
+.atlas-node:hover .atlas-node-dot,
+.atlas-node:focus-visible .atlas-node-dot {
+  box-shadow: 0 0 0 7px #fff3;
+}
+.atlas-node:focus-visible {
+  outline: 1px solid #f0f4e8;
+  outline-offset: -3px;
+}
+.atlas-node-label {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  left: 32px;
+  top: 11px;
+  white-space: nowrap;
+  color: #f1f2e9;
+  background: #141b19c9;
+  backdrop-filter: blur(6px);
+  border: 1px solid #e5eadb1f;
+  font-size: 10px;
+  line-height: 1.3;
+  padding: 7px 9px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.atlas-node.label-left .atlas-node-label {
+  left: auto;
+  right: 32px;
+}
+.atlas-node-label small {
+  color: #bac2b8;
+  font-size: 8px;
+  border-left: 1px solid #ffffff30;
+  padding-left: 7px;
+}
+.atlas-node.selected .atlas-node-label {
+  border-color: #f2f5e24d;
+}
+.atlas-scale {
+  position: absolute;
+  bottom: 9px;
+  left: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font:
+    8px Consolas,
+    monospace;
+  color: #a4afa6;
+  pointer-events: none;
+}
+.atlas-scale i {
+  width: 30px;
+  height: 5px;
+  border: 1px solid #a6b4a9;
+  border-top: 0;
+}
+.atlas-coordinate {
+  position: absolute;
+  right: 28px;
+  bottom: 0;
+  font:
+    8px Consolas,
+    monospace;
+  color: #a4afa6;
+  pointer-events: none;
+}
+.atlas-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 23px 16px;
+  gap: 10px;
+}
+.atlas-controls > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.atlas-controls button {
+  width: 35px;
+  height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ffffff17;
+  border-radius: 5px;
+  color: #b7c2b9;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+.atlas-controls button:hover,
+.atlas-controls button.active {
+  color: #f1f3e9;
+  background: #ffffff12;
+}
+.atlas-controls button:focus-visible {
+  outline: 2px solid #dbe7db;
+  outline-offset: 3px;
+}
+.atlas-controls button:disabled {
+  opacity: 0.35;
+}
+.atlas-control-divider {
+  height: 16px;
+  width: 1px;
+  background: #ffffff1a;
+  margin: 0 7px;
+}
+.atlas-stage-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #aab6ad;
+  border-top: 1px solid #ffffff15;
+  font-size: 9px;
+  padding: 15px 28px;
+  margin-top: auto;
+}
+.atlas-stage-footer > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.atlas-directory {
+  min-width: 0;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+}
+.atlas-directory > header .eyebrow {
+  font-size: 8px;
+  letter-spacing: 1.3px;
+  color: var(--muted);
+}
+.atlas-directory > header h2 {
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.5px;
+  margin: 16px 0 10px;
+}
+.atlas-directory > header p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 0;
+}
+.atlas-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 23px 0 9px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+  color: var(--muted);
+}
+.atlas-search input {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+  width: 100%;
+}
+.atlas-search input:focus {
+  box-shadow: none;
+}
+.atlas-search:focus-within {
+  border-color: var(--accent);
+}
+.atlas-search kbd {
+  background: var(--paper);
+  font:
+    9px Consolas,
+    monospace;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.atlas-directory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 228px;
+  overflow: auto;
+  margin: 0 -5px 20px;
+  scrollbar-width: thin;
+}
+.atlas-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+.atlas-filters button {
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 10px;
+  border-radius: 4px;
+  color: var(--muted);
+}
+.atlas-filters button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.atlas-directory-list > button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 9px 10px;
+  text-align: left;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.atlas-directory-list > button:hover {
+  background: var(--paper);
+}
+.atlas-directory-list > button.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.atlas-directory-list > button strong {
+  font-weight: 500;
+  flex: 1;
+}
+.atlas-directory-list > button small {
+  font-size: 9px;
+}
+.atlas-directory-list > button > svg {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.atlas-directory-list > button.selected > svg,
+.atlas-directory-list > button:hover > svg {
+  opacity: 1;
+}
+.atlas-list-dot {
+  width: 4px;
+  height: 4px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
+.atlas-directory-list > button.selected .atlas-list-dot {
+  background: currentColor;
+}
+.atlas-no-results {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 18px 12px;
+}
+.atlas-inspector {
+  border-top: 1px solid var(--line);
+  padding-top: 17px;
+  margin-top: auto;
+}
+.atlas-selection-count {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.atlas-selection-count > span {
+  font:
+    12px Consolas,
+    monospace;
+  color: var(--accent);
+}
+.atlas-selection-count i {
+  font-size: 9px;
+  font-style: normal;
+  color: var(--muted);
+}
+.atlas-selection-count > div {
+  display: flex;
+  gap: 4px;
+}
+.atlas-selection-count button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+}
+.atlas-domain {
+  color: var(--muted);
+  font-size: 9px;
+}
+.atlas-inspector h3 {
+  font-size: 21px;
+  font-weight: 500;
+  margin: 10px 0;
+}
+.atlas-inspector > p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.9;
+  margin: 0 0 15px;
+  min-height: 42px;
+}
+.atlas-dependency {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  color: var(--accent);
+  font-size: 10px;
+  margin-bottom: 12px;
+}
+.atlas-inspector-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.atlas-inspector-actions .button {
+  font-size: 11px;
+  padding: 11px 13px;
+}
+.atlas-inspector-actions .text-button {
+  font-size: 10px;
+}
+.atlas-model-status {
+  border-top: 1px solid var(--line);
+  margin-top: 22px;
+  padding-top: 15px;
+  font-size: 9px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.5;
+}
+.atlas-model-status > i {
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.atlas-model-status > span {
+  margin-left: auto;
+  font:
+    8px Consolas,
+    monospace;
+}
+@media (min-width: 1500px) {
+  .atlas-viewport {
+    max-height: 580px;
+  }
+}
+@media (max-width: 1100px) {
+  .lunar-explorer {
+    grid-template-columns: minmax(0, 1.35fr) minmax(285px, 1fr);
+  }
+  .atlas-stage-heading {
+    padding: 23px 21px 0;
+  }
+  .atlas-stage-heading h2 {
+    font-size: 16px;
+  }
+  .atlas-directory {
+    padding: 24px 22px;
+  }
+  .atlas-directory > header h2 {
+    font-size: 19px;
+  }
+  .atlas-stage-footer {
+    padding: 14px 20px;
+    font-size: 8px;
+  }
+}
+@media (max-width: 950px) {
+  .lunar-explorer {
+    grid-template-columns: 1fr;
+  }
+  .atlas-viewport {
+    flex: none;
+    max-height: 500px;
+    min-height: 0;
+  }
+  .atlas-directory {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 28px;
+  }
+  .atlas-directory > header {
+    grid-column: 1/-1;
+  }
+  .atlas-search {
+    grid-column: 1;
+  }
+  .atlas-directory-list {
+    grid-column: 1;
+    grid-row: 4;
+    max-height: 260px;
+  }
+  .atlas-inspector {
+    grid-column: 2;
+    grid-row: 2/5;
+    margin-top: 23px;
+  }
+  .atlas-model-status {
+    grid-column: 1/-1;
+    margin-top: 8px;
+  }
+  .atlas-filters {
+    grid-column: 1;
+  }
+}
+@media (max-width: 760px) {
+  .lunar-explorer {
+    border-radius: 9px;
+  }
+  .atlas-stage-heading {
+    padding: 22px 20px 0;
+    gap: 10px;
+  }
+  .atlas-kicker {
+    font-size: 7px;
+    letter-spacing: 1.3px;
+  }
+  .atlas-stage-heading h2 {
+    font-size: 17px;
+    margin-top: 13px;
+  }
+  .atlas-live {
+    font-size: 8px;
+    padding: 5px 7px;
+  }
+  .atlas-viewport {
+    margin-top: 8px;
+  }
+  .atlas-node-label {
+    font-size: 9px;
+    padding: 6px;
+    gap: 0;
+    left: 29px;
+  }
+  .atlas-node.label-left .atlas-node-label {
+    right: 29px;
+  }
+  .atlas-node-label small {
+    display: none;
+  }
+  .atlas-controls {
+    padding: 10px 15px 14px;
+  }
+  .atlas-controls button {
+    width: 38px;
+    height: 38px;
+  }
+  .atlas-stage-footer {
+    padding: 13px 19px;
+  }
+  .atlas-stage-footer > span:last-child {
+    font-size: 8px;
+  }
+  .atlas-directory {
+    display: flex;
+    padding: 25px 20px 20px;
+  }
+  .atlas-directory > header h2 {
+    font-size: 21px;
+  }
+  .atlas-directory-list {
+    max-height: 188px;
+    margin-bottom: 21px;
+  }
+  .atlas-directory-list > button {
+    min-height: 44px;
+  }
+  .atlas-inspector {
+    margin-top: 0;
+  }
+  .atlas-selection-count {
+    margin-bottom: 14px;
+  }
+  .atlas-selection-count button {
+    width: 34px;
+    height: 34px;
+  }
+  .atlas-inspector-actions .button {
+    min-height: 44px;
+  }
+  .atlas-model-status {
+    margin-top: 23px;
+  }
+  .atlas-scale {
+    left: 20px;
+  }
+  .atlas-coordinate {
+    right: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lunar-explorer *,
+  .lunar-explorer *::before,
+  .lunar-explorer *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------
+   能力星球 canvas 化后的新增样式（关系徽标 / 代际 / 护照 / 资源清单）
+   ------------------------------------------------------------------ */
+.atlas-filters button span {
+  margin-left: 5px;
+  font-size: 8px;
+  opacity: 0.65;
+}
+.atlas-gen {
+  font-style: normal;
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 2px;
+}
+.atlas-relation-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0 6px;
+}
+.atlas-relation-chip {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.atlas-relation-chip.depend_on {
+  color: #3f9d7c;
+  border-color: #3f9d7c55;
+}
+.atlas-relation-chip.compose_with,
+.atlas-relation-chip.similar_to {
+  color: #4d88b8;
+  border-color: #4d88b855;
+}
+.atlas-cap-note {
+  font-size: 10px;
+  color: var(--muted);
+  padding: 10px 12px;
+  line-height: 1.7;
+}
+.atlas-dependency {
+  margin-top: 4px;
+}
+/* 能力库：代际筛选 + 分段加载 */
+.skill-generations {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+.skill-generations button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  color: var(--muted);
+  background: var(--surface);
+}
+.skill-generations button span {
+  font-size: 9px;
+  opacity: 0.7;
+}
+.skill-generations button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.library-more {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 20px;
+}
+/* 技能护照详情 */
+.skill-passport {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  background: var(--paper);
+}
+.skill-passport h4 {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+.skill-passport > div + div {
+  margin-top: 12px;
+}
+.skill-passport p,
+.skill-passport li {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin: 0;
+}
+.skill-passport ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.skill-passport-boundary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px !important;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  font-size: 11px !important;
+}
+.skill-resource-list {
+  margin-top: 14px;
+}
+.skill-resource-list h4 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.skill-resource-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 5px;
+  color: var(--muted);
+}
+.skill-resource-list button:hover {
+  background: var(--paper);
+  color: var(--accent);
+}
+.skill-resource-list small {
+  font-size: 9px;
+  opacity: 0.7;
+}

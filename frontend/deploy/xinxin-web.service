@@ -1,0 +1,38 @@
+[Unit]
+Description=Xinxin HTTPS web client and API gateway
+After=network-online.target xinxin-backend.service
+Wants=network-online.target xinxin-backend.service
+StartLimitIntervalSec=120
+StartLimitBurst=6
+
+[Service]
+Type=notify
+User=xinxin-web
+Group=xinxin-web
+EnvironmentFile=/etc/xinxin/web.env
+Environment=XDG_DATA_HOME=/var/lib/xinxin-web
+Environment=XDG_CONFIG_HOME=/var/lib/xinxin-web/config
+ExecStart=/opt/xinxin/runtime/caddy run --config /etc/xinxin/Caddyfile
+ExecReload=/opt/xinxin/runtime/caddy reload --config /etc/xinxin/Caddyfile --force
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+UMask=0077
+StateDirectory=xinxin-web
+StateDirectoryMode=0700
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+CPUQuota=40%
+MemoryMax=256M
+TasksMax=128
+LimitNOFILE=8192
+LogNamespace=xinxin
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=300
+
+[Install]
+WantedBy=multi-user.target

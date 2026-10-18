@@ -1,0 +1,17 @@
+"""Business demonstration skill with explicit data lineage and measurable outputs."""
+RAW = [dict(name='business-metrics-audit', description='经营月报与业务指标核验：清理订单数据，按月汇总收入、成本、毛利率，生成可追溯图表与管理层结论。',
+    domain='业务与运营', tags=['经营分析','收入','毛利率','月报','数据审计','图表'],
+    capability='从订单明细生成可复核的月度经营报告，显式区分模拟数据、业务事实与推测。',
+    inputs=['带 order_id、month、revenue、cost 的订单明细；金额单位与缺失处理规则'],
+    outputs=['clean.csv','monthly_summary.csv','figure.svg','report.md'],
+    use_when=['管理层需要经营表现、风险与下一步行动','验证数据清洗和跨步骤产物传递'],
+    steps=['按 order_id 去重并输出删除记录；收入或成本缺失的订单剔除并说明数量。',
+           '清洗后只读取 clean.csv，不复制原始数据重算；按 month 汇总收入、成本与订单数。',
+           '毛利 = 总收入 - 总成本；毛利率 = 毛利 / 总收入，不能平均订单毛利率。',
+           '核对月度汇总与清洗明细总额一致，浮点比较使用绝对容差 1e-8。',
+           '从 monthly_summary.csv 生成趋势图与管理层报告，标注模拟数据、单位和数据质量风险。'],
+    pitfalls=['对重复订单重复计数','收入缺失用 0 冒充真实收入','平均单笔毛利率造成加权错误',
+              '验证步骤重新硬编码原始数据使血缘失效','演示数据不得解释为公司实际经营情况'],
+    verification=['清洗剔除的重复与缺失订单数量有明确记录','汇总字段包含 month,revenue,cost,gross_profit,gross_margin,orders',
+                  '毛利及毛利率与真实 CSV 数值一致','图表和报告明确标注模拟数据'],
+    relations=[('compose_with','data-cleaning'),('compose_with','scientific-visualization')])]

@@ -1,0 +1,32 @@
+{
+	admin 127.0.0.1:2019
+}
+
+# Tailscale Serve terminates HTTPS; this gateway accepts loopback traffic only.
+http://:8088 {
+	bind 127.0.0.1
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+	@api path /api/* /health
+	handle @api {
+		request_body {
+			max_size 67371008
+		}
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+		}
+		header Cache-Control "no-store"
+	}
+	handle {
+		root * /opt/xinxin/frontend
+		@entry path / /index.html /sw.js /manifest.webmanifest /registerSW.js
+		header @entry Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

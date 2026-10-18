@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily private backup for Xinxin
+
+[Timer]
+OnCalendar=*-*-* 04:20:00 Asia/Shanghai
+RandomizedDelaySec=15m
+Persistent=true
+Unit=xinxin-backup.service
+
+[Install]
+WantedBy=timers.target

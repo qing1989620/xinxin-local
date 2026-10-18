@@ -1,0 +1,43 @@
+{
+  "provider": "DeepSeek official API",
+  "data": "isolated synthetic fixtures; no raw reference chat",
+  "cases": [
+    {
+      "name": "casual_tone",
+      "status": "completed",
+      "tools": [],
+      "reply": "哈哈哈 可以呀，这个报错终于被你收拾掉了\n\n看来是找对地方了嘛，挺厉害的",
+      "elapsed_seconds": 2.1,
+      "passed": true
+    },
+    {
+      "name": "birthday",
+      "status": "completed",
+      "tools": [],
+      "reply": "2007年11月9日",
+      "elapsed_seconds": 2.11,
+      "passed": true
+    },
+    {
+      "name": "curated_skill",
+      "status": "completed",
+      "tools": [
+        "load_skill",
+        "read_skill_resource"
+      ],
+      "reply": "我先加载技能，然后读参考文件。读完了。技能正文和参考文件都明确写了这两条，下面按参考内容说。\n\n**1. `FROM node:latest` 的问题**\n\n参考里没有单独讲 `:latest`，但相关依据很明确：\n\n- 技能正文的 BASE IMAGE 清单第一条就是“Use specific tags, never :latest in production”，并建议 CI 里用 `image@sha256:...` 固定摘要，保证可复现。\n- 安全审计表里“Using :latest tag”标为 **High**，修法是固定到具体版本。\n- 体积表里 `node:20` 约 1000MB，标注“Never use in production”；`node:20-alpine` 约 130MB。也就是说，`node:latest` 不只是版本漂移，还默认落在完整版镜像上，体积和攻击面都大。\n\n实际后果：同一份 Dockerfile 今天和下周构建可能拿到不同 Node 版本，构建结果不可复现；大版本升级可能悄悄带进破坏性变更；镜像层缓存也会因为基础层变化整段失效。\n\n**2. 先 `COPY . .` 再装依赖的问题**\n\n参考在“Order Layers by Change Frequency”和 BUILD CACHE 部分都点了这条：\n\n- 正确顺序是 `COPY package.json package-lock.json ./` → `RUN npm ci` → `COPY . .` → `RUN npm run build`，按“最少变化优先”排列。\n- 明确写了“Avoid COPY . . before dependency installation”。\n\n原因：`COPY . .` 会把源码一起放进这一层，只要改任意一个源文件，这一层缓存就失效，后面的 `npm install` / `npm ci` 层跟着全部重跑，每次小改动都要重新装依赖。先只拷依赖清单，依赖没变就能命中缓存。\n\n另外两点补充：\n- 参考建议配合 `.dockerignore` 排除 `node_modules`、`.git`、`dist`、`.env` 等，否则 `COPY . .` 会把本地 `node_modules` 也塞进构建上下文和镜像。\n- 依赖安装建议用 `npm ci`（按 lock 文件装，可复现），并可用 `--mount=type=cache,target=/root/.cache` 之类做 BuildKit 缓存挂载。\n\n这轮是只读，我没执行任何命令，也没运行技能里的 `dockerfile_analyzer.py`，上面的结论都来自参考文本本身。",
+      "elapsed_seconds": 8.66,
+      "passed": true
+    },
+    {
+      "name": "phone_resource",
+      "status": "completed",
+      "tools": [
+        "read_document"
+      ],
+      "reply": "我先读一下附件。读到了呀，文件是 `phone-note.txt`。\n\n里面写的服务端口是 **8321**，原句是：\n\n> 服务端口：8321\n\n文件里还有一句“原文件不需要修改。”，我也没有改动它。",
+      "elapsed_seconds": 5.56,
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,1563 @@
+{
+  "version": 1,
+  "source_repository": "qing1989620/skillnet-demo",
+  "source_revision": "0af2de6a9c8b129e174e3442b67c5f7cb4324db9",
+  "adaptation": "Selected packages are unchanged reference data. Chinese summaries and base-tool relations are Xinxin adaptations; scripts are never auto-executed. Referenced third-party skills/services are not implicitly installed.",
+  "skills": [
+    {
+      "id": "gh-claude-docker-development-521176",
+      "name": "Docker 与 Compose",
+      "description": "优化 Dockerfile、多阶段构建、容器配置和镜像体积",
+      "domain": "运维",
+      "base_skill": "server-deployment",
+      "original_description": "Docker and container development agent skill and plugin for Dockerfile optimization, docker-compose orchestration, multi-stage builds, and container security hardening. Use when: user wants to optimize a Dockerfile, create or improve docker-compose configurations, implement multi-stage builds, audit container security, reduce image size, or follow container best practices. Covers build performance, layer caching, secret management, and production-ready container patterns.",
+      "repository": "alirezarezvani/claude-skills",
+      "revision": "19392f7a08264ed00486a251f5b2098321771f94",
+      "source_url": "https://github.com/alirezarezvani/claude-skills/blob/19392f7a08264ed00486a251f5b2098321771f94/engineering/docker-development/skills/docker-development/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/a3bf2a-LICENSE",
+          "bytes": 1072,
+          "sha256": "a20126646f93d32a8989c3cf4772d59194f405034f7babe7daebeac22b8ab151"
+        },
+        {
+          "path": "references/compose-patterns.md",
+          "bytes": 5877,
+          "sha256": "b149ed246dd56ac620779fbca707239cf26e764e58c800a29b5b0160449ad918"
+        },
+        {
+          "path": "references/dockerfile-best-practices.md",
+          "bytes": 5243,
+          "sha256": "401fd02e5a3186476eea5734da09252cc1bd364f460496cbdd136eeb3808876a"
+        },
+        {
+          "path": "scripts/compose_validator.py",
+          "bytes": 13506,
+          "sha256": "6360aec1e01681a081c2f9bdfec990616f4382d2f19e18d96fa0ac8796d0d89e"
+        },
+        {
+          "path": "scripts/dockerfile_analyzer.py",
+          "bytes": 13870,
+          "sha256": "dafb015d72ba08751da6e28d8dfb182989d3f4a0a8ab4f5e0a2df7e9093faf44"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 11876,
+          "sha256": "6471aa331d8a13d1b451dfcf5f1603b585d65b5fa70f99078604e778a7ab9f1c"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-linux-troubleshooting-459c59",
+      "name": "Linux 故障诊断",
+      "description": "排查 Linux 服务、进程、磁盘、网络和日志异常",
+      "domain": "运维",
+      "base_skill": "server-deployment",
+      "original_description": "Linux system troubleshooting workflow for diagnosing and resolving system issues, performance problems, and service failures.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/linux-troubleshooting/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 4402,
+          "sha256": "9f5e9cdd6b72827add86f98c45a80539cd5921eb4e83fff73fd266ca6b4940aa"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-bash-defensive-patterns-9f6117",
+      "name": "可靠 Shell 脚本",
+      "description": "编写有错误处理、输入校验和清理逻辑的 Bash 脚本",
+      "domain": "运维",
+      "base_skill": "coding-workspace",
+      "original_description": "Master defensive Bash programming techniques for production-grade scripts. Use when writing robust shell scripts, CI/CD pipelines, or system utilities requiring fault tolerance and safety.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/bash-defensive-patterns/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 11027,
+          "sha256": "f4ac917b6b1319fd36e8102fe14ea4fbdafd3b2615cbce89cd13e66be40a6ee0"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 2028,
+          "sha256": "ed2a096eb6f08d48ed0d7e9fa00ae7e9d4ab7b07f9575710453b527eb51177c8"
+        }
+      ]
+    },
+    {
+      "id": "gh-claude-git-worktree-manager-570eb8",
+      "name": "Git 工作树",
+      "description": "隔离分支工作区，检查工作树状态并保护未提交修改",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Run parallel feature work safely with Git worktrees. Standardizes branch isolation, port allocation, environment sync, and cleanup so each worktree behaves like an independent local app. Optimized for multi-agent workflows where each agent or terminal session owns one worktree. Use when running multiple feature branches simultaneously, isolating experimental work, or coordinating multi-agent development across the same repo.",
+      "repository": "alirezarezvani/claude-skills",
+      "revision": "19392f7a08264ed00486a251f5b2098321771f94",
+      "source_url": "https://github.com/alirezarezvani/claude-skills/blob/19392f7a08264ed00486a251f5b2098321771f94/engineering/skills/git-worktree-manager/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/a3bf2a-LICENSE",
+          "bytes": 1072,
+          "sha256": "a20126646f93d32a8989c3cf4772d59194f405034f7babe7daebeac22b8ab151"
+        },
+        {
+          "path": "README.md",
+          "bytes": 1291,
+          "sha256": "f50d318567114db46620ce72137a61e781e93b00cefa7e750380bd07aa8c6d49"
+        },
+        {
+          "path": "references/docker-compose-patterns.md",
+          "bytes": 1149,
+          "sha256": "c95986632c880e1aa6fffa91cbfc02ed53ce654c34f95178f44c9194512b4fc1"
+        },
+        {
+          "path": "references/port-allocation-strategy.md",
+          "bytes": 1030,
+          "sha256": "460a886d8e89f524f09faa2c44caae48dc476d3955577bd067a900b9a502224a"
+        },
+        {
+          "path": "scripts/worktree_cleanup.py",
+          "bytes": 6620,
+          "sha256": "4c1c39c0e626eb1b94b65c69ce5307a8ce0880c2bccc6e3ab5ab0c63bd9683a6"
+        },
+        {
+          "path": "scripts/worktree_manager.py",
+          "bytes": 8566,
+          "sha256": "735207b879f5a7b9cb2747de7af40d410c60723abd2fa0882c2af64590f4a438"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 7089,
+          "sha256": "c972e7576a18df4180b92f83af3d5e375814a8d6133267acce44ec89709f4dac"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-git-commit-message-15195e",
+      "name": "Git 提交说明",
+      "description": "根据实际差异组织清晰的提交信息",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Generates conventional-commit messages from staged changes: type prefix + English imperative subject (≤50 chars) + optional body explaining why. Use when the user asks to write, generate, or polish a git commit message.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/git-commit-message/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 4214,
+          "sha256": "c3718194816a4ceabe2cd1dd1260f7f9edf9724050487d448cc4714028b11c9f"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-git-pr-review-877d80",
+      "name": "代码变更审查",
+      "description": "检查代码差异、回归风险与可验证的修复建议",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Generate a concise and structured PR description from commit history with minimal token usage",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/git-pr-review/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 3815,
+          "sha256": "4dceae8d6903ff3b145243d2ab084bde58ee743bd08a9592f3bc7ee80542684c"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-debugging-strategies-6d5343",
+      "name": "系统化排错",
+      "description": "复现错误，收集证据，定位根因并验证修复",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Transform debugging from frustrating guesswork into systematic problem-solving with proven strategies, powerful tools, and methodical approaches.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/debugging-strategies/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 11944,
+          "sha256": "b74622e440ab2ac223d1eaec23ebf02d1ce54dcb8a8d3246b44f9130fda02b86"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1550,
+          "sha256": "49fb069639aed6df0e1d86629cfa291422cab2911daf9d4c6e29834e3fdac2a9"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-async-python-patterns-9967de",
+      "name": "Python 异步编程",
+      "description": "处理 asyncio 并发、取消、超时和异步资源生命周期",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Comprehensive guidance for implementing asynchronous Python applications using asyncio, concurrent programming patterns, and async/await for building high-performance, non-blocking systems.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/async-python-patterns/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 17935,
+          "sha256": "1a1ff5b00ab550b74d407261352ba4b97a643d3a2f24416937be964554431d13"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 2038,
+          "sha256": "ec109a485750ee96486cda7d7617db2b852b5705d85281cbe786793234cf089f"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-python-packaging-e26fed",
+      "name": "Python 工程打包",
+      "description": "整理 Python 包结构、依赖、构建与发布配置",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Comprehensive guide to creating, structuring, and distributing Python packages using modern packaging tools, pyproject.toml, and publishing to PyPI.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/python-packaging/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 18137,
+          "sha256": "1c779072ce77c2c0e278b2966329636eec18323c4428b14bb0f92a96c6adc061"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1638,
+          "sha256": "3bea7bcf375775fafa6fa48b448949cc2e8bfd2830ad084b508946f4dd635b92"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-python-performance-optimization-e4a70b",
+      "name": "Python 性能分析",
+      "description": "先测量性能瓶颈，再优化 Python 的运行时间与内存",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Profile and optimize Python code using cProfile, memory profilers, and performance best practices. Use when debugging slow Python code, optimizing bottlenecks, or improving application performance.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/python-performance-optimization/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 21162,
+          "sha256": "fe8d13f436730cc6140d8c81b14d3a5ea7276675fe5b60696e4ccb3b7d284bb7"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1743,
+          "sha256": "674f8695f32b129e8f314980974c5954620be787e6b44cf91b9da30dd7155fc6"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-typescript-advanced-types-83dbbf",
+      "name": "TypeScript 类型设计",
+      "description": "设计泛型、条件类型和可靠的 TypeScript 接口",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Comprehensive guidance for mastering TypeScript's advanced type system including generics, conditional types, mapped types, template literal types, and utility types for building robust, type-safe applications.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/typescript-advanced-types/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 16904,
+          "sha256": "faafac186fe915844a21c0c2c9447658e9e826e210a4cc1e76646c87d7fee0d9"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1724,
+          "sha256": "e6f14e5369ed6c12116accbf8aa2e3c9ba6d6232069eb691c4e6200fa8332ad1"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-react-best-practices-022aa4",
+      "name": "React 性能与结构",
+      "description": "改善 React 组件的数据流、渲染和交互性能",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Comprehensive performance optimization guide for React and Next.js applications, maintained by Vercel. Use when writing new React components or Next.js pages, implementing data fetching (client or server-side), or reviewing code for performance issues.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/react-best-practices/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "bytes": 60535,
+          "sha256": "9288e276adf1a8e907721874d5c1ca7ea62d57ca81750d5ac9d0d87f4e1c52f8"
+        },
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "metadata.json",
+          "bytes": 921,
+          "sha256": "a7d0263491b8f3b2a3439d07d1dfd3f28b74ddbb309ee28392d3ecc5bf411602"
+        },
+        {
+          "path": "README.md",
+          "bytes": 3360,
+          "sha256": "9eafb2123d3b8b2aef41fba0db2648a3f4f49996f8c7c8bb2c86263befd8b48a"
+        },
+        {
+          "path": "rules/_sections.md",
+          "bytes": 1554,
+          "sha256": "01c59969e4e867f0708c8f8ef9c6d87fab9a07d0586244f429ff84013db8a115"
+        },
+        {
+          "path": "rules/_template.md",
+          "bytes": 631,
+          "sha256": "99df2a3ea088c6c22de2484ddc7e964d0e9923846f44c63380343ecc64455442"
+        },
+        {
+          "path": "rules/advanced-event-handler-refs.md",
+          "bytes": 1478,
+          "sha256": "86e7c6f5df102a71a2bdbb4b5125a4ddbe1ffe889a95dae86acefadc2af35706"
+        },
+        {
+          "path": "rules/advanced-use-latest.md",
+          "bytes": 1191,
+          "sha256": "0b7d925c96c5f063095e627a37f13b2b2cfff22d8c126be6232edcea509fa062"
+        },
+        {
+          "path": "rules/async-api-routes.md",
+          "bytes": 1125,
+          "sha256": "523338540d73427dc14c0cbb19f2741ebccdf8b105a7b2c1b33d2905cf237a42"
+        },
+        {
+          "path": "rules/async-defer-await.md",
+          "bytes": 2028,
+          "sha256": "9b9166c7fc58b436cf039ac4e36dd0d3c4f762b61111f579d93cdb9f2ab2b6f9"
+        },
+        {
+          "path": "rules/async-dependencies.md",
+          "bytes": 942,
+          "sha256": "bfd348ab519f168447ffdbde7b70f40ecb99115c3cdae9292182ec8e28e1ab63"
+        },
+        {
+          "path": "rules/async-parallel.md",
+          "bytes": 654,
+          "sha256": "6d2f841896279e976dfcdc1ac89e70771ac188baadfd43c096b5706cb838b961"
+        },
+        {
+          "path": "rules/async-suspense-boundaries.md",
+          "bytes": 2510,
+          "sha256": "de05fedac2eb7ae563b887b5a424464ec3dfaf84e5b7797467ebe2a796ac8afc"
+        },
+        {
+          "path": "rules/bundle-barrel-imports.md",
+          "bytes": 2370,
+          "sha256": "9e61a5d579a8a7d55194c2e110414d7ee2d8da947ba187d444daa1e54d265f0f"
+        },
+        {
+          "path": "rules/bundle-conditional.md",
+          "bytes": 866,
+          "sha256": "081062850fa0cecb4c2e65a69971b48bf84ada6d26fb09404b98cb596fabaf90"
+        },
+        {
+          "path": "rules/bundle-defer-third-party.md",
+          "bytes": 920,
+          "sha256": "3719fb47b191e8db4fe22686ec88448ad5af9e6838585425abbe103d0b642e37"
+        },
+        {
+          "path": "rules/bundle-dynamic-imports.md",
+          "bytes": 791,
+          "sha256": "401817a7369f315fc5a68a1095742ff7d53d0461906880dc9d64a41495ee1986"
+        },
+        {
+          "path": "rules/bundle-preload.md",
+          "bytes": 1149,
+          "sha256": "d1f7cc28da7cd5ab249acd287edc5b761afcfb194e9cb62cd44c5f3543db2de2"
+        },
+        {
+          "path": "rules/client-event-listeners.md",
+          "bytes": 1969,
+          "sha256": "242a873349febc1ce685e85617994784dbab92c2eaa68aed7fed5a83e7680e93"
+        },
+        {
+          "path": "rules/client-swr-dedup.md",
+          "bytes": 1159,
+          "sha256": "644652c39c6cc00de8d1c77a7273612e868dc3f7edda30764164c12ec0f764a3"
+        },
+        {
+          "path": "rules/js-batch-dom-css.md",
+          "bytes": 1902,
+          "sha256": "b2dc21bef3b5dedef3323cff55cb3394d9e10e497de20a49e45b9f6904bb8649"
+        },
+        {
+          "path": "rules/js-cache-function-results.md",
+          "bytes": 1949,
+          "sha256": "3daaa11d24f4295cb6be8bc6f407f2ce83cc7b5bd1f0e68891ea8ab835721dc7"
+        },
+        {
+          "path": "rules/js-cache-property-access.md",
+          "bytes": 532,
+          "sha256": "73e47431e74878a927061bf0ddc7cd91a7556cb35d2573f3421e82300d9ae311"
+        },
+        {
+          "path": "rules/js-cache-storage.md",
+          "bytes": 1651,
+          "sha256": "11b826b0433898c1ece2d3547010d8e77db9fb240185748c45db91493de9b6cc"
+        },
+        {
+          "path": "rules/js-combine-iterations.md",
+          "bytes": 753,
+          "sha256": "71add08aeeb43091d4ff4c0b2842cce8b4bdef8ad3e732cc034bb5a84827e746"
+        },
+        {
+          "path": "rules/js-early-exit.md",
+          "bytes": 1133,
+          "sha256": "925ce5ce87f3347186ca62212f29cc6baa2b8c85a96d2720ad07c3d0abf781c0"
+        },
+        {
+          "path": "rules/js-hoist-regexp.md",
+          "bytes": 1028,
+          "sha256": "f9e9aef2f7c2307dd7310f283df85dcada45fc43e9bb941b0c3aa414dec21ec4"
+        },
+        {
+          "path": "rules/js-index-maps.md",
+          "bytes": 837,
+          "sha256": "5df1bdc2cfabb2c98abd55d26762e5c18189535c2e686184f426082e62920391"
+        },
+        {
+          "path": "rules/js-length-check-first.md",
+          "bytes": 1752,
+          "sha256": "1a50e03cdacda77a4ecb8d280165fce115feda9f70d39becb159384da26a002a"
+        },
+        {
+          "path": "rules/js-min-max-loop.md",
+          "bytes": 2105,
+          "sha256": "d51fed76afdf565bb3c372d47c7d4c65ec07cba7663cc5e630b59e115442fb65"
+        },
+        {
+          "path": "rules/js-set-map-lookups.md",
+          "bytes": 532,
+          "sha256": "a7fd781a6ba9ad49065961b6f9a90ef486bf6b648390e1a08704025f98e1642b"
+        },
+        {
+          "path": "rules/js-tosorted-immutable.md",
+          "bytes": 1782,
+          "sha256": "d0a5e1b0fec48a0a81397957e2f068e224329f7c42cb5feeed8aae6fa64025e8"
+        },
+        {
+          "path": "rules/rendering-activity.md",
+          "bytes": 564,
+          "sha256": "1e5e7eaf3555e61d6a2e900089c676527d26259501db5594f59544b6c664f85a"
+        },
+        {
+          "path": "rules/rendering-animate-svg-wrapper.md",
+          "bytes": 1185,
+          "sha256": "9c6ae0ca7a51434e803887c64cded760956579a1452ccb80a461a03f9c937c77"
+        },
+        {
+          "path": "rules/rendering-conditional-render.md",
+          "bytes": 980,
+          "sha256": "2ec2fa23c4148285144687050c52369adba3da2fbe3d486f8d3e0aad8f06f2bc"
+        },
+        {
+          "path": "rules/rendering-content-visibility.md",
+          "bytes": 815,
+          "sha256": "64eee6d5b916fe74df33363994b27fc7f71bea3bcedc7ee04bda23107ca3e6e4"
+        },
+        {
+          "path": "rules/rendering-hoist-jsx.md",
+          "bytes": 1039,
+          "sha256": "93b229560fae92005ed9a2a829064607b39b2e984e92d221d05b2d41df2b7c0e"
+        },
+        {
+          "path": "rules/rendering-hydration-no-flicker.md",
+          "bytes": 2308,
+          "sha256": "dc7ab358c67c177bca6e6f360fbc935ebe4efa928c0ba3ebd3f9f3d9e2000ca3"
+        },
+        {
+          "path": "rules/rendering-svg-precision.md",
+          "bytes": 588,
+          "sha256": "ed468533f6e95f622859c884b122cf21f9f593ed6bb3d500a54de4b9f9bcb9fb"
+        },
+        {
+          "path": "rules/rerender-defer-reads.md",
+          "bytes": 973,
+          "sha256": "234050a77faf50cb306be10a9e15bd4421134ab5907e75f13e6d78e2bd262dc9"
+        },
+        {
+          "path": "rules/rerender-dependencies.md",
+          "bytes": 824,
+          "sha256": "17eb5830956fb56486fd3cfc7431f5849d39751730c05ad9e77dd4f0c27169c5"
+        },
+        {
+          "path": "rules/rerender-derived-state.md",
+          "bytes": 724,
+          "sha256": "011c9d3e655f6e91408e818d47213625c1938008f2c68a42cbd72d2873438d99"
+        },
+        {
+          "path": "rules/rerender-functional-setstate.md",
+          "bytes": 2968,
+          "sha256": "5e68df6b2ae8058e67f476ff1ac67bde159f5a9d18df439e46eabcdeb7b52e58"
+        },
+        {
+          "path": "rules/rerender-lazy-state-init.md",
+          "bytes": 2016,
+          "sha256": "4ae844740f266fc8cbf050701230286624a2440ec5be67b9a63d9edc3c580573"
+        },
+        {
+          "path": "rules/rerender-memo.md",
+          "bytes": 1148,
+          "sha256": "1f258990c2f27ff6256b3cc5c43300631bb3f0d81f749aed08d07fcdcc131dd1"
+        },
+        {
+          "path": "rules/rerender-transitions.md",
+          "bytes": 1055,
+          "sha256": "60f4033909a62df5e5b8c601494f9e50a562e2f8c1c2d81eac24f38142265f1c"
+        },
+        {
+          "path": "rules/server-after-nonblocking.md",
+          "bytes": 2012,
+          "sha256": "d0b8d24a3db9f0f65f9e2bddbf230b0e03a5f60e1229d93a4a18f5e7a991c7c2"
+        },
+        {
+          "path": "rules/server-cache-lru.md",
+          "bytes": 1353,
+          "sha256": "1924b64561841923b88a657085097a0aeba3e0ba2d5470b9f5c15cc10d6ae70f"
+        },
+        {
+          "path": "rules/server-cache-react.md",
+          "bytes": 681,
+          "sha256": "c85380a2449dc9635e9bbf27e6a07821e9da864e344bf79f989b9df9b6170107"
+        },
+        {
+          "path": "rules/server-parallel-fetching.md",
+          "bytes": 1515,
+          "sha256": "3e3bb090981a1609cc86761b595ad97daea09ccc5f1a8748518e57aabcc9468a"
+        },
+        {
+          "path": "rules/server-serialization.md",
+          "bytes": 996,
+          "sha256": "f4c7d68b29c82381baad059c4a7f09e868e71ec9c3115a26ad3ae7d24c0dfe1f"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 5649,
+          "sha256": "75a1cf7ee1d59f56604b4db52d3cb680d1bfdbe5b064f6abc7acf8ba30acc1d3"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-accessibility-compliance-accessibility-audi-636324",
+      "name": "界面无障碍检查",
+      "description": "检查键盘操作、语义、焦点、对比度和辅助技术体验",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "You are an accessibility expert specializing in WCAG compliance, inclusive design, and assistive technology compatibility. Conduct audits, identify barriers, and provide remediation guidance.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/accessibility-compliance-accessibility-audit/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 13895,
+          "sha256": "a8686936d2d03c1a5943d8168451b4f9477032bf70dfeaaef3ede6bcf118c894"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 2277,
+          "sha256": "f0c76db2ccf2f2a0acca2f3384177eadbba83a499589d0b347914819210bd77a"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-javascript-testing-patterns-327510",
+      "name": "JavaScript 测试",
+      "description": "为 JavaScript 和 TypeScript 编写有价值的单元与集成测试",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Comprehensive guide for implementing robust testing strategies in JavaScript/TypeScript applications using modern testing frameworks and best practices.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/javascript-testing-patterns/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 25843,
+          "sha256": "3764b34a43b5e3559e2da6ca9496bf195f2561d93ba024816628048918b05194"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1663,
+          "sha256": "9aebe35bdcf51c241f71b9989373bd73851fb5d6e282e0f37c1e7beb5f79c9a0"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-e2e-testing-patterns-19449c",
+      "name": "端到端测试",
+      "description": "验证关键用户流程，减少等待和脆弱定位造成的不稳定测试",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Build reliable, fast, and maintainable end-to-end test suites that provide confidence to ship code quickly and catch regressions before users do.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/e2e-testing-patterns/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 14949,
+          "sha256": "a3d1d5f50d946accf7942695ea5427fca835bb7a2b0db7e9a63e16426256567f"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 2567,
+          "sha256": "c41f94f3304e9cc65d2dcf6de50e773efade8df78bc7865a536f3a5f5e863205"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-ai-prompt-regression-testing-eb8570",
+      "name": "提示词回归检查",
+      "description": "用固定场景比较提示词行为、工具调用和输出约束",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Prompt engineering regression test matrix register: baseline outputs, semantic drift thresholds, judge evaluations, and golden dataset.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/ai-prompt-regression-testing/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 5360,
+          "sha256": "bd48f8169228347c6e6c3c19ed4e3046fd96bcb3e1e3973d7d0ded9302c85415"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-api-design-principles-b1df32",
+      "name": "API 接口设计",
+      "description": "设计一致的 REST 接口、错误、分页和版本契约",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Master REST and GraphQL API design principles to build intuitive, scalable, and maintainable APIs that delight developers and stand the test of time.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/api-design-principles/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "assets/api-design-checklist.md",
+          "bytes": 3884,
+          "sha256": "ef98cb8910cdc555514198df7becc6de8b04e1a98e2291b1440bc62e14cd07e5"
+        },
+        {
+          "path": "assets/rest-api-template.py",
+          "bytes": 5323,
+          "sha256": "b359cda817740ee2cd3c9a901d7d5a14178cc0e2dcb46b75af053e5cc4d6012c"
+        },
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "references/graphql-schema-design.md",
+          "bytes": 9005,
+          "sha256": "0f10cbe2f3d787be9de4ab8dcc88444ac36ab69786973666a229fdbffeb01638"
+        },
+        {
+          "path": "references/rest-best-practices.md",
+          "bytes": 7571,
+          "sha256": "675fbafdd5a6d5ac2c17ab97e17c90aa0a10c2a5608860128a8be14764130fae"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 13019,
+          "sha256": "01a77e3f69a3e8d82a5ff49fa8ab1a1d0e16046af21c78f2c800e15e397b2321"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 1793,
+          "sha256": "9e3a261c94e6b67e386a0c58532a4aedd924683bb8d6bde6bf90c5337a91195d"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-api-documentation-9c82df",
+      "name": "API 文档",
+      "description": "依据实现补全接口示例、参数、错误与使用说明",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "API documentation workflow for generating OpenAPI specs, creating developer guides, and maintaining comprehensive API documentation.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/api-documentation/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 3605,
+          "sha256": "9b7068b8c2c24704e1e909cfb54a0818137647032bcec58ce568cb0d47a84b0a"
+        }
+      ]
+    },
+    {
+      "id": "gh-claude-database-schema-designer-aff360",
+      "name": "数据库结构设计",
+      "description": "设计表、关联、索引、约束与可迁移的数据库结构",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Use when the user asks to create ERD diagrams, normalize database schemas, design table relationships, or plan schema migrations.",
+      "repository": "alirezarezvani/claude-skills",
+      "revision": "19392f7a08264ed00486a251f5b2098321771f94",
+      "source_url": "https://github.com/alirezarezvani/claude-skills/blob/19392f7a08264ed00486a251f5b2098321771f94/engineering/skills/database-schema-designer/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/a3bf2a-LICENSE",
+          "bytes": 1072,
+          "sha256": "a20126646f93d32a8989c3cf4772d59194f405034f7babe7daebeac22b8ab151"
+        },
+        {
+          "path": "references/full-schema-examples.md",
+          "bytes": 10443,
+          "sha256": "8eecb394b1b2509bc013a1aaca962b4f491cdf961c541cfb9bf3719ddb3aa4aa"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 7502,
+          "sha256": "0a964937e39dc65462ad5b3e36e30ebd08f17eea6503e0f7d0b2dbe86fbe35fc"
+        }
+      ]
+    },
+    {
+      "id": "gh-claude-sql-database-assistant-670628",
+      "name": "SQL 查询分析",
+      "description": "理解 SQL、检查查询计划与索引并解释优化取舍",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Use when the user asks to write SQL queries, optimize database performance, generate migrations, explore database schemas, or work with ORMs like Prisma, Drizzle, TypeORM, or SQLAlchemy.",
+      "repository": "alirezarezvani/claude-skills",
+      "revision": "19392f7a08264ed00486a251f5b2098321771f94",
+      "source_url": "https://github.com/alirezarezvani/claude-skills/blob/19392f7a08264ed00486a251f5b2098321771f94/engineering/skills/sql-database-assistant/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/a3bf2a-LICENSE",
+          "bytes": 1072,
+          "sha256": "a20126646f93d32a8989c3cf4772d59194f405034f7babe7daebeac22b8ab151"
+        },
+        {
+          "path": "references/optimization_guide.md",
+          "bytes": 10699,
+          "sha256": "3b7d6c8404581379543f2cb7132ad5c807908fea1cc84251bfd1aab0378024bb"
+        },
+        {
+          "path": "references/orm_patterns.md",
+          "bytes": 12565,
+          "sha256": "7f0eec37838f6d987339ca79ccbffa1cfea2e7f8ce9589b9e3b2cbf7d694ebfb"
+        },
+        {
+          "path": "references/query_patterns.md",
+          "bytes": 9787,
+          "sha256": "ad0ac06f52f3f326b6a508d7c29c467627a69e733636d64b42b9425e5d9f43bf"
+        },
+        {
+          "path": "scripts/migration_generator.py",
+          "bytes": 16436,
+          "sha256": "b2270d03b468dd0856c8eabb6ad200f5102dd2e84265d3f3b1571d68298003e3"
+        },
+        {
+          "path": "scripts/query_optimizer.py",
+          "bytes": 11756,
+          "sha256": "94f726dc8b1db6cb33365cec0e24dd1711eb85dc1a03b68a86fa7b717b8aa461"
+        },
+        {
+          "path": "scripts/schema_explorer.py",
+          "bytes": 14300,
+          "sha256": "f57626eb38a0aa56ac6c95540c1686d224d172f68210acedb04004b26275bcaf"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 16077,
+          "sha256": "f767c7f1296e54877d1bf4fb71a7887931e65e4d374e43a2f578e3ee2bec1641"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-postgresql-optimization-2fea25",
+      "name": "PostgreSQL 优化",
+      "description": "检查慢查询、连接、索引与 PostgreSQL 运行参数",
+      "domain": "运维",
+      "base_skill": "coding-workspace",
+      "original_description": "PostgreSQL database optimization workflow for query tuning, indexing strategies, performance analysis, and production database management.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/postgresql-optimization/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 4122,
+          "sha256": "7e38bae10d0df33400530075c9b0d2037f97bcbf7c8532bacc3e373a55a74e34"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-security-scanning-security-dependencies-74c3a2",
+      "name": "依赖安全检查",
+      "description": "检查依赖版本、已知漏洞与有依据的升级方案",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "You are a security expert specializing in dependency vulnerability analysis, SBOM generation, and supply chain security. Scan project dependencies across multiple ecosystems to identify vulnerabilities, assess risks, and provide automated remediation strategies.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/security-scanning-security-dependencies/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 17051,
+          "sha256": "90703fe249340006afa994fc127e073e7f5a3b32c81becc43a40cc3d90869caa"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 2249,
+          "sha256": "eb8f129a63658067c9b34d1cb929dbe12cb2cffb222e1b459fe9ff422521c8eb"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-skill-security-audit-38e57e",
+      "name": "技能包检查",
+      "description": "阅读技能指令和脚本，识别越权、数据外发和不可信依赖",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Audit an Agent Skill, MCP server, connector, or desktop extension before installation by tracing code, dependencies, permissions, credentials, data flow, and irreversible actions.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/skill-security-audit/SKILL.md",
+      "license": "CC0-1.0",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 5521,
+          "sha256": "3bc5dc649a062b7380fc88dca46bf892bff02a774d82852f778236253669b00c"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-code-refactoring-tech-debt-1e85a8",
+      "name": "重构与技术债",
+      "description": "依据实际维护成本识别技术债并安排渐进重构",
+      "domain": "开发",
+      "base_skill": "coding-workspace",
+      "original_description": "Identify technical debt from actual code and change history, estimate its impact, and prioritize bounded improvements with explicit assumptions.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/code-refactoring-tech-debt/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 11486,
+          "sha256": "1af7513d1799b8b1081eb538b543d1717315e4926e36f82630bd199f67a308fa"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-markdown-rendering-ffb206",
+      "name": "Markdown 文档呈现",
+      "description": "整理 Markdown 文档结构、语法与安全呈现",
+      "domain": "内容",
+      "base_skill": "coding-workspace",
+      "original_description": "Open Markdown reliably in cmux panes and recover from blank rendered surfaces.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/markdown-rendering/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 3015,
+          "sha256": "83e1d571e1a9848dc07b10fe7805dc710b0fd7bf0a6ece8e750acde851a42dd1"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-pdf-conversion-router-8ab07e",
+      "name": "PDF 转换规划",
+      "description": "识别 PDF 类型与转换目标，选择合适工具并核验产物",
+      "domain": "资料",
+      "base_skill": "private-documents",
+      "original_description": "Use when converting a PDF into another format such as Markdown, HTML, text, JSON, DOCX, or structured notes and the agent must choose the best extraction route, settings, and cleanup strategy for maximum fidelity and readability.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/pdf-conversion-router/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 15358,
+          "sha256": "0f8c6329ce932d53c5346b48d557135728857cf4eba19d8e3825a29628098263"
+        }
+      ]
+    },
+    {
+      "id": "gh-scientific-exploratory-data-analysis-a64a41",
+      "name": "探索性数据分析",
+      "description": "分析 CSV、JSON 等数据的分布、缺失和异常，保留原始数据",
+      "domain": "资料",
+      "base_skill": "private-documents",
+      "original_description": "Performs bounded, local exploratory analysis of explicitly supported scientific files. Supports redacted CSV/TSV/JSON profiles; optional NumPy, HDF5, FASTA/FASTQ, and basic image metadata inspection; missingness/leakage audits; outlier and transformation sensitivity; and rigorous EDA report scaffolds. Other domain formats are reference-only and unknown formats fail closed.",
+      "repository": "K-Dense-AI/scientific-agent-skills",
+      "revision": "92ace75ac21efe19a620434e0ca4e356081fe807",
+      "source_url": "https://github.com/K-Dense-AI/scientific-agent-skills/blob/92ace75ac21efe19a620434e0ca4e356081fe807/skills/exploratory-data-analysis/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "assets/report_template.md",
+          "bytes": 7873,
+          "sha256": "c6cd0644dbefeb64c77e84935509f52a92d45256daf2cd4be84012e99e4d7d44"
+        },
+        {
+          "path": "attribution/65d90f-LICENSE.md",
+          "bytes": 1068,
+          "sha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"
+        },
+        {
+          "path": "references/bioinformatics_genomics_formats.md",
+          "bytes": 8977,
+          "sha256": "b3594673cbe22e29fd5bc2681c1b53d4f8b02b48ff17fc9ffaf5a09d1d885be3"
+        },
+        {
+          "path": "references/chemistry_molecular_formats.md",
+          "bytes": 8732,
+          "sha256": "3ff937541ebf0396d4c2304016cebc42d405110300df7379f59c40953fc8ed41"
+        },
+        {
+          "path": "references/general_scientific_formats.md",
+          "bytes": 12276,
+          "sha256": "42bcf3389bbd78e426dd41139208517f3f78bdc17e068a1eb3a984d2f2487320"
+        },
+        {
+          "path": "references/microscopy_imaging_formats.md",
+          "bytes": 9305,
+          "sha256": "c96bb7291ded320a106800c1132191683aa3028f2240c5fcf954079f1a26c382"
+        },
+        {
+          "path": "references/proteomics_metabolomics_formats.md",
+          "bytes": 9821,
+          "sha256": "66d9493fe14c717f5e8e60500e8fa7bfe1f619084e23b643a767f0952a35efd7"
+        },
+        {
+          "path": "references/spectroscopy_analytical_formats.md",
+          "bytes": 9555,
+          "sha256": "102a68c212ef5447815c889cf06668f3cb5bd8644f018354d6e98d1a15101a0f"
+        },
+        {
+          "path": "scripts/__init__.py",
+          "bytes": 69,
+          "sha256": "87539288ce5d4caf24fc9fca14e5d70c41730c9d4285106ac4db0c4b5cefd60c"
+        },
+        {
+          "path": "scripts/_capabilities.py",
+          "bytes": 20714,
+          "sha256": "93fd42bcc6940db0a6cad364dab42a52f0867e782f7e93c9b27c4185249edc06"
+        },
+        {
+          "path": "scripts/_common.py",
+          "bytes": 14293,
+          "sha256": "f363af255cc78ea63864e0da9f679f57a9e71efd36b6813332f3d2c419b30d51"
+        },
+        {
+          "path": "scripts/_structured.py",
+          "bytes": 14683,
+          "sha256": "8cb23c8552339acc926f4dc84e1ec032c79152515098e1fd97f2326b84b4ead9"
+        },
+        {
+          "path": "scripts/_tabular.py",
+          "bytes": 32782,
+          "sha256": "5d1db825890dd035c30e51ac1c11aee56e1e1dca6ffd238ee87ae7d51d8df2f0"
+        },
+        {
+          "path": "scripts/capability_manifest.py",
+          "bytes": 5433,
+          "sha256": "1e52e1db668ebce919751a75b53ad959c36749e4b1695f59d8ac2d6c8eda4abf"
+        },
+        {
+          "path": "scripts/distribution_sensitivity.py",
+          "bytes": 3304,
+          "sha256": "ca6e9f3dd59cfb382b1ff0874e709933c136ec942085a0437d4000bbf7f1f3c8"
+        },
+        {
+          "path": "scripts/eda_analyzer.py",
+          "bytes": 10547,
+          "sha256": "6532b28ad3f28dd9f58acecb54361c8271d2755584a54ecb0be34da74d1e5d20"
+        },
+        {
+          "path": "scripts/image_inspector.py",
+          "bytes": 7931,
+          "sha256": "79c21b35d01376929ff0edf26a3bb25923b9e75458c586e0f5721cec356fe639"
+        },
+        {
+          "path": "scripts/missingness_leakage_audit.py",
+          "bytes": 3904,
+          "sha256": "28458714e80ee31db636c0265ba21e1623ba27816d31e236fdc9b873a5b78ffc"
+        },
+        {
+          "path": "scripts/report_scaffold.py",
+          "bytes": 4247,
+          "sha256": "4d745592384bfceb0ec7384eecfc5e8ba49ebfa4ec55be75a99ce7c7e102f60b"
+        },
+        {
+          "path": "scripts/sequence_inspector.py",
+          "bytes": 8621,
+          "sha256": "11ca2fa3a0d660192631b9b562f362b0fd120c9e54639bfb049c600c6920be28"
+        },
+        {
+          "path": "scripts/tabular_profile.py",
+          "bytes": 3077,
+          "sha256": "78cd139292c18e31d17de882762948db7b51fdc3278546f994270a287d0149db"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 14722,
+          "sha256": "955c4cefa49106dd03b55cbd62603bab2d2fb678e627dd452ba62040c7128484"
+        }
+      ]
+    },
+    {
+      "id": "gh-scientific-statistical-analysis-1c754f",
+      "name": "统计分析方法",
+      "description": "按数据和问题选择统计方法，检查假设并说明不确定性",
+      "domain": "绘图",
+      "base_skill": "scientific-plotting",
+      "original_description": "Guided statistical analysis for research data - test selection, assumption checking, effect sizes, power analysis, Bayesian alternatives, and APA-formatted reporting. Use whenever a user wants to compare groups, test a hypothesis, analyze experimental or survey data, check statistical assumptions, compute required sample sizes, or write up results - even if they never name a specific test. Covers t-tests, ANOVA, chi-square, correlation, regression, non-parametric and Bayesian methods. For low-level model APIs, see the statsmodels and pymc skills.",
+      "repository": "K-Dense-AI/scientific-agent-skills",
+      "revision": "92ace75ac21efe19a620434e0ca4e356081fe807",
+      "source_url": "https://github.com/K-Dense-AI/scientific-agent-skills/blob/92ace75ac21efe19a620434e0ca4e356081fe807/skills/statistical-analysis/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/65d90f-LICENSE.md",
+          "bytes": 1068,
+          "sha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"
+        },
+        {
+          "path": "references/assumptions_and_diagnostics.md",
+          "bytes": 14654,
+          "sha256": "6e1ebc110c092845b93e5c6d28f38c8a990780105ba1865f0bd47c007620b073"
+        },
+        {
+          "path": "references/bayesian_statistics.md",
+          "bytes": 14557,
+          "sha256": "34d62e1b20dd82a11497be40e07c93e4fdb555d56e4944e200f881c1b7629cbf"
+        },
+        {
+          "path": "references/effect_sizes_and_power.md",
+          "bytes": 20907,
+          "sha256": "5e1321c9058b2931a1bd2a753c7a8f4295f58274412d62e99a34eabd478e42b2"
+        },
+        {
+          "path": "references/reporting_standards.md",
+          "bytes": 21469,
+          "sha256": "0a30a1bec63231c94c9c285977acaa4218c50a34c8385857d18f62c61ac817b7"
+        },
+        {
+          "path": "references/test_selection_guide.md",
+          "bytes": 6950,
+          "sha256": "e72e00b6ebe9450e5e84849503db223c4908a8d9a68c3b87cf0ab8ec3254fe83"
+        },
+        {
+          "path": "scripts/assumption_checks.py",
+          "bytes": 18387,
+          "sha256": "3e37a4e04407b5f040f103962ed0e73935d114d3892ee45b5a06a1da42c10341"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 23585,
+          "sha256": "e112848726b3713267cac65e4e2c15491a0a26ee1ed628db01195f7e43f97997"
+        }
+      ]
+    },
+    {
+      "id": "gh-scientific-scientific-writing-49b296",
+      "name": "研究报告写作",
+      "description": "围绕真实证据组织研究报告、图表说明与引用",
+      "domain": "内容",
+      "base_skill": "coding-workspace",
+      "original_description": "Drafts, revises, and audits scientific manuscripts or reports with explicit evidence provenance, reporting-guideline coverage, authorship accountability, confidentiality controls, and local consistency checks. Use for manuscript sections, references, declarations, tables, figures, or submission preparation when scientific accuracy and traceability matter.",
+      "repository": "K-Dense-AI/scientific-agent-skills",
+      "revision": "92ace75ac21efe19a620434e0ca4e356081fe807",
+      "source_url": "https://github.com/K-Dense-AI/scientific-agent-skills/blob/92ace75ac21efe19a620434e0ca4e356081fe807/skills/scientific-writing/SKILL.md",
+      "license": "MIT",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "assets/authorship_template.json",
+          "bytes": 1239,
+          "sha256": "04a590ac47ed61dcc7cd88a26d51243cf178fe6ada99d4000ca225e1b5f6f20a"
+        },
+        {
+          "path": "assets/claim_evidence_template.csv",
+          "bytes": 218,
+          "sha256": "cfb7a9f44cd1e5ef47ccdb3e32ac0a25b72d30e51343faace9bf07c00e3a0659"
+        },
+        {
+          "path": "assets/consistency_manifest_template.json",
+          "bytes": 891,
+          "sha256": "2ea6f468ab6fab45c4db3616fbaddcc2ae706b3a26d6745b4cf74ddb53266872"
+        },
+        {
+          "path": "assets/manuscript_manifest_template.json",
+          "bytes": 1012,
+          "sha256": "914052ff25b44072a07dce2ae8171524b717894ad7d2103054356115b9dd6c22"
+        },
+        {
+          "path": "assets/manuscript_scaffold.md",
+          "bytes": 1979,
+          "sha256": "55305ba311ff4e2459a31a99b3f1b9da44d79499332399a9216b5f92cb412ab2"
+        },
+        {
+          "path": "assets/REPORT_FORMATTING_GUIDE.md",
+          "bytes": 2713,
+          "sha256": "2bb69499426ed6727c1701bae752c2e902151cbf69963f8bcf25b9e54cc20724"
+        },
+        {
+          "path": "assets/reporting_coverage_template.json",
+          "bytes": 189,
+          "sha256": "886ca599622c1dfaedde7649ec47e973b4fbe6081cac6a6afaf24ace899d46a9"
+        },
+        {
+          "path": "assets/reporting_guidelines.json",
+          "bytes": 16009,
+          "sha256": "215f8c55bd40bda0569f2e81556030ff575319e25276b1e1ae70e2cc7475ddcd"
+        },
+        {
+          "path": "assets/source_manifest_template.json",
+          "bytes": 599,
+          "sha256": "fc6f65a8571b717691ac717f325825a608190f271e8b79650b711cc95f5b0a36"
+        },
+        {
+          "path": "attribution/65d90f-LICENSE.md",
+          "bytes": 1068,
+          "sha256": "09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"
+        },
+        {
+          "path": "references/authorship_ai_confidentiality.md",
+          "bytes": 4919,
+          "sha256": "0200e3ad8eafaedec26bce2b9895cda81c6c9325790507509134373a0ca41fe2"
+        },
+        {
+          "path": "references/citation_styles.md",
+          "bytes": 3945,
+          "sha256": "338c08d8fba6fbf7437aad4dd99db5bccf3f597fa6650c562fae0c7ca422e572"
+        },
+        {
+          "path": "references/cli_reference.md",
+          "bytes": 4101,
+          "sha256": "05b15a587277e37dbc6161532dce58c8ccf647e22f21861ebcbac22954453e75"
+        },
+        {
+          "path": "references/evidence_workflow.md",
+          "bytes": 5033,
+          "sha256": "346c867d71e8cf1db6e3684a64714925a3966fcaeb1db853d7ddb07c6a6f607b"
+        },
+        {
+          "path": "references/figures_tables.md",
+          "bytes": 3915,
+          "sha256": "212d10f3e7a01325d2518c4aab54a4fc04a67e4aa94e959cead199c425a0f4d6"
+        },
+        {
+          "path": "references/imrad_structure.md",
+          "bytes": 4512,
+          "sha256": "8a1201f8e58a045736a5bc65a47f239c894be6946716e969c0b77aa90a7e8e39"
+        },
+        {
+          "path": "references/journal_policies.md",
+          "bytes": 3010,
+          "sha256": "aefbd73c5a8a23be076b210a910f026ece748a73b4593cb99e885879bd61d2c2"
+        },
+        {
+          "path": "references/professional_report_formatting.md",
+          "bytes": 3230,
+          "sha256": "c269fd256bda6a9389bfd5ffefa8eff8876b96d92f8391e8a01fa80910bb35d3"
+        },
+        {
+          "path": "references/reporting_guidelines.md",
+          "bytes": 4785,
+          "sha256": "4a74d4613742bb26fe3d74596998b9e75ea8a2694a012222b6d9636e121a1f0d"
+        },
+        {
+          "path": "references/research_integrity_open_science.md",
+          "bytes": 4149,
+          "sha256": "f8f91010537acf4b78616d7410d23b85030f94d66e9d36db03d6e632ffb56100"
+        },
+        {
+          "path": "references/source_ledger.md",
+          "bytes": 11473,
+          "sha256": "1692a3bea432dfde6eb1e7ca7054d0dd8652b1bef6b97322ea3c30f0ff68d5b3"
+        },
+        {
+          "path": "references/writing_principles.md",
+          "bytes": 3904,
+          "sha256": "58d4b32f63446c0b082f163314fdcf0d41a50568ad392d34ba992e24fadae764"
+        },
+        {
+          "path": "scripts/_common.py",
+          "bytes": 7977,
+          "sha256": "8cc192d82d219d1ec9720f8a8ab0c440fb35f2562fdeaeb7432a38d18e5e7b42"
+        },
+        {
+          "path": "scripts/audit_claims.py",
+          "bytes": 10039,
+          "sha256": "6074f51663e6863cf28168824a3f440b5acce9734c3c3f72590ba89c88a23c06"
+        },
+        {
+          "path": "scripts/check_consistency.py",
+          "bytes": 14209,
+          "sha256": "5bd1f0dcbcccdac31e422b5a7b220d1ab1272a7eed906a62c0a5f2518e495d87"
+        },
+        {
+          "path": "scripts/check_references.py",
+          "bytes": 7075,
+          "sha256": "a262d6e935e69ec1c1f25a36b8a12b6905b3f3dee0a11d94557d3f69857c5f07"
+        },
+        {
+          "path": "scripts/lint_manuscript.py",
+          "bytes": 5881,
+          "sha256": "08ff45315c4dadd1c91104e3639b6bec7a6086c000830dc9d0b2b965895b3398"
+        },
+        {
+          "path": "scripts/scaffold_manuscript.py",
+          "bytes": 4328,
+          "sha256": "69e9a82c7d0608646872c0f4ad08b538f0c67175b48601d9d52ea527334ce4ae"
+        },
+        {
+          "path": "scripts/select_reporting_guidelines.py",
+          "bytes": 7580,
+          "sha256": "d130036ab1df6486cb54431a168207af03a52c626459ba7471041b0ee5aab567"
+        },
+        {
+          "path": "scripts/validate_authorship.py",
+          "bytes": 11518,
+          "sha256": "31572a61ff61fe58f0b3f4c5b0e0e44bd9de5b865772f563dd5413876c186788"
+        },
+        {
+          "path": "scripts/validate_manifest.py",
+          "bytes": 14393,
+          "sha256": "6f87919db5aa5fb5ba929b6566c892a0d6881a9e46d8a9646186c6cac01e13d2"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 14897,
+          "sha256": "511a2096bebecd8cf0f8212b9d262d37154ae1ba566eb385d93ac968682edbd1"
+        }
+      ]
+    },
+    {
+      "id": "gh-agentic-code-documentation-doc-generate-c3c7d0",
+      "name": "工程文档生成",
+      "description": "阅读真实代码，编写架构、操作和维护文档",
+      "domain": "内容",
+      "base_skill": "coding-workspace",
+      "original_description": "You are a documentation expert specializing in creating comprehensive, maintainable documentation from code. Generate API docs, architecture diagrams, user guides, and technical references using AI-powered analysis and industry best practices.",
+      "repository": "sickn33/agentic-awesome-skills",
+      "revision": "ec0254763ac8d61a810899fe8d961c1ac01215e8",
+      "source_url": "https://github.com/sickn33/agentic-awesome-skills/blob/ec0254763ac8d61a810899fe8d961c1ac01215e8/skills/code-documentation-doc-generate/SKILL.md",
+      "license": "MIT (code); CC-BY-4.0 (original documentation)",
+      "execution_verified": false,
+      "files": [
+        {
+          "path": "attribution/2ca226-LICENSE-CONTENT",
+          "bytes": 652,
+          "sha256": "deae07ece522fbca65ab33f0c18ca9630b1077a8f3f233c0af445235b3fb6fcf"
+        },
+        {
+          "path": "attribution/32ff66-LICENSE",
+          "bytes": 1073,
+          "sha256": "af98370a7edc0f00ec46979d049517833c9a7fa2ba74e3cf8cc42f7db557299d"
+        },
+        {
+          "path": "resources/implementation-playbook.md",
+          "bytes": 16953,
+          "sha256": "8a515e3170258b6986eb779e3171c3e9f611e90a21359537c4c3ee8078472ef9"
+        },
+        {
+          "path": "SKILL.md",
+          "bytes": 3220,
+          "sha256": "5db742368a888810014a653212c1f1592646f0ca5551dc8b1618747a9b8e407f"
+        }
+      ]
+    }
+  ]
+}

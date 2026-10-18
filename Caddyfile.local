@@ -1,0 +1,59 @@
+# ============================================================================
+# Xinxin本地版 · 局域网网关配置（Caddy，纯 HTTP，本机 IP 直连）
+# ----------------------------------------------------------------------------
+# 作用：把 http://<本机局域网IP>:<网关端口> 的访问转发到本机两个服务：
+#   /api/*  /health   ->  后端 127.0.0.1:8010（SSE 事件流，必须 flush_interval -1）
+#   其它所有路径      ->  前端 127.0.0.1:5180（vite preview 自带 SPA history 回退）
+#
+# 为什么还用 Caddy：手机与电脑只记一个地址（单端口入口），/api 与界面同源，
+# 免去 CORS 与混合端口问题；顺带提供安全响应头、请求体上限与访问日志。
+#
+# 端口：默认 8080（被占用时用 Start-Xinxin-Local.ps1 -GatewayPort 改）。
+#       仅监听局域网可达地址；后端与前端始终只绑 127.0.0.1，不直接暴露。
+#
+# 证书：不需要。本方案面向同一局域网（手机连家里/公司同一 WiFi）；
+#       明文 HTTP 在局域网内使用，请勿把网关端口暴露到公网。
+#
+# 运行方式：由 Start-Xinxin-Local.ps1 自动生成 .runtime/gateway.env 后启动：
+#   XINXIN_GATEWAY_PORT / XINXIN_LOG_DIR（也可用环境变量覆盖，默认值见下）
+#
+# 手动验证（在项目根目录执行）：
+#   .\tools\caddy.exe validate --config .\Caddyfile.local --adapter caddyfile
+# ============================================================================
+
+http://:{$XINXIN_GATEWAY_PORT:8080} {
+	encode zstd gzip
+
+	# 安全响应头
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	# ---- 后端 API / SSE 事件流 ----------------------------------------------
+	@api path /api/* /health
+	handle @api {
+		request_body {
+			max_size 67371008
+		}
+		reverse_proxy 127.0.0.1:8010 {
+			flush_interval -1
+		}
+		header Cache-Control "no-store"
+	}
+
+	# ---- 前端（其余路径一律反代 vite preview）--------------------------------
+	handle {
+		reverse_proxy 127.0.0.1:5180
+	}
+
+	# ---- 访问日志（自动滚动，单文件 10MiB、保留 5 个，防止写满磁盘）-----------
+	log {
+		output file {$XINXIN_LOG_DIR:./logs}/caddy-access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

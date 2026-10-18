@@ -1,0 +1,15 @@
+{
+  "imported_at": "2026-10-18T11:40:16.586478+00:00",
+  "source": "skillnet-demo（本地导入）",
+  "seed_skills": 76,
+  "community_skills": 1769,
+  "evolved_skills": 36,
+  "total_skills": 1881,
+  "files": 10995,
+  "bytes": 93099000,
+  "catalog_sha256": "739528325efe2455e7a425410d0af7a158a42e7424d248c1ca2f5ef56d9468d9",
+  "seed_modules": {
+    "seed/catalog_data.py": "0ef1088f7fa5275e69dcbb0a861d40e849b8f12518a871bdf920515c3ddaa055",
+    "seed/business_skills.py": "5d21fccffc9ef7f54f5e8613ce3222e1271f28d5dda4bf9a3e97776b49588989"
+  }
+}

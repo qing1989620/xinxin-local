@@ -1,0 +1,25 @@
+{
+  "apk": "releases/Xinxin-0.1.0-cloud.apk",
+  "build": "release-private-https",
+  "bytes": 3464996,
+  "sha256": "21b3509cd43b991f379aae6d6fcfded3ed79e32ccd32956bb1064e3f2588bc9b",
+  "web_assets_matched": 18,
+  "native_allow_mixed_content": false,
+  "real_device_verified": false,
+  "default_backend_url": "<private-tailnet-https-origin>",
+  "private_https_default_verified_in_bundle": true,
+  "signature_verified": true,
+  "signature_schemes": {
+    "v2": true,
+    "v3": true
+  },
+  "certificate_sha256": "556f95239b8a2cc7134a04f601f07bdd326ecba0173c9b645ebc837127a0fcd4",
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "debuggable": false,
+  "release_manifest_cleartext": false,
+  "system_backup_allowed": false,
+  "access_mode": "private-tailnet",
+  "private_https_access": "server_self_verified_over_tailnet_address",
+  "owner_reported_local_apk_acceptance": "2026-10-17"
+}

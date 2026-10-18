@@ -1,0 +1,24 @@
+{
+  "version": "skill-network-adapter-v1",
+  "stage": "research_candidate_not_admitted",
+  "protocol_sha256": "5706178b4d193b05d629089cf3226cdb103332a53e880f8183037a9d797821d3",
+  "corpus_sha256": "9a53ed36010368d15060830e42fd0a56b80c277a926c65d35938715f5d4fa038",
+  "encoder": {
+    "repository": "Xenova/multilingual-e5-small",
+    "revision": "761b726dd34fb83930e26aab4e9ac3899aa1fa78",
+    "frozen": true
+  },
+  "seed": 29,
+  "graph": false,
+  "selected_epoch": 7,
+  "parameter_delta_l2": 10.196726827336947,
+  "training_examples": 106,
+  "document_pretraining_examples": 2043,
+  "weights_sha256": "b9e7622390ddc71633586f71bce15960940801808693eea2189d2835c267f3f5",
+  "dimension": 384,
+  "rank": 48,
+  "trainable_parameters": 110596,
+  "score_kind": "learned_relevance_not_success_probability",
+  "model_id": "network-b9e7622390ddc716",
+  "selected_by_validation": "text-29"
+}

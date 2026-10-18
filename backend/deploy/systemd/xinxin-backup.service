@@ -1,0 +1,19 @@
+[Unit]
+Description=Xinxin private database and resource backup
+
+[Service]
+Type=oneshot
+User=xinxin
+Group=xinxin
+UMask=0077
+ExecStart=/opt/xinxin/venv/bin/python /opt/xinxin/backend/scripts/backup_private_data.py --source /var/lib/xinxin --output /var/backups/xinxin --keep 7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# SQLite mode=ro still needs WAL/SHM bookkeeping when the last API connection closed.
+ReadWritePaths=/var/lib/xinxin /var/backups/xinxin
+CPUQuota=40%
+MemoryMax=256M
+Nice=10
+LogNamespace=xinxin

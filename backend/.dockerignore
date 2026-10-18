@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!requirements.lock
+!THIRD_PARTY.md
+!app/**
+!vendor/**
+!resources/**
+!scripts/**
+**/__pycache__
+**/*.pyc

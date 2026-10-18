@@ -1,0 +1,10 @@
+/var/lib/xinxin/logs/tina.log {
+    su xinxin xinxin
+    daily
+    maxsize 10M
+    rotate 3
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

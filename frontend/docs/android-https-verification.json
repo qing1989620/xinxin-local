@@ -1,0 +1,17 @@
+{
+  "apk": "releases/Xinxin-0.1.0-debug.apk",
+  "build": "debug-https",
+  "bytes": 4912321,
+  "sha256": "b9b539c7d14c57e4b304643663639d08b6118fe65678a75d50536ab2f5c6764d",
+  "web_assets_matched": 18,
+  "native_allow_mixed_content": false,
+  "real_device_verified": false,
+  "signature_verified": true,
+  "signature_schemes": [
+    "v2"
+  ],
+  "package": "com.xinxin.personal",
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "release_manifest_cleartext": false
+}
