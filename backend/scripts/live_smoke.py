@@ -28,7 +28,16 @@ PORT = 8021
 source = BASE / "data"
 target = BASE / ".qa-data" / f"live-{int(time.time())}"
 target.mkdir(parents=True, exist_ok=True)
-for name in ("xinxin.sqlite3", "vault.key", "bootstrap.code"):
+if (source / "xinxin.sqlite3").exists():
+    # backup API gives a consistent snapshot even while the live app is running
+    src_db = sqlite3.connect(source / "xinxin.sqlite3")
+    dst_db = sqlite3.connect(target / "xinxin.sqlite3")
+    try:
+        src_db.backup(dst_db)
+    finally:
+        dst_db.close()
+        src_db.close()
+for name in ("vault.key", "bootstrap.code"):
     src = source / name
     if src.exists():
         shutil.copy2(src, target / name)

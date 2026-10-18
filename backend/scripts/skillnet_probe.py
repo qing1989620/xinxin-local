@@ -20,9 +20,16 @@ sys.path.insert(0, str(BASE))
 source = BASE / "data"
 target = BASE / ".qa-data" / f"probe-{int(time.time())}"
 target.mkdir(parents=True, exist_ok=True)
-for name in ("xinxin.sqlite3", "vault.key"):
-    if (source / name).exists():
-        shutil.copy2(source / name, target / name)
+if (source / "xinxin.sqlite3").exists():
+    src_db = sqlite3.connect(source / "xinxin.sqlite3")
+    dst_db = sqlite3.connect(target / "xinxin.sqlite3")
+    try:
+        src_db.backup(dst_db)
+    finally:
+        dst_db.close()
+        src_db.close()
+if (source / "vault.key").exists():
+    shutil.copy2(source / "vault.key", target / "vault.key")
 if (source / "skills").exists():
     shutil.copytree(source / "skills", target / "skills")
 
