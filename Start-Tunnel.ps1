@@ -56,6 +56,15 @@ $outLog=Join-Path $runtimePath 'tunnel.out.log'
 $errLog=Join-Path $runtimePath 'tunnel.err.log'
 foreach($f in @($outLog,$errLog)){ if(Test-Path -LiteralPath $f){ Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
 
+# A previous quick tunnel would stay alive with its own (now stale) address and
+# keep consuming a connection. Only one public entry should exist at a time.
+$existing=Get-Process -Name cloudflared -ErrorAction SilentlyContinue
+if($existing){
+  $existing | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  Write-Host "Stopped $($existing.Count) previous tunnel process(es)."
+}
+
 # Windows PowerShell Start-Process fails when duplicate env vars differ only in
 # case (http_proxy vs HTTP_PROXY). Detect it and drop the lowercase variants.
 $shadowedProxies=$false

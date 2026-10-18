@@ -1,4 +1,4 @@
-param([switch]$All)
+﻿param([switch]$All)
 $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
 $runtimePath=Join-Path $projectPath '.runtime'
