@@ -8,6 +8,7 @@ import "./styles.css";
 import "./workspace.css";
 import "./agent.css";
 import "./capabilities.css";
+import "./polish.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
