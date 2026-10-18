@@ -105,8 +105,7 @@ def purge_conversations(store, library, idents):
     retained = 0
     committed = False
     try:
-        with store.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with store.connect(write=True) as db:
             if db.execute("SELECT 1 FROM runs WHERE status IN ('queued','running','cancelling') LIMIT 1").fetchone():
                 raise ValueError("请先停止运行任务，再永久删除对话")
             if db.execute(f"SELECT COUNT(*) FROM conversations WHERE id IN ({placeholders})", idents).fetchone()[0] != len(idents):

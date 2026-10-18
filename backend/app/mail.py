@@ -28,7 +28,7 @@ class MailCodes:
             key = secrets.token_hex(32)
             auth.set_secret("email_hmac_key", key)
         self.key = key.encode()
-        with store.connect() as db:
+        with store.connect(write=True) as db:
             db.execute("""CREATE TABLE IF NOT EXISTS email_codes(
                 id TEXT PRIMARY KEY, scene TEXT NOT NULL, digest TEXT NOT NULL,
                 expires REAL NOT NULL, created REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
@@ -81,8 +81,7 @@ class MailCodes:
             "secret:" + key: self.auth.vault.encrypt(value.encode()).decode()
             for key, value in to_save.items()
         }
-        with self.store.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self.store.connect(write=True) as db:
             db.executemany(
                 "INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 [
@@ -111,8 +110,7 @@ class MailCodes:
         current, ident = time.time(), uid()
         code = f"{secrets.randbelow(1000000):06d}"
         peer_hash = hmac.new(self.key, peer.encode(), hashlib.sha256).hexdigest()
-        with self.store.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self.store.connect(write=True) as db:
             last = db.execute(
                 "SELECT created FROM email_codes ORDER BY created DESC LIMIT 1"
             ).fetchone()
@@ -202,8 +200,7 @@ class MailCodes:
         if not self.enabled():
             raise HTTPException(503, "邮箱服务尚未配置，请使用账号密码登录")
         success = False
-        with self.store.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self.store.connect(write=True) as db:
             row = db.execute(
                 "SELECT * FROM email_codes WHERE scene=? ORDER BY created DESC LIMIT 1",
                 (scene,),

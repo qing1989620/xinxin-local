@@ -81,8 +81,7 @@ class FileLibrary:
                     parse_error = "已保存原文件，暂时无法提取文本"
             elif extract:
                 parse_error = "原文件已保存；超过 16 MB 的文件不自动提取正文，可交给 Agent 按需处理"
-            with self.store.connect() as db:
-                db.execute("BEGIN IMMEDIATE")
+            with self.store.connect(write=True) as db:
                 previous = (
                     db.execute(
                         "SELECT file_id,signature FROM uploads WHERE request_id=?",
@@ -211,7 +210,7 @@ class FileLibrary:
 
     def delete(self, ident):
         target = self.path(ident)
-        with self.store.connect() as db:
+        with self.store.connect(write=True) as db:
             db.execute("DELETE FROM uploads WHERE file_id=?", (ident,))
             db.execute("DELETE FROM files WHERE id=?", (ident,))
         target.unlink(missing_ok=True)

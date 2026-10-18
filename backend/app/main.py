@@ -413,7 +413,7 @@ def create_app(config=None):
         row = store.one("SELECT password FROM owner WHERE id=1")
         if not password_matches(body.current, row["password"]):
             raise HTTPException(400, "原密码不正确")
-        with store.connect() as db:
+        with store.connect(write=True) as db:
             db.execute(
                 "UPDATE owner SET password=? WHERE id=1",
                 (password_hash(body.password),),
@@ -831,7 +831,7 @@ def create_app(config=None):
             if store.setting(marker) is not None:
                 raise ValueError("此任务已提交过该技能的反馈")
             router.bandit.update(run["task"], name, body.reward)
-            with store.connect() as db:
+            with store.connect(write=True) as db:
                 db.execute(
                     "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                     ("skill-policy", encode(router.bandit.state_dict())),

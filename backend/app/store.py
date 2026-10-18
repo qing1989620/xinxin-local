@@ -102,10 +102,26 @@ class Store:
             )
 
     @contextmanager
-    def connect(self):
-        db = sqlite3.connect(self.path, timeout=15)
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=15000")
+    def connect(self, write=False):
+        # WAL cleanup races on Windows: a connection opened while the WAL/shm
+        # is being (re)created can be treated as readonly (SQLITE_READONLY, not
+        # SQLITE_BUSY). Retry the write lock on a fresh connection *before*
+        # yielding, so callers never re-run their body after side effects.
+        db = self._open()
+        if write:
+            for attempt in range(8):
+                try:
+                    db.execute("BEGIN IMMEDIATE")
+                    break
+                except sqlite3.OperationalError as exc:
+                    message = str(exc).lower()
+                    if "readonly" not in message and "locked" not in message:
+                        raise
+                    db.close()
+                    time.sleep(0.01 * (attempt + 1))
+                    db = self._open()
+            else:
+                raise sqlite3.OperationalError("无法获取数据库写锁")
         try:
             yield db
             db.commit()
@@ -114,6 +130,14 @@ class Store:
             raise
         finally:
             db.close()
+
+    def _open(self):
+        db = sqlite3.connect(self.path, timeout=15)
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA busy_timeout=15000")
+        # Touch the schema page so the WAL/shm is attached before any write.
+        db.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        return db
 
     def all(self, sql, args=()):
         with self.connect() as db:
@@ -124,8 +148,20 @@ class Store:
         return rows[0] if rows else None
 
     def execute(self, sql, args=()):
-        with self.connect() as db:
-            return db.execute(sql, args).rowcount
+        # Single-statement writes still need the same WAL race retry as
+        # connect(write=True): a readonly error means the statement never ran,
+        # so replaying it is safe (the failed transaction was rolled back).
+        for attempt in range(5):
+            try:
+                with self.connect(write=True) as db:
+                    return db.execute(sql, args).rowcount
+            except sqlite3.OperationalError as exc:
+                message = str(exc).lower()
+                if attempt == 4 or (
+                    "readonly" not in message and "locked" not in message
+                ):
+                    raise
+                time.sleep(0.02 * (attempt + 1))
 
     def setting(self, key, default=None):
         row = self.one("SELECT value FROM settings WHERE key=?", (key,))
@@ -138,8 +174,7 @@ class Store:
         )
 
     def event(self, run_id, kind, data):
-        with self.connect() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self.connect(write=True) as db:
             seq = db.execute(
                 "SELECT COALESCE(MAX(seq),0)+1 FROM events WHERE run_id=?", (run_id,)
             ).fetchone()[0]
