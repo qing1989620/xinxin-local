@@ -388,6 +388,9 @@ export default function App() {
     [theme, setTheme] = useState(
       localStorage.getItem("xinxin-accent") || "teal",
     ),
+    [background, setBackground] = useState(
+      localStorage.getItem("xinxin-bg") || "paper",
+    ),
     [install, setInstall] = useState<any>(null),
     [updateAvailable, setUpdateAvailable] = useState(false);
   const applyUpdate = useRef<((reloadPage?: boolean) => Promise<void>) | null>(
@@ -501,6 +504,10 @@ export default function App() {
     }
     localStorage.setItem("xinxin-accent", theme);
   }, [theme]);
+  useEffect(() => {
+    document.documentElement.dataset.bg = background;
+    localStorage.setItem("xinxin-bg", background);
+  }, [background]);
   useEffect(() => {
     localStorage.setItem("xinxin-sidebar", compact ? "compact" : "expanded");
   }, [compact]);
@@ -796,7 +803,14 @@ export default function App() {
               <Route path="/schedules" element={<SchedulesPage />} />
               <Route
                 path="/settings"
-                element={<SettingsPage theme={theme} onTheme={setTheme} />}
+                element={
+                  <SettingsPage
+                    theme={theme}
+                    onTheme={setTheme}
+                    background={background}
+                    onBackground={setBackground}
+                  />
+                }
               />
               <Route
                 path="*"

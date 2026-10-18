@@ -32,12 +32,12 @@ body {
   background-image:
     radial-gradient(
       1100px 620px at 82% -12%,
-      rgba(55, 108, 98, 0.085),
+      color-mix(in srgb, var(--accent) 9%, transparent),
       transparent 62%
     ),
     radial-gradient(
-      820px 520px at 4% 4%,
-      rgba(168, 85, 62, 0.045),
+      860px 520px at 2% 6%,
+      color-mix(in srgb, var(--accent) 4%, transparent),
       transparent 58%
     ),
     linear-gradient(180deg, #faf8f3 0%, #f6f4ed 52%, #f3f1e9 100%);
@@ -53,8 +53,8 @@ body::before {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(41, 46, 43, 0.032) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(41, 46, 43, 0.032) 1px, transparent 1px);
+    linear-gradient(to right, rgba(41, 46, 43, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(41, 46, 43, 0.04) 1px, transparent 1px);
   background-size: 56px 56px;
   -webkit-mask-image: radial-gradient(
     130% 95% at 50% 0%,
@@ -78,6 +78,126 @@ body::after {
 #root {
   position: relative;
   z-index: 1;
+}
+
+/* Background presets — chosen in Settings, persisted in localStorage. */
+:root[data-bg="grid"] body::after {
+  display: none;
+}
+
+:root[data-bg="plain"] body::before,
+:root[data-bg="plain"] body::after {
+  display: none;
+}
+
+.background-options {
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.background-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 249, 0.72);
+  text-align: left;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background 0.16s ease;
+}
+
+.background-option:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+}
+
+.background-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+
+.background-option > svg {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.bg-swatch {
+  width: 100%;
+  height: 44px;
+  border: 1px solid rgba(41, 46, 43, 0.1);
+  border-radius: 6px;
+  background-color: #f7f5ef;
+}
+
+.bg-swatch.paper {
+  background-image:
+    linear-gradient(to right, rgba(41, 46, 43, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(41, 46, 43, 0.06) 1px, transparent 1px);
+  background-size: 7px 7px;
+}
+
+.bg-swatch.grid {
+  background-image:
+    linear-gradient(to right, rgba(41, 46, 43, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(41, 46, 43, 0.1) 1px, transparent 1px);
+  background-size: 7px 7px;
+  background-color: #faf8f3;
+}
+
+.bg-swatch.plain {
+  background-image: none;
+  background-color: #faf8f3;
+}
+
+.bg-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.bg-copy strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.bg-copy small {
+  font-size: 10px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) {
+  .background-options {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .background-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 ::selection {
@@ -311,6 +431,57 @@ code,
 pre code {
   background: none;
   padding: 0;
+}
+
+/* ---- detail refinements ------------------------------------------------ */
+
+.nav-link {
+  position: relative;
+}
+
+.nav-link.active::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: 11px;
+  bottom: 11px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.mission-card,
+.resource-console,
+.desk-panel {
+  box-shadow:
+    var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.button.primary {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(0, 0, 0, 0.04)
+  );
+}
+
+.desk-heading h1,
+.page-heading h1 {
+  letter-spacing: -0.03em;
+}
+
+.metric-card > strong,
+.activity-summary strong,
+.console-mark {
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-chart .bar-track > span {
+  border-radius: 3px 3px 0 0;
+}
+
+.empty {
+  color: var(--muted);
 }
 
 /* ---- motion & mobile --------------------------------------------------- */

@@ -739,9 +739,13 @@ type SettingsData = {
 export function SettingsPage({
   theme,
   onTheme,
+  background,
+  onBackground,
 }: {
   theme: string;
   onTheme: (value: string) => void;
+  background: string;
+  onBackground: (value: string) => void;
 }) {
   const { data, error, reload } = useResource<SettingsData>("/settings"),
     [model, setModel] = useState(""),
@@ -819,6 +823,29 @@ export function SettingsPage({
               <strong>{label}</strong>
               <small>{description}</small>
               {theme === value && <Check size={16} />}
+            </button>
+          ))}
+        </div>
+        <div className="background-options" aria-label="背景样式">
+          {[
+            ["paper", "纸纹", "细网格与纸张颗粒"],
+            ["grid", "网格", "只有发丝参考线"],
+            ["plain", "纯净", "不着纹理的暖白"],
+          ].map(([value, label, description]) => (
+            <button
+              key={value}
+              className={`background-option ${
+                background === value ? "selected" : ""
+              }`}
+              onClick={() => onBackground(value)}
+              aria-pressed={background === value}
+            >
+              <span className={`bg-swatch ${value}`} />
+              <span className="bg-copy">
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+              {background === value && <Check size={16} />}
             </button>
           ))}
         </div>
