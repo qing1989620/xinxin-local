@@ -87,6 +87,8 @@ for($i=0;$i -lt 90;$i++){
 
 Write-Host ''
 if($publicUrl){
+  # remember the address for other tools and for the stop script
+  Set-Content -LiteralPath (Join-Path $runtimePath 'public-url.txt') -Value $publicUrl -Encoding UTF8
   # quick-tunnel origins change every run: drop the stale one, append the new one
   $envFile=Join-Path $projectPath 'backend/.env'
   if(Test-Path -LiteralPath $envFile){
@@ -112,11 +114,13 @@ if($publicUrl){
     [System.IO.File]::WriteAllLines($envFile,$updated,(New-Object System.Text.UTF8Encoding($false)))
     Write-Host '  backend/.env CORS allowlist updated.'
 
-    # restart managed services so the backend serves the new origin
+    # restart managed services so the backend serves the new origin.
+    # Do NOT use *> here: the launcher sets $ErrorActionPreference='Stop', and
+    # merging a native command's stderr into the stream aborts it mid-way.
     Write-Host '  Restarting local services so the new origin takes effect...'
-    & (Join-Path $projectPath 'Stop-Xinxin-Local.ps1') *> $null
+    & (Join-Path $projectPath 'Stop-Xinxin-Local.ps1')
     Start-Sleep -Seconds 2
-    & (Join-Path $projectPath 'Start-Xinxin-Local.ps1') -NoBrowser *> $null
+    & (Join-Path $projectPath 'Start-Xinxin-Local.ps1') -NoBrowser
     Start-Sleep -Seconds 6
   }
 

@@ -39,7 +39,11 @@ export default defineConfig({
       },
     }),
   ],
+  // 公网隧道/自有域名进来时 Host 不是 localhost，Vite 7 默认会返回
+  // 403 "Blocked request"（静态页面被拦、而 /api 走代理却正常，
+  // 表现就是接口通、页面 403）。这里显式放行隧道域名族。
   server: {
+    allowedHosts: [".trycloudflare.com", ".zhixuedu.cn", ".localhost"],
     watch: {
       ignored: ["**/android/**", "**/.toolchains/**", "**/releases/**"],
     },
@@ -51,8 +55,9 @@ export default defineConfig({
     },
   },
   // 本地版用 vite preview 提供生产界面：/api 与 /health 同样转发给后端，
-  // 使 http://127.0.0.1:5180 与 Tailscale 私有域名都可直接使用。
+  // 使 http://127.0.0.1:5180 与公网隧道域名都可直接使用。
   preview: {
+    allowedHosts: [".trycloudflare.com", ".zhixuedu.cn", ".localhost"],
     port: 5180,
     strictPort: true,
     proxy: {

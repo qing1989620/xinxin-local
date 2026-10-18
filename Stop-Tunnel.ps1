@@ -16,6 +16,10 @@ $json = Join-Path $runtimePath 'tunnel.json'
 if (Test-Path -LiteralPath $json) {
   Remove-Item -LiteralPath $json -Force -ErrorAction SilentlyContinue
 }
+$urlFile = Join-Path $runtimePath 'public-url.txt'
+if (Test-Path -LiteralPath $urlFile) {
+  Remove-Item -LiteralPath $urlFile -Force -ErrorAction SilentlyContinue
+}
 
 # -All also stops backend / frontend / gateway.
 if ($All) {
