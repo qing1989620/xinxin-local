@@ -56,6 +56,16 @@ $outLog=Join-Path $runtimePath 'tunnel.out.log'
 $errLog=Join-Path $runtimePath 'tunnel.err.log'
 foreach($f in @($outLog,$errLog)){ if(Test-Path -LiteralPath $f){ Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
 
+# Windows PowerShell Start-Process fails when duplicate env vars differ only in
+# case (http_proxy vs HTTP_PROXY). Detect it and drop the lowercase variants.
+$shadowedProxies=$false
+try{$null=Get-ChildItem -LiteralPath env: -ErrorAction Stop}catch{$shadowedProxies=$true}
+if($shadowedProxies){
+  foreach($lower in 'http_proxy','https_proxy','all_proxy','no_proxy'){
+    Remove-Item -LiteralPath "env:$lower" -ErrorAction SilentlyContinue
+  }
+}
+
 $proc=Start-Process -FilePath $tunnelExe -ArgumentList $tunnelArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog
 @{role='tunnel';id=$proc.Id;started=(Get-Date).ToString('s')} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimePath 'tunnel.json') -Encoding UTF8
 
@@ -77,16 +87,44 @@ for($i=0;$i -lt 90;$i++){
 
 Write-Host ''
 if($publicUrl){
+  # quick-tunnel origins change every run: drop the stale one, append the new one
+  $envFile=Join-Path $projectPath 'backend/.env'
+  if(Test-Path -LiteralPath $envFile){
+    $lines=Get-Content -LiteralPath $envFile
+    $updated=New-Object System.Collections.Generic.List[string]
+    $found=$false
+    foreach($line in $lines){
+      if($line -match '^\s*XINXIN_CORS_ORIGINS='){
+        $value=$line.Substring($line.IndexOf('=')+1)
+        $kept=@()
+        foreach($part in ($value -split ',')){
+          $p=$part.Trim()
+          if($p -and ($p -notmatch 'trycloudflare\.com')){ $kept+=$p }
+        }
+        $kept+=$publicUrl
+        $updated.Add('XINXIN_CORS_ORIGINS=' + ($kept -join ','))
+        $found=$true
+      }else{
+        $updated.Add($line)
+      }
+    }
+    if(-not $found){ $updated.Add('XINXIN_CORS_ORIGINS=' + $publicUrl) }
+    [System.IO.File]::WriteAllLines($envFile,$updated,(New-Object System.Text.UTF8Encoding($false)))
+    Write-Host '  backend/.env CORS allowlist updated.'
+
+    # restart managed services so the backend serves the new origin
+    Write-Host '  Restarting local services so the new origin takes effect...'
+    & (Join-Path $projectPath 'Stop-Xinxin-Local.ps1') *> $null
+    Start-Sleep -Seconds 2
+    & (Join-Path $projectPath 'Start-Xinxin-Local.ps1') -NoBrowser *> $null
+    Start-Sleep -Seconds 6
+  }
+
   Write-Host 'Xinxin is reachable from the public internet:' -ForegroundColor Green
   Write-Host "  $publicUrl"
   Write-Host ''
-  Write-Host '  IMPORTANT: add the address above to XINXIN_CORS_ORIGINS in backend/.env'
-  Write-Host '  and restart the backend, otherwise the phone page loads but API'
-  Write-Host '  requests are blocked by the browser (CORS).'
-  Write-Host ''
   Write-Host '  The quick-tunnel address changes on every restart. For a permanent'
   Write-Host '  address use a named Cloudflare Tunnel with your own domain, or frp.'
-  Write-Host '  Close the tunnel with ./Stop-Xinxin-Local.ps1 (stops managed roles).'
 }else{
   Write-Host 'No tunnel address within 45s. Check .runtime/tunnel.out.log and tunnel.err.log' -ForegroundColor DarkYellow
 }
