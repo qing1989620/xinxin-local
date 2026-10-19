@@ -24,6 +24,29 @@ Xinxin 是一个**单主人、本地优先**的 Agent 工作空间。它把「�
 
 ---
 
+## 技术栈
+
+| 层 | 选型 |
+| --- | --- |
+| 后端 | FastAPI + SQLite（WAL）+ 自研任务引擎（持久化队列 / 事件流 / 预算 / 续接） |
+| 技能检索 | BM25 Okapi + E5 稠密语义（int8 ONNX，384 维）+ 结构/标签三通道融合 |
+| 策略学习 | Shared LinUCB（证据门控：工具执行成功才更新） |
+| 模型接入 | 任意 OpenAI 兼容 Chat Completions（默认 DeepSeek），流式解析 |
+| 前端 | React 19 + TypeScript + Vite 7，16 个页面，无状态管理库 |
+| 可视化 | 自研 Canvas 渲染（技能球 3D 聚类、农历），不依赖 three.js |
+| 移动端 | Capacitor 8 打包 APK；PWA（Workbox，prompt 型更新） |
+| 网关 | Caddy 单端口反代（`flush_interval -1` 保证 SSE 实时） |
+| 桌面端 | PowerShell 5.1 + Edge 应用模式，WindowsJob 进程树终止 |
+| 公网（可选） | cloudflared 出站隧道，无需公网 IP |
+
+代码规模：后端 31 个 Python 文件约 7 900 行，前端 31 个 TS/TSX 文件约 11 000 行，
+桌面端 6 个脚本；75 个 REST 端点 + 1 条 SSE 流；19 张表的单库存储。
+
+> 想读懂实现：[架构与实现](docs/架构与实现.md)（模块地图 / 数据模型 / 接口契约）、
+> [算法详解](docs/算法详解.md)（三通道检索的公式与权重、LinUCB、预算与压缩策略）。
+
+---
+
 ## 界面导览
 
 ### 工作台
@@ -360,6 +383,9 @@ events: queued · started · skills · usage · tool.* · delta · progress · f
 - 检索审计数据（`candidates` / `graph_added`）只用于展示，不进入系统提示
 - 上一轮的工具证据带 `seq`、参数和结果摘要，续接任务不靠模型记忆
 
+> 每一步的公式、权重与取舍（为什么用 BM25 原始分做置信度标尺、为什么压缩顺序如此、
+> LinUCB 为什么要求执行证据）都写在 [算法详解](docs/算法详解.md)。
+
 ---
 
 ## 快速开始
@@ -463,9 +489,9 @@ APK 生成在 `frontend/releases/Xinxin-0.1.0-local.apk`，使用你自己的签
 
 当前状态（2026-10-19）：
 
-- 后端 **172** 项测试、前端 **37** 项测试通过；TypeScript 与生产构建通过
+- 后端 **172** 项测试、前端 **43** 项测试通过；TypeScript 与生产构建通过
 - 14 个页面 + 1 个对话态用无头浏览器逐页检查：**0 控制台错误、0 未捕获异常**
-- 公网链路 20 项验收：HTTPS 登录、CORS、上传/下载（中文文件名）、401 CORS、SSE 到结束、断点续传、真实 Agent 任务、Fabric 重排
+- 公网链路 21 项验收：HTTPS 登录、CORS、上传/下载（中文文件名）、401 CORS、SSE 到结束、断点续传、真实 Agent 任务、Fabric 重排
 - 真实浏览器点击流程：登录表单 → Agent 输入 → 模型流式回复，全链路通过
 - 电脑软件端 11 项验收通过：单实例、冷启动、端口占用错误窗口、VBS 无窗口、安装/卸载快捷方式、日志编码等（详见 [`docs/电脑端验收.md`](docs/电脑端验收.md)）
 
@@ -503,14 +529,15 @@ APK 生成在 `frontend/releases/Xinxin-0.1.0-local.apk`，使用你自己的签
 │   ├── Install/Uninstall-*.ps1     # 快捷方式装/卸
 │   └── assets/                     # 启动页、错误页模板、图标
 ├── backend/                                         # FastAPI + SQLite
-│   ├── app/            # 路由、任务、技能、模型、工具
+│   ├── app/            # 路由、任务、技能、模型、工具（31 个模块）
 │   ├── tests/          # 172 项后端测试
 │   ├── scripts/        # 冒烟、全链路、演示数据
 │   └── resources/      # SkillNet 语料（1800+ 技能）、绘图参考
 ├── frontend/                                        # React + TypeScript
-│   ├── src/            # 页面、组件、样式（14 个页面）
+│   ├── src/            # 页面、组件、样式（16 个页面）
+│   ├── tests/          # 43 项前端测试
 │   └── build-android.ps1           # Android APK 打包
-└── docs/               # 部署、验收、截图、专题文档
+└── docs/               # 架构与实现、算法详解、部署、验收、截图
 ```
 
 前后端只通过版本化 HTTP 接口和事件契约协作，不跨目录 import，不直连数据库。
