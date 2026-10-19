@@ -73,6 +73,7 @@ import AgentPage from "./pages/AgentPage";
 import { configureConversationLocation } from "./conversationLocation";
 import TasksPage from "./pages/TasksPage";
 import FilesPage from "./pages/FilesPage";
+import ErrorBoundary from "./ErrorBoundary";
 import {
   ServersPage,
   SkillsPage,
@@ -808,45 +809,47 @@ export default function App() {
           </div>
         </header>
         <main id="main" className="main">
-          <Suspense fallback={<Loading />}>
-            <Routes>
-              <Route path="/" element={<Dashboard name={name} />} />
-              <Route path="/agent" element={<AgentPage />} />
-              <Route path="/tasks" element={<TasksPage />} />
-              <Route path="/files" element={<FilesPage />} />
-              <Route path="/servers" element={<ServersPage />} />
-              <Route path="/skills" element={<SkillsPage />} />
-              <Route path="/content/*" element={<ContentPage />} />
-              <Route path="/tools" element={<ToolsPage />} />
-              <Route path="/memories" element={<MemoriesPage />} />
-              <Route path="/schedules" element={<SchedulesPage />} />
-              <Route
-                path="/settings"
-                element={
-                  <SettingsPage
-                    theme={theme}
-                    onTheme={setTheme}
-                    background={background}
-                    onBackground={setBackground}
-                  />
-                }
-              />
-              <Route
-                path="*"
-                element={
-                  <div className="empty">
-                    <h1>这里还没有内容</h1>
-                    <button
-                      className="button primary"
-                      onClick={() => navigate("/")}
-                    >
-                      回到工作台
-                    </button>
-                  </div>
-                }
-              />
-            </Routes>
-          </Suspense>
+          <ErrorBoundary resetKey={location.pathname}>
+            <Suspense fallback={<Loading />}>
+              <Routes>
+                <Route path="/" element={<Dashboard name={name} />} />
+                <Route path="/agent" element={<AgentPage />} />
+                <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/files" element={<FilesPage />} />
+                <Route path="/servers" element={<ServersPage />} />
+                <Route path="/skills" element={<SkillsPage />} />
+                <Route path="/content/*" element={<ContentPage />} />
+                <Route path="/tools" element={<ToolsPage />} />
+                <Route path="/memories" element={<MemoriesPage />} />
+                <Route path="/schedules" element={<SchedulesPage />} />
+                <Route
+                  path="/settings"
+                  element={
+                    <SettingsPage
+                      theme={theme}
+                      onTheme={setTheme}
+                      background={background}
+                      onBackground={setBackground}
+                    />
+                  }
+                />
+                <Route
+                  path="*"
+                  element={
+                    <div className="empty">
+                      <h1>这里还没有内容</h1>
+                      <button
+                        className="button primary"
+                        onClick={() => navigate("/")}
+                      >
+                        回到工作台
+                      </button>
+                    </div>
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </main>
         <footer className="workspace-footer">
           <span>XINXIN — A SPACE OF YOUR OWN</span>

@@ -16,6 +16,11 @@ from pathlib import Path
 
 PERMISSIONS = {"read": 0, "workspace": 1, "full": 2}
 
+# subprocess 模块只导出 CREATE_NEW_PROCESS_GROUP / CREATE_NO_WINDOW，
+# 不导出 CREATE_SUSPENDED（0x4）；进程先挂起，再由 WindowsJob 指派进作业
+# （见 windows_job.py），确保任务进程树随作业句柄关闭而被整棵终止。
+CREATE_SUSPENDED = 0x4
+
 
 class Policy:
     def __init__(self, level, workspace, cancelled=None):
@@ -99,7 +104,11 @@ def execute_process(command, cwd, cancelled, timeout=90, *, on_output=None, keep
         env=env,
         start_new_session=os.name != "nt",
         creationflags=(
-            (subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW | 0x4)
+            (
+                subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
+            )
             if os.name == "nt"
             else 0
         ),

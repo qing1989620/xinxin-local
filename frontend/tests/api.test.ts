@@ -602,4 +602,30 @@ describe("private transport boundaries", () => {
     expect(seen).toEqual(["你好", "完成"]);
     expect(streams).toBe(2);
   });
+  it("skips a malformed event and keeps the rest of the stream flowing", async () => {
+    const { setSession, watchRun } = await import("../src/api");
+    await setSession("local-test");
+    const seen: string[] = [];
+    const event = (seq: number, text: string) =>
+      `id: ${seq}\ndata: ${JSON.stringify({ seq, kind: "delta", data: { text } })}\n\n`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) =>
+        new Response(
+          input.includes("/events")
+            ? event(1, "开始") +
+                'id: 2\ndata: {"seq":2,"kind":"delta","data":{"text":"截断\n\n' +
+                event(3, "继续") +
+                "event: end\ndata: {}\n\n"
+            : '{"status":"running"}',
+        ),
+      ),
+    );
+    await watchRun(
+      "task",
+      (item) => seen.push(item.data.text),
+      new AbortController().signal,
+    );
+    expect(seen).toEqual(["开始", "继续"]);
+  });
 });

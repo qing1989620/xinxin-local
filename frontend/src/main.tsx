@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { ToastProvider } from "./ui";
 import App from "./App";
 import { UploadProvider } from "./Uploads";
+import ErrorBoundary from "./ErrorBoundary";
 import "./styles.css";
 import "./workspace.css";
 import "./agent.css";
@@ -12,12 +13,14 @@ import "./polish.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ToastProvider>
-        <UploadProvider>
-          <App />
-        </UploadProvider>
-      </ToastProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ToastProvider>
+          <UploadProvider>
+            <App />
+          </UploadProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

@@ -425,7 +425,15 @@ export async function watchRun(
             .map((line) => line.slice(5).trimStart())
             .join("\n");
           if (!text) continue;
-          const event = JSON.parse(text) as EventItem;
+          let event: EventItem;
+          try {
+            event = JSON.parse(text) as EventItem;
+            if (!event || typeof event !== "object") continue;
+          } catch {
+            // 单条脏事件（截断的 JSON、网关注入的杂项）不应中断整个任务流：
+            // 跳过即可，游标不前进，断线重连后后端会按游标补发完整事件。
+            continue;
+          }
           if (event.seq > cursor) {
             cursor = event.seq;
             if (event.kind === "finished") sawFinished = true;

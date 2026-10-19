@@ -18,6 +18,7 @@ import {
   type Run,
   type EventItem,
 } from "../api";
+import { parseJson } from "../safeJson";
 import {
   Empty,
   ErrorState,
@@ -218,7 +219,11 @@ export default function TasksPage() {
                   <strong>{date(detail.created)}</strong>
                   <span>用量</span>
                   <strong>
-                    {JSON.parse(detail.usage || "{}").total_tokens || 0} tokens
+                    {parseJson<{ total_tokens?: number }>(
+                      detail.usage,
+                      {},
+                    ).total_tokens || 0}{" "}
+                    tokens
                   </strong>
                 </div>
                 {["queued", "running", "cancelling"].includes(
