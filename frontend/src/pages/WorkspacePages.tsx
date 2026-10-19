@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Clock3,
   Code2,
+  Copy,
   ExternalLink,
   Image,
   LockKeyhole,
@@ -23,6 +24,7 @@ import {
   Sparkles,
   Trash2,
   WandSparkles,
+  Wifi,
 } from "lucide-react";
 import {
   api,
@@ -736,6 +738,51 @@ type SettingsData = {
   image_configured: boolean;
   zine_installed: boolean;
 };
+
+type NetworkInfo = {
+  local: string;
+  lan: string;
+  public: string;
+  gateway_port: number;
+  public_updated: string;
+  server_required: boolean;
+};
+
+function AddressRow({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  const toast = useToast();
+  return (
+    <div className="address-row">
+      <span className="address-label">{label}</span>
+      <code>{value}</code>
+      {hint && <small>{hint}</small>}
+      {value.startsWith("http") && (
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={`复制${label}地址`}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(value);
+              toast("已复制");
+            } catch {
+              toast("复制失败，请手动选择", true);
+            }
+          }}
+        >
+          <Copy size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
 export function SettingsPage({
   theme,
   onTheme,
@@ -757,6 +804,7 @@ export function SettingsPage({
     [busy, setBusy] = useState(false),
     [password, setPassword] = useState({ current: "", password: "" }),
     toast = useToast();
+  const network = useResource<NetworkInfo>("/network");
   useEffect(() => {
     if (data) {
       setModel(data.model);
@@ -860,6 +908,34 @@ export function SettingsPage({
         <code>{theme.startsWith("#") ? theme : "自由选择色彩"}</code>
         <span>自动保持文字可读性</span>
       </label>
+      {network.data && (
+        <section className="settings-section">
+          <div className="settings-intro">
+            <Wifi size={22} strokeWidth={1.3} />
+            <h2>连接地址</h2>
+            <p>
+              同一 WiFi 直接用局域网地址，不需要服务器。
+              <br />
+              只有人不在同一网络时，才用下面的外部地址。
+            </p>
+          </div>
+          <div className="address-list">
+            <AddressRow label="本机" value={network.data.local} />
+            <AddressRow
+              label="手机 / 局域网"
+              value={network.data.lan || "未检测到局域网地址"}
+              hint="同一 WiFi，地址不变"
+            />
+            <AddressRow
+              label="外部访问"
+              value={network.data.public || "未开启"}
+              hint={
+                network.data.public ? "重启后会变化" : "启动公网访问后显示"
+              }
+            />
+          </div>
+        </section>
+      )}
       <EmailSettings />
       <form onSubmit={save}>
         <section className="settings-section">

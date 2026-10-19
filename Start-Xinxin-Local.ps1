@@ -171,23 +171,55 @@ if($NoGateway){
   }finally{$env:XINXIN_LOG_DIR=$oldLogDir;$env:XINXIN_GATEWAY_PORT=$oldPort}
 }
 
+# 本机地址清单：供设置页与隧道脚本读取，不依赖任何外部服务
+$addresses=@{
+  local="http://127.0.0.1:$FrontendPort"
+  lan=if($gatewayStarted -and $lanIp){"http://${lanIp}:$GatewayPort"}else{''}
+  gateway_port=$GatewayPort
+  updated=(Get-Date).ToString('s')
+}
+$addresses | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimePath 'addresses.json') -Encoding UTF8
+
 Write-Host ''
 Write-Host 'Xinxin本地版 已启动'
 Write-Host "  本机浏览器:    http://127.0.0.1:$FrontendPort"
 if($gatewayStarted -and $lanIp){
-  Write-Host "  手机/局域网:   http://${lanIp}:$GatewayPort   （手机需连同一 WiFi）"
-  Write-Host "  如手机连不上：以管理员运行 ./Setup-Lan-Access.ps1 放行防火墙，或换 -GatewayPort"
+  Write-Host "  手机/局域网:   http://${lanIp}:$GatewayPort   （同一 WiFi，无需服务器）"
 }elseif($gatewayStarted){
   Write-Host "  手机/局域网:   http://<本机局域网IP>:$GatewayPort   （未能自动探测局域网 IP）"
 }
 Write-Host "  停止: ./Stop-Xinxin-Local.ps1"
 
-# 防火墙自检：没有放行规则时，手机必然连不上局域网网关
+# 防火墙自检：程序规则（放行 tools\caddy.exe）或端口规则任一存在即可。
+# 早期只看端口规则，会把 Setup-Lan-Access 创建的程序规则误判为“未放行”。
 if($gatewayStarted){
-  $fwRuleName="Xinxin本地版网关 (TCP $GatewayPort)"
-  $hasFwRule=$false
-  try{$hasFwRule=[bool](Get-NetFirewallRule -DisplayName $fwRuleName -ErrorAction SilentlyContinue)}catch{$hasFwRule=$false}
-  if(-not $hasFwRule){
+  $fwOk=$false
+  $fwKind=''
+  try{
+    $programs=Get-NetFirewallRule -Direction Inbound -Enabled True -Action Allow -ErrorAction Stop |
+      Where-Object { $_.DisplayName -like 'Caddy*' -or $_.DisplayName -like 'Xinxin*' }
+    foreach($rule in $programs){
+      $program=$rule | Get-NetFirewallApplicationFilter
+      if($program.Program -and (Test-Path -LiteralPath $program.Program)){
+        $appPath=[System.IO.Path]::GetFullPath($program.Program)
+        $caddyPath=[System.IO.Path]::GetFullPath($caddyExe)
+        if($appPath -eq $caddyPath){$fwOk=$true;$fwKind='程序规则';break}
+      }
+    }
+    if(-not $fwOk){
+      $portFilters=Get-NetFirewallPortFilter -Protocol TCP -ErrorAction Stop |
+        Where-Object { $_.LocalPort -eq $GatewayPort -or $_.LocalPort -eq 'Any' }
+      foreach($filter in $portFilters){
+        $rule=$filter | Get-NetFirewallRule -ErrorAction SilentlyContinue
+        if($rule -and $rule.Direction -eq 'Inbound' -and $rule.Enabled -eq 'True' -and $rule.Action -eq 'Allow'){
+          $fwOk=$true;$fwKind='端口规则';break
+        }
+      }
+    }
+  }catch{$fwOk=$false}
+  if($fwOk){
+    Write-Host "  防火墙：已放行网关（$fwKind），手机与电脑在同一 WiFi 即可访问" -ForegroundColor DarkGray
+  }else{
     Write-Host ''
     Write-Host '[!] 手机多半连不上：Windows 防火墙尚未放行 TCP ' -NoNewline -ForegroundColor Yellow
     Write-Host $GatewayPort -ForegroundColor Yellow

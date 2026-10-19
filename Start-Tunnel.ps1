@@ -3,21 +3,15 @@
 # Exposes the local gateway (127.0.0.1:<LocalPort>) so a phone on mobile data
 # or any outside network can reach this machine's backend.
 #
-# Two modes:
-#   cloudflare (default) - quick tunnel, no account and no domain needed.
-#                          Cloudflare assigns https://<random>.trycloudflare.com,
-#                          which CHANGES on every restart. Good for validating the
-#                          path, not for a permanent address.
-#   frp                  - self-hosted relay via your own public server.
-#                          Fixed address. Needs tools/frpc.exe and tools/frpc.toml.
+# Quick tunnel only: no account, no domain, and no server to rent. Cloudflare
+# assigns https://<random>.trycloudflare.com, which changes on every restart.
+# The LAN address (http://<this-machine-ip>:8080) is the stable one.
 #
 # Usage:
 #   ./Start-Tunnel.ps1
-#   ./Start-Tunnel.ps1 -UseFrp
 #   ./Start-Tunnel.ps1 -LocalPort 9090
 param(
-  [int]$LocalPort = 8080,
-  [switch]$UseFrp
+  [int]$LocalPort = 8080
 )
 $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
@@ -32,23 +26,15 @@ if(-not $listener){
 Write-Host "Local gateway is listening on 127.0.0.1:$LocalPort"
 
 # --- 2. locate the tunnel binary ---
-if($UseFrp){
-  $tunnelExe=Join-Path $projectPath 'tools/frpc.exe'
-  $tunnelArgs=@('-c',(Join-Path $projectPath 'tools/frpc.toml'))
-  $missing='tools/frpc.exe (https://github.com/fatedier/frp/releases) or tools/frpc.toml'
-}else{
-  $found=Get-Command cloudflared -ErrorAction SilentlyContinue
-  if($found){ $tunnelExe=$found.Source } else { $tunnelExe=Join-Path $projectPath 'tools/cloudflared.exe' }
-  $tunnelArgs=@('tunnel','--url',"http://127.0.0.1:$LocalPort",'--no-autoupdate')
-  $missing='tools/cloudflared.exe (https://github.com/cloudflare/cloudflared/releases)'
-}
+$found=Get-Command cloudflared -ErrorAction SilentlyContinue
+if($found){ $tunnelExe=$found.Source } else { $tunnelExe=Join-Path $projectPath 'tools/cloudflared.exe' }
+$tunnelArgs=@('tunnel','--url',"http://127.0.0.1:$LocalPort",'--no-autoupdate')
+$missing='tools/cloudflared.exe (https://github.com/cloudflare/cloudflared/releases)'
 
 if(-not (Test-Path -LiteralPath $tunnelExe)){
   Write-Host ''
   Write-Host "Tunnel binary not found. Install $missing" -ForegroundColor Yellow
-  if(-not $UseFrp){
-    Write-Host '  winget install --id Cloudflare.cloudflared -e'
-  }
+  Write-Host '  winget install --id Cloudflare.cloudflared -e'
   exit 1
 }
 
@@ -96,8 +82,10 @@ for($i=0;$i -lt 90;$i++){
 
 Write-Host ''
 if($publicUrl){
-  # remember the address for other tools and for the stop script
-  Set-Content -LiteralPath (Join-Path $runtimePath 'public-url.txt') -Value $publicUrl -Encoding UTF8
+  # remember the address for other tools and for the stop script.
+  # Write without a BOM: the backend reads this file as a strict URL.
+  $urlFile=Join-Path $runtimePath 'public-url.txt'
+  [System.IO.File]::WriteAllText($urlFile, $publicUrl, (New-Object System.Text.UTF8Encoding($false)))
   # quick-tunnel origins change every run: drop the stale one, append the new one
   $envFile=Join-Path $projectPath 'backend/.env'
   if(Test-Path -LiteralPath $envFile){
@@ -135,9 +123,16 @@ if($publicUrl){
 
   Write-Host 'Xinxin is reachable from the public internet:' -ForegroundColor Green
   Write-Host "  $publicUrl"
-  Write-Host ''
-  Write-Host '  The quick-tunnel address changes on every restart. For a permanent'
-  Write-Host '  address use a named Cloudflare Tunnel with your own domain, or frp.'
+  $lanUrl=''
+  try{
+    $addresses=Get-Content -LiteralPath (Join-Path $runtimePath 'addresses.json') -Raw | ConvertFrom-Json
+    $lanUrl=$addresses.lan
+  }catch{}
+  if($lanUrl){
+    Write-Host ''
+    Write-Host "  Same Wi-Fi, no server, never changes: $lanUrl"
+  }
+  Write-Host '  The quick-tunnel address changes on every restart; the LAN address does not.'
 }else{
   Write-Host 'No tunnel address within 45s. Check .runtime/tunnel.out.log and tunnel.err.log' -ForegroundColor DarkYellow
 }

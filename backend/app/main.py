@@ -35,6 +35,7 @@ from .conversations import deletion_preview, purge_conversation, batch_deletion_
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
 from .model import endpoint
+from .network import local_addresses
 from .mail import MailCodes
 from .skills import SkillRouter
 from .store import Store, encode, now, uid
@@ -316,6 +317,10 @@ def create_app(config=None):
     @app.get("/health")
     def health():
         return {"status": "ok", "product": "Xinxin", "version": "0.1.0"}
+
+    @app.get("/api/v1/network", dependencies=[Depends(owner)])
+    def network():
+        return local_addresses()
 
     @app.get("/api/v1/auth/status")
     def auth_status():
