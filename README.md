@@ -18,6 +18,7 @@ Xinxin 是一个**单主人、本地优先**的 Agent 工作空间。它把「�
 - 每一轮任务都有事件流，断线可回放，超预算会停下并保留现场
 - 技能不是一张固定的工具表，而是从 1800+ 个技能里按任务检索、扩展、重排后选出最必要的那几个
 - 所有数据、模型密钥、生成文件都留在本机；后端只监听回环，局域网只开一个端口
+- 可以用电脑软件端（双击图标）、桌面浏览器、手机浏览器、PWA 或 APK——同一份数据、同一套服务
 
 它最初为云服务器而写，现在以**本机版**分发：开箱即用，手机连同一个 Wi-Fi 就能用。
 
@@ -162,15 +163,79 @@ Xinxin 是一个**单主人、本地优先**的 Agent 工作空间。它把「�
 
 ## 它能做什么
 
-| 类别 | 具体能力 |
+下面按使用场景把功能拆开细说，每一项都是当前版本已经验证可用的能力。
+
+### 对话与执行
+
+| 能力 | 说明 |
 | --- | --- |
-| 对话与执行 | 多轮对话、任务拆解、工具调用、文件读写、命令执行、进度说明 |
-| 研究与资料 | 文件上传、正文抽取、全文检索、引用阅读、论文级绘图、图片处理 |
-| 内容生产 | 文章、合集、相册、诗词、简历；草稿与发布状态 |
-| 长期协作 | 记忆、定时任务、任务续接、断线回放 |
-| 技能体系 | 1800+ 技能检索、关系扩展、必要性重排、依赖排序、证据门控学习 |
-| 多端 | 桌面浏览器、手机浏览器/PWA、Android APK |
-| 模型 | 任意 OpenAI 兼容 Chat Completions 接口；密钥本地加密 |
+| 多轮对话 | 支持 Markdown 渲染、代码块高亮、图片与附件；流式回复逐字出现 |
+| 任务拆解 | 一句话目标会被拆成可执行步骤，由 Agent 自己调工具完成，不需要你指定用哪个工具 |
+| 工具调用 | 文件读写、命令执行、网络请求、绘图、图片处理等，全部在本机执行 |
+| 进度说明 | 执行过程中的中间说明与最终答复分开记录，断流草稿不污染历史 |
+| 手动停止 | 任务跑到一半可以随时停；已执行的工具记录保留，支持续接 |
+| 幂等重试 | 同一个 `request_key` 重复提交不会重复执行 |
+
+### 研究与资料
+
+| 能力 | 说明 |
+| --- | --- |
+| 文件上传 | 单文件 64 MB 上限，认证后解析，超大请求在解 multipart 之前就被拒绝 |
+| 幂等上传 | 同名重试带 `X-Upload-ID`，网络抖动不会留下两份 |
+| 正文抽取 | 文本、Markdown、CSV、PDF、DOCX 等自动抽取正文供检索 |
+| 全文检索 | 上传的资料可被 Agent 检索并在回答中引用 |
+| 论文级绘图 | 20+ 种图表模板（森林图、火山图、生存曲线、ROC、SHAP、UMAP 等） |
+| 图片处理 | 去水印、增强、修复、人像美化、抠图 |
+
+### 内容生产
+
+| 形态 | 说明 |
+| --- | --- |
+| 文章 / 合集 | 长文写作与多篇组合，支持草稿与发布状态 |
+| 相册 | 图片集合管理 |
+| 诗词 | 诗、词、赋等短篇内容 |
+| 简历 | 结构化个人简历 |
+| 共同能力 | 草稿与已发布分开，默认全部私有；可附图附件，Agent 也能读取这些内容作为上下文 |
+
+### 长期协作
+
+| 能力 | 说明 |
+| --- | --- |
+| 记忆 | 偏好、事实、项目、习惯四类；可手动维护或让 Agent 记住；每轮只注入最近少量条目 |
+| 定时任务 | 固定间隔执行，停机期间不补跑；每次执行产生独立任务记录 |
+| 任务续接 | 断线回放、失败后接着跑、预算耗尽后保留现场 |
+| 断点续传 | SSE 断线带上 `Last-Event-ID` 可从游标续传 |
+
+### 技能体系
+
+| 能力 | 说明 |
+| --- | --- |
+| 1800+ 内置技能 | 带契约（能力、输入、输出、适用场景）、质量评级、依赖关系 |
+| 三通道融合 | BM25 + E5 稠密 + 结构/标签召回，加权融合 |
+| 关系扩展 | 按 `compose_with` / `depend_on` 图扩展候选 |
+| 必要性重排 | LLM 判断哪些技能真的需要，可以少选、可以不选 |
+| 置信度分流 | 自动 / 确认 / 直答三档，按检索分数分流 |
+| 证据门控学习 | 有工具执行成功证据才更新 LinUCB；没有证据不学习 |
+| 只读语料 | 社区技能按只读资料处理，绝不自动执行其中脚本 |
+
+### 多端
+
+| 端 | 形态 |
+| --- | --- |
+| 电脑软件端 | 桌面图标一键启动，独立应用窗口（无地址栏/标签页） |
+| 桌面浏览器 | 直接打开本机或局域网地址 |
+| 手机浏览器 | 响应式布局，可「添加到主屏幕」当 PWA |
+| Android APK | 自签打包，预填局域网地址 |
+
+### 模型与安全
+
+| 能力 | 说明 |
+| --- | --- |
+| 任意 OpenAI 兼容接口 | 走 Chat Completions；默认 DeepSeek，可换任意兼容服务 |
+| 密钥本地加密 | `vault.key` 加密存储，不回传前端、不进日志 |
+| 单主人认证 | 一个账号，CORS 精确来源白名单 |
+| 数据不出机器 | 后端默认只监听 `127.0.0.1`，局域网唯一入口是 Caddy 网关 |
+| 社区技能只读 | 正文按需加载并做 SHA-256 校验 |
 
 ---
 
@@ -301,24 +366,44 @@ events: queued · started · skills · usage · tool.* · delta · progress · f
 
 前置：Python 3.12+、Node.js 20+、Git；手机访问还需要 Caddy（`winget install Caddy.Caddy`，或放到 `tools/caddy.exe`）。
 
-```powershell
-# 每次开机启动（会自动建虚拟环境、装依赖、构建前端）
-./Start-Xinxin-Local.ps1
+### 从 GitHub 获取
 
-# 或双击
-启动Xinxin本地版.cmd
+```powershell
+# 1. 克隆到本地（或用你自己的 fork / 镜像地址）
+git clone https://github.com/qing1989620/xinxin-local.git
+cd xinxin-local
+
+# 2. 一次启动（脚本会自动：建 venv → 装 Python 依赖 → npm install → npm run build）
+./Start-Xinxin-Local.ps1
 ```
 
-启动后终端会打印：
+**第一次运行会做什么**（全部自动，不用手动干预）：
+
+1. `backend/.venv/` 建 Python 虚拟环境，按 `backend/requirements.lock` 装依赖
+2. `frontend/` 跑 `npm install`（按 `package-lock.json`）和 `npm run build` 生成 `dist/`
+3. 启动三个角色：`backend` (FastAPI + SQLite)、`frontend` (Vite 预览)、`gateway` (Caddy 网关)
+4. 自动放行 Windows 防火墙（程序规则），终端打印本机 / 局域网地址
+
+> **提示**：依赖锁文件 `requirements.lock` 和 `package-lock.json` 都在仓库里，
+> 克隆后不需要手动装任何依赖，也不需要手动构建——脚本会判断产物是否过期并自动重建。
+
+### 验证安装成功
+
+终端看到下面这段就是成功了：
 
 ```
 Xinxin本地版 已启动
   本机浏览器:    http://127.0.0.1:5180
   手机/局域网:   http://10.0.0.x:8080   （同一 WiFi，无需服务器）
+  停止: ./Stop-Xinxin-Local.ps1
   防火墙：已放行网关（程序规则），手机与电脑在同一 WiFi 即可访问
 ```
 
-首次打开会要求创建主人账号；模型密钥在「设置 → 对话模型」里填。
+浏览器打开 `http://127.0.0.1:5180`，首次访问会让你创建主人账号（只需一次）。模型密钥在
+「设置 → 对话模型」里填，保存后即可使用。
+
+**健康检查**：浏览器或命令行访问 `http://127.0.0.1:8080/health`，返回
+`{"status":"ok","product":"Xinxin","version":"0.1.0"}` 即一切正常。
 
 ### 常用命令
 
@@ -327,8 +412,27 @@ Xinxin本地版 已启动
 | 只本机调试（不起网关） | `./Start-Xinxin-Local.ps1 -NoGateway` |
 | 不自动开浏览器 | `./Start-Xinxin-Local.ps1 -NoBrowser` |
 | 换网关端口 | `./Start-Xinxin-Local.ps1 -GatewayPort 9090` |
-| 停止 | `./Stop-Xinxin-Local.ps1` |
-| 测试 | `cd backend && .venv/Scripts/python -m pytest -q`；`cd frontend && npx vitest run` |
+| 换后端端口 | `./Start-Xinxin-Local.ps1 -BackendPort 8011` |
+| 换前端端口 | `./Start-Xinxin-Local.ps1 -FrontendPort 5181` |
+| 停止全部服务 | `./Stop-Xinxin-Local.ps1` |
+| 查看服务状态 | `./Start-Xinxin-Local.ps1 -NoBrowser`（已运行会提示 already running） |
+| 后端测试 | `cd backend && .venv/Scripts/python -m pytest -q` |
+| 前端测试 | `cd frontend && npx vitest run` |
+| 只跑某个后端测试 | `cd backend && .venv/Scripts/python -m pytest tests/test_script_encoding.py -v` |
+
+### 电脑软件端（可选）
+
+想「像普通软件一样」用——双击图标自动就绪、独立应用窗口、无地址栏：
+
+```powershell
+# 装桌面图标和开始菜单项（只创建快捷方式，不复制代码）
+./Install-Xinxin-Desktop.ps1
+# 或双击
+安装电脑端.cmd
+```
+
+安装后双击桌面 `Xinxin` 图标即可：服务没起会自动拉起（显示启动页），就绪后打开独立应用窗口。
+详见 [`docs/电脑端.md`](docs/电脑端.md)。
 
 ### 手机
 
@@ -342,6 +446,17 @@ cd frontend
 
 APK 生成在 `frontend/releases/Xinxin-0.1.0-local.apk`，使用你自己的签名。
 
+### 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| `Python 3.12+ is required` | 装 Python 3.12+，重新运行 |
+| `Port 8080 is occupied` | 换端口：`./Start-Xinxin-Local.ps1 -GatewayPort 9090` |
+| 首次运行很慢 | 正常——要建 venv、装依赖、构建前端，几分钟内完成 |
+| 改了前端代码但页面没变 | 脚本检测到源码比产物新会自动重建；或手动 `cd frontend && npm run build` |
+| 手机打不开 | 确认同一 Wi-Fi；跑一次 `./Setup-Lan-Access.ps1`（需管理员）放行防火墙 |
+| 忘了账号密码 | 数据都在 `backend/data/`，详见「数据与备份」 |
+
 ---
 
 ## 验证与边界
@@ -352,6 +467,7 @@ APK 生成在 `frontend/releases/Xinxin-0.1.0-local.apk`，使用你自己的签
 - 14 个页面 + 1 个对话态用无头浏览器逐页检查：**0 控制台错误、0 未捕获异常**
 - 公网链路 20 项验收：HTTPS 登录、CORS、上传/下载（中文文件名）、401 CORS、SSE 到结束、断点续传、真实 Agent 任务、Fabric 重排
 - 真实浏览器点击流程：登录表单 → Agent 输入 → 模型流式回复，全链路通过
+- 电脑软件端 11 项验收通过：单实例、冷启动、端口占用错误窗口、VBS 无窗口、安装/卸载快捷方式、日志编码等（详见 [`docs/电脑端验收.md`](docs/电脑端验收.md)）
 
 明确的边界：
 
@@ -375,21 +491,52 @@ APK 生成在 `frontend/releases/Xinxin-0.1.0-local.apk`，使用你自己的签
 
 ```
 .
-├── Start-Xinxin-Local.ps1 / Stop-Xinxin-Local.ps1   # 三角色启停
-├── Start-Tunnel.ps1 / Stop-Tunnel.ps1               # 可选：外部访问
-├── Caddyfile.local                                  # 单端口网关
+├── Start-Xinxin-Local.ps1 / Stop-Xinxin-Local.ps1   # 三角色启停（一键启动/停止）
+├── Start-Tunnel.ps1 / Stop-Tunnel.ps1               # 可选：外部访问（Cloudflare 隧道）
+├── Setup-Lan-Access.ps1                             # 放行局域网防火墙
+├── Caddyfile.local                                  # 单端口网关配置
+├── 启动Xinxin本地版.cmd / 启动公网访问.cmd              # 双击启动入口
+├── 安装电脑端.cmd / 卸载电脑端.cmd                      # 电脑软件端装/卸
+├── desktop/                                         # 电脑软件端
+│   ├── Xinxin-Desktop.ps1          # 启动器：自动就绪 + 独立应用窗口 + 单实例
+│   ├── Xinxin-Desktop.vbs          # 无窗口入口（快捷方式调用）
+│   ├── Install/Uninstall-*.ps1     # 快捷方式装/卸
+│   └── assets/                     # 启动页、错误页模板、图标
 ├── backend/                                         # FastAPI + SQLite
 │   ├── app/            # 路由、任务、技能、模型、工具
 │   ├── tests/          # 172 项后端测试
 │   ├── scripts/        # 冒烟、全链路、演示数据
-│   └── resources/      # SkillNet 语料、绘图参考
+│   └── resources/      # SkillNet 语料（1800+ 技能）、绘图参考
 ├── frontend/                                        # React + TypeScript
-│   ├── src/            # 页面、组件、样式
-│   └── build-android.ps1
-└── docs/               # 部署、验收与截图
+│   ├── src/            # 页面、组件、样式（14 个页面）
+│   └── build-android.ps1           # Android APK 打包
+└── docs/               # 部署、验收、截图、专题文档
 ```
 
 前后端只通过版本化 HTTP 接口和事件契约协作，不跨目录 import，不直连数据库。
+
+### 用 GitHub 协作
+
+仓库目前是单分支 `main`，推送到 `github.com/qing1989620/xinxin-local`。要给它发 PR、或者
+从你自己的 fork 派生时，按常规 Git 流程即可：
+
+```powershell
+# 克隆到你自己的 fork
+git clone https://github.com/<your-name>/xinxin-local.git
+cd xinxin-local
+git remote add upstream https://github.com/qing1989620/xinxin-local.git
+
+# 同步上游
+git fetch upstream
+git merge upstream/main
+
+# 开分支改代码，改完推到你的 fork
+git checkout -b my-feature
+git push -u origin my-feature
+```
+
+数据与密钥不进 Git：`backend/data/`、`.runtime/`、`vendor/`、`**/.env` 都在 `.gitignore`
+里。推送前 `git status` 确认没有意外的运行时文件。
 
 ---
 
