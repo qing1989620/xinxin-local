@@ -57,6 +57,23 @@ def test_public_address_is_read_when_present(client):
     assert data["public_updated"]
 
 
+def test_address_book_tolerates_bom(client):
+    api, runtime = client
+    (runtime / "addresses.json").write_text(
+        json.dumps(
+            {
+                "local": "http://127.0.0.1:5180",
+                "lan": "http://10.0.0.9:8080",
+                "gateway_port": 8080,
+            }
+        ),
+        encoding="utf-8-sig",
+    )
+    # A BOM must not make the saved LAN value unreadable (it would silently
+    # fall back to adapter detection and could pick the wrong interface).
+    assert api.get("/api/v1/network").json()["lan"] == "http://10.0.0.9:8080"
+
+
 def test_public_address_tolerates_bom(client):
     api, runtime = client
     # Windows PowerShell writes BOM-marked text by default; the reader must not

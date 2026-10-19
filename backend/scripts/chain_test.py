@@ -164,6 +164,12 @@ try:
 
     step("public health", wait_http(f"{public}/health", 90))
     client = httpx.Client(base_url=public, timeout=60, trust_env=False)
+    spec = client.get("/api/v1/auth/status")
+    step(
+        "auth status over https",
+        spec.status_code == 200 and spec.json().get("configured") is True,
+        f"{spec.status_code} {spec.text[:120]}",
+    )
 
     owner = sqlite3.connect(target / "xinxin.sqlite3")
     name = owner.execute("SELECT name FROM owner WHERE id=1").fetchone()[0]

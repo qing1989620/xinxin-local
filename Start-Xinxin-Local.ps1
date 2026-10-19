@@ -178,7 +178,13 @@ $addresses=@{
   gateway_port=$GatewayPort
   updated=(Get-Date).ToString('s')
 }
-$addresses | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimePath 'addresses.json') -Encoding UTF8
+$addresses | ConvertTo-Json | ForEach-Object {
+  [System.IO.File]::WriteAllText(
+    (Join-Path $runtimePath 'addresses.json'),
+    $_,
+    (New-Object System.Text.UTF8Encoding($false))
+  )
+}
 
 Write-Host ''
 Write-Host 'Xinxin本地版 已启动'
