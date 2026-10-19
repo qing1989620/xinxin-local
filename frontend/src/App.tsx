@@ -40,6 +40,24 @@ import {
 } from "lucide-react";
 import { registerSW } from "virtual:pwa-register";
 import { Capacitor } from "@capacitor/core";
+
+// 电脑软件端（desktop/Xinxin-Desktop.ps1）以 ?desktop=1 打开应用窗口：
+// 窗口本身就是"安装好的软件"，不再展示安装提示与离线就绪提示。
+// 标记写进 sessionStorage：同标签页内的整页跳转（重定向、刷新）不丢，
+// 而新开标签页（网页端）不会继承。网页与手机端永远不带这个标记，行为不变。
+function detectDesktopApp(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    if (new URLSearchParams(window.location.search).has("desktop")) {
+      sessionStorage.setItem("xinxin-desktop", "1");
+      return true;
+    }
+    return sessionStorage.getItem("xinxin-desktop") === "1";
+  } catch {
+    return false;
+  }
+}
+const desktopApp = detectDesktopApp();
 import {
   api,
   post,
@@ -519,6 +537,7 @@ export default function App() {
       }
     };
     const installHandler = (event: Event) => {
+      if (desktopApp) return; // 电脑端不需要"安装到手机"
       event.preventDefault();
       setInstall(event);
     };
@@ -531,7 +550,7 @@ export default function App() {
             toast("新版本已准备好，保存当前编辑后可在顶栏更新应用。");
           },
           onOfflineReady() {
-            toast("Xinxin 已可安装，离线时可以打开界面。");
+            if (!desktopApp) toast("Xinxin 已可安装，离线时可以打开界面。");
           },
         })
       : null;

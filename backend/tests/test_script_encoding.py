@@ -10,15 +10,25 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _script_roots() -> list[Path]:
+    roots = [ROOT]
+    # 电脑软件端的脚本同样含中文，一并纳入守卫
+    desktop = ROOT / "desktop"
+    if desktop.is_dir():
+        roots.append(desktop)
+    return roots
+
+
 def test_non_ascii_powershell_scripts_have_utf8_bom():
     offenders = []
-    for path in sorted(ROOT.glob("*.ps1")):
-        data = path.read_bytes()
-        if any(byte > 127 for byte in data) and not data.startswith(b"\xef\xbb\xbf"):
-            offenders.append(path.name)
+    for root in _script_roots():
+        for path in sorted(root.glob("*.ps1")):
+            data = path.read_bytes()
+            if any(byte > 127 for byte in data) and not data.startswith(b"\xef\xbb\xbf"):
+                offenders.append(path.name)
     assert not offenders, f"missing UTF-8 BOM: {offenders}"
 
 
 def test_powershell_scripts_are_not_empty():
-    scripts = [path for path in ROOT.glob("*.ps1") if path.stat().st_size > 0]
+    scripts = [path for root in _script_roots() for path in root.glob("*.ps1") if path.stat().st_size > 0]
     assert scripts
