@@ -3,8 +3,10 @@
 上游全部打桩，不发真实请求；音频本身不经过后端。
 """
 
+import json
 import time
 
+import httpx
 from fastapi.testclient import TestClient
 
 import app.music as music_module
@@ -19,6 +21,8 @@ from app.music import (
     label_for,
     mood_note,
     record_play,
+    remember_emotion,
+    remember_emotion,
     set_influence,
 )
 
@@ -235,3 +239,206 @@ def test_mood_note_reaches_the_system_prompt(tmp_path):
         tmp_path,
     )
     assert "此刻的氛围" not in plain and "ambient_music" not in plain
+
+
+def test_score_uses_model_once_then_cache(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-score-key"})
+    calls = []
+
+    def transport(request):
+        calls.append(json.loads(request.content))
+        content = json.dumps(
+            [
+                {"index": 1, "valence": -0.7, "energy": 0.25, "label": "哀", "reason": "失恋慢歌"},
+                {"index": 2, "valence": 0.55, "energy": 0.8, "label": "乐", "reason": "夏日快歌"},
+            ],
+            ensure_ascii=False,
+        )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"role": "assistant", "content": content}}],
+                "usage": {"total_tokens": 90, "prompt_tokens": 60, "completion_tokens": 30},
+            },
+        )
+
+    app.state.manager.model_transport = httpx.MockTransport(transport)
+    payload = {
+        "tracks": [
+            {"id": "1", "source": "netease", "name": "我好像在哪见过你", "artist": "薛之谦"},
+            {"id": "2", "source": "netease", "name": "夏天的风", "artist": "火羊瞌睡了"},
+        ]
+    }
+    first = client.post("/api/v1/music/score", json=payload).json()
+    assert first["scored"] == 2
+    assert first["emotions"]["netease:1"]["label"] == "哀"
+    assert first["emotions"]["netease:1"]["reason"] == "失恋慢歌"
+    assert first["emotions"]["netease:2"]["valence"] == 0.55
+    assert "我好像在哪见过你" in calls[0]["messages"][1]["content"]
+
+    second = client.post("/api/v1/music/score", json=payload).json()
+    assert second["scored"] == 0
+    assert second["emotions"]["netease:1"]["source"] == "cache"
+    assert len(calls) == 1
+
+
+def test_score_without_model_key_returns_nothing(tmp_path):
+    app, client = setup(tmp_path)
+    response = client.post(
+        "/api/v1/music/score", json={"tracks": [{"id": "9", "name": "演员"}]}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"emotions": {}, "scored": 0}
+
+
+def test_bad_model_output_falls_back_to_lexicon(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-score-key"})
+    app.state.manager.model_transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "抱歉，我无法判断"}}]},
+        )
+    )
+    result = client.post(
+        "/api/v1/music/score",
+        json={"tracks": [{"id": "3", "name": "下雨了", "artist": "薛之谦"}]},
+    ).json()
+    assert result["scored"] == 0 and result["emotions"] == {}
+
+
+def test_play_prefers_calibrated_emotion(tmp_path):
+    app, _ = setup(tmp_path)
+    store = app.state.store
+    remember_emotion(
+        store,
+        {"id": "42", "source": "netease"},
+        {"valence": -0.8, "energy": 0.2, "label": "哀", "reason": "伤感情歌"},
+    )
+    record_play(store, {"id": "42", "source": "netease", "name": "演员", "artist": "薛之谦"})
+    row = store.one("SELECT valence,energy,label FROM music_plays")
+    assert row["label"] == "哀"
+    assert row["valence"] == -0.8
+
+
+def test_score_uses_model_once_then_cache(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-score-key"})
+    calls = []
+
+    def transport(request):
+        calls.append(json.loads(request.content))
+        content = json.dumps(
+            [
+                {"index": 1, "valence": -0.7, "energy": 0.25, "label": "哀", "reason": "失恋慢歌"},
+                {"index": 2, "valence": 0.55, "energy": 0.8, "label": "乐", "reason": "夏日快歌"},
+            ],
+            ensure_ascii=False,
+        )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [{"message": {"role": "assistant", "content": content}}],
+                "usage": {"total_tokens": 90, "prompt_tokens": 60, "completion_tokens": 30},
+            },
+        )
+
+    app.state.manager.model_transport = httpx.MockTransport(transport)
+    payload = {
+        "tracks": [
+            {"id": "1", "source": "netease", "name": "我好像在哪见过你", "artist": "薛之谦"},
+            {"id": "2", "source": "netease", "name": "夏天的风", "artist": "火羊瞌睡了"},
+        ]
+    }
+    first = client.post("/api/v1/music/score", json=payload).json()
+    assert first["scored"] == 2
+    assert first["emotions"]["netease:1"]["label"] == "哀"
+    assert first["emotions"]["netease:1"]["reason"] == "失恋慢歌"
+    assert first["emotions"]["netease:2"]["valence"] == 0.55
+    assert "我好像在哪见过你" in calls[0]["messages"][1]["content"]
+
+    second = client.post("/api/v1/music/score", json=payload).json()
+    assert second["scored"] == 0
+    assert second["emotions"]["netease:1"]["source"] == "cache"
+    assert len(calls) == 1
+
+
+def test_score_without_model_key_returns_nothing(tmp_path):
+    app, client = setup(tmp_path)
+    response = client.post(
+        "/api/v1/music/score", json={"tracks": [{"id": "9", "name": "演员"}]}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"emotions": {}, "scored": 0}
+
+
+def test_bad_model_output_falls_back_to_lexicon(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-score-key"})
+    app.state.manager.model_transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "抱歉，我无法判断"}}]},
+        )
+    )
+    result = client.post(
+        "/api/v1/music/score",
+        json={"tracks": [{"id": "3", "name": "下雨了", "artist": "薛之谦"}]},
+    ).json()
+    assert result["scored"] == 0 and result["emotions"] == {}
+
+
+def test_play_prefers_calibrated_emotion(tmp_path):
+    app, _ = setup(tmp_path)
+    store = app.state.store
+    remember_emotion(
+        store,
+        {"id": "42", "source": "netease"},
+        {"valence": -0.8, "energy": 0.2, "label": "哀", "reason": "伤感情歌"},
+    )
+    record_play(store, {"id": "42", "source": "netease", "name": "演员", "artist": "薛之谦"})
+    row = store.one("SELECT valence,energy,label FROM music_plays")
+    assert row["label"] == "哀"
+    assert row["valence"] == -0.8
+
+
+def test_label_is_derived_from_scores_not_model_text(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-score-key"})
+    app.state.manager.model_transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '[{"index":1,"valence":0.2,"energy":0.8,"label":"怒","reason":"励志摇滚"}]'
+                        }
+                    }
+                ]
+            },
+        )
+    )
+    result = client.post(
+        "/api/v1/music/score",
+        json={"tracks": [{"id": "77", "name": "孤勇者", "artist": "陈奕迅"}]},
+    ).json()
+    assert result["emotions"]["netease:77"]["label"] == "乐"
+
+
+def test_calibration_backfills_existing_plays(tmp_path):
+    app, client = setup(tmp_path)
+    store = app.state.store
+    record_play(store, {"id": "5", "source": "netease", "name": "演员", "artist": "薛之谦"})
+    assert store.one("SELECT label FROM music_plays")["label"] == "平静"
+    remember_emotion(
+        store,
+        {"id": "5", "source": "netease"},
+        {"valence": -0.6, "energy": 0.3, "label": "哀", "reason": "伤感情歌"},
+    )
+    client.post(
+        "/api/v1/music/score",
+        json={"tracks": [{"id": "5", "source": "netease", "name": "演员", "artist": "薛之谦"}]},
+    )
+    assert store.one("SELECT label FROM music_plays")["label"] == "哀"

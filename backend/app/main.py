@@ -35,7 +35,7 @@ from .conversations import deletion_preview, purge_conversation, batch_deletion_
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
 from . import music
-from .model import endpoint
+from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
 from .skills import SkillRouter
@@ -111,6 +111,18 @@ class MusicPlay(Input):
     name: str = Field(min_length=1, max_length=200)
     artist: str = Field(default="", max_length=200)
     album: str = Field(default="", max_length=200)
+
+
+class MusicScoreItem(Input):
+    id: str = Field(min_length=1, max_length=120)
+    source: str = Field(default="netease", max_length=20)
+    name: str = Field(min_length=1, max_length=200)
+    artist: str = Field(default="", max_length=200)
+    album: str = Field(default="", max_length=200)
+
+
+class MusicScore(Input):
+    tracks: list[MusicScoreItem] = Field(default_factory=list, max_length=30)
 
 
 class MusicSetting(Input):
@@ -489,6 +501,26 @@ def create_app(config=None):
             "mood": music.current_mood(store),
             "plays": music.recent_plays(store),
         }
+
+    @app.post("/api/v1/music/score", dependencies=[Depends(owner)])
+    async def music_score(body: MusicScore):
+        """按歌曲校准情绪：缓存优先，未命中的一次批量问模型。"""
+        url, model, key = manager.model_config()
+        gateway = None
+        if key:
+            gateway = ModelGateway(
+                url,
+                model,
+                key,
+                record_usage=lambda value: None,
+                cancelled=asyncio.Event(),
+                max_calls=1,
+                max_tokens=4096,
+                transport=manager.model_transport,
+            )
+        return await music.score_tracks(
+            store, gateway, [item.model_dump() for item in body.tracks]
+        )
 
     @app.post("/api/v1/music/play", dependencies=[Depends(owner)])
     def music_play(body: MusicPlay):

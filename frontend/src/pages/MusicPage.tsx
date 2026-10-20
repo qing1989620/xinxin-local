@@ -18,7 +18,7 @@ import {
   Volume2,
   X,
 } from "lucide-react";
-import { api, put, remove } from "../api";
+import { api, post, put, remove } from "../api";
 import { Loading, useToast } from "../ui";
 import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
 
@@ -26,8 +26,10 @@ type Emotion = {
   valence: number;
   energy: number;
   label: string;
-  confidence: number;
-  hits: string[];
+  confidence?: number;
+  hits?: string[];
+  reason?: string;
+  source?: string;
 };
 type Track = PlayerTrack & { emotion: Emotion };
 type Mood = {
@@ -101,6 +103,7 @@ export default function MusicPage() {
     [source, setSource] = useState<string>("netease"),
     [tracks, setTracks] = useState<Track[] | null>(null),
     [searching, setSearching] = useState(false),
+    [calibrating, setCalibrating] = useState(false),
     [pending, setPending] = useState(""),
     [mood, setMood] = useState<Mood | null>(null),
     [plays, setPlays] = useState<Play[]>([]),
@@ -127,6 +130,37 @@ export default function MusicPage() {
     return () => window.removeEventListener("xinxin:music-played", refresh);
   }, [loadMood]);
 
+  // 词表只给保守估计；检索后异步让模型按歌曲本身校准，结果写进后端缓存。
+  const calibrate = useCallback(async (list: Track[]) => {
+    if (!list.length) return;
+    setCalibrating(true);
+    try {
+      const result = await post<{
+        emotions: Record<string, Emotion>;
+      }>("/music/score", {
+        tracks: list.map(({ id, source, name, artist, album }) => ({
+          id,
+          source,
+          name,
+          artist,
+          album,
+        })),
+      });
+      setTracks((current) =>
+        current
+          ? current.map((track) => {
+              const found = result.emotions[`${track.source}:${track.id}`];
+              return found ? { ...track, emotion: { ...track.emotion, ...found } } : track;
+            })
+          : current,
+      );
+    } catch {
+      // 模型不可用时保留词表结果，不打断播放
+    } finally {
+      setCalibrating(false);
+    }
+  }, []);
+
   const runSearch = useCallback(
     async (text: string, src: string) => {
       setSearching(true);
@@ -136,6 +170,7 @@ export default function MusicPage() {
         );
         setTracks(result.tracks);
         if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
+        else void calibrate(result.tracks);
         sessionStorage.setItem(
           "xinxin-music-search",
           JSON.stringify({ q: text, source: src }),
@@ -146,7 +181,7 @@ export default function MusicPage() {
         setSearching(false);
       }
     },
-    [toast],
+    [calibrate, toast],
   );
 
   async function search(event?: FormEvent) {
@@ -326,9 +361,11 @@ export default function MusicPage() {
             <span>
               {searching
                 ? "检索中"
-                : tracks
-                  ? `${tracks.length} 首`
-                  : "按回车开始"}
+                : calibrating
+                  ? "校准情绪中"
+                  : tracks
+                    ? `${tracks.length} 首`
+                    : "按回车开始"}
             </span>
           </div>
 
@@ -368,9 +405,10 @@ export default function MusicPage() {
                     <span
                       className={`emotion-word ${tone(track.emotion.label)}`}
                       title={
-                        track.emotion.hits.length
+                        track.emotion.reason ||
+                        (track.emotion.hits?.length
                           ? `命中：${track.emotion.hits.join("、")}`
-                          : "没有命中情绪词，按中性处理"
+                          : "还没有校准，按中性处理")
                       }
                     >
                       {track.emotion.label}

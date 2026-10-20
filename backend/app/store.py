@@ -49,6 +49,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS music_plays(id TEXT PRIMARY KEY,track_id TEXT NOT NULL,source TEXT NOT NULL,name TEXT NOT NULL,artist TEXT NOT NULL DEFAULT '',album TEXT NOT NULL DEFAULT '',valence REAL NOT NULL,energy REAL NOT NULL,label TEXT NOT NULL,created INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id,created);
                 CREATE INDEX IF NOT EXISTS music_plays_created ON music_plays(created);
+                CREATE TABLE IF NOT EXISTS music_emotions(track_key TEXT PRIMARY KEY,valence REAL NOT NULL,energy REAL NOT NULL,label TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS records_kind ON records(kind,updated);
                 CREATE INDEX IF NOT EXISTS runs_created ON runs(created);
             """)

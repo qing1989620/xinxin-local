@@ -3,8 +3,9 @@
 三条边界：
 1. 只代理 JSON（搜索 / 取链 / 歌词），音频由客户端直连 CDN，不经过本机；
 2. 官方限流 5 分钟 50 次，这里做进程内配额 + 结果缓存，避免把限流打穿；
-3. 情绪是**本地启发式**：从标题/歌手/专辑的词表推断 valence（悲伤↔愉快）
-   与 energy（安静↔激昂），不是音频分析，也不假装是事实。
+3. 情绪有两层：先按标题/歌手/专辑的词表给出保守估计，再由模型结合歌曲
+   本身（歌名、歌手、专辑、常见唱法）校准 valence（悲伤↔愉快）与 energy
+   （安静↔激昂），结果按歌曲缓存。两者都不是音频分析，也不假装是事实。
 
 播放记录按 90 分钟半衰期聚合成本轮"氛围"，注入人格提示——这是语气倾向，
 不改变事实、权限与安全约束。
@@ -12,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import threading
@@ -136,10 +138,10 @@ def emotion_for(title: str = "", artist: str = "", album: str = "") -> dict:
 
 
 def label_for(valence: float, energy: float) -> str:
-    # 中性区间先判：没有命中情绪词的歌 valence=0、energy=0.45，
-    # 若直接按四象限会落到「哀」，把一首无所谓喜悲的歌读成低落。
-    if abs(valence) < 0.15 and 0.25 <= energy <= 0.65:
-        return "平静"
+    # 中性先判：没有明确正负时，安静的是「平静」，轰鸣的是「怒」。
+    # 不先判就会把无所谓喜悲的歌读成「哀」——这是曾经真实发生过的误判。
+    if abs(valence) < 0.15:
+        return "平静" if energy <= 0.65 else "怒"
     if valence >= 0.15:
         return "乐" if energy >= 0.55 else "喜"
     if energy >= 0.55:
@@ -292,11 +294,156 @@ client = GDClient()
 
 
 # ----------------------------------------------------------------------
+# 情绪标注：词表兜底 + 模型校准（按歌曲缓存）
+# ----------------------------------------------------------------------
+LABELS = ("喜", "怒", "哀", "乐", "平静")
+_LABEL_SET = frozenset(LABELS)
+
+SCORE_PROMPT = """你是中文音乐情绪标注员。根据歌名、歌手、专辑，以及你对这首歌歌词主题与编曲气质的了解，判断整首歌的情绪。
+
+打分维度：
+- valence：情绪正负。-1 极负面（绝望、苦涩），0 中性，1 极正面（甜蜜、治愈）。
+- energy：唤醒度。0 极安静（钢琴、气声、慢板），1 极激烈（摇滚、快歌、嘶吼）。
+- label：只能取 喜 / 怒 / 哀 / 乐 / 平静
+  · 喜：正面、低唤醒（温柔、甜蜜、治愈）
+  · 乐：正面、高唤醒（欢快、热闹）
+  · 怒：负面、高唤醒（愤怒、控诉、爆发）
+  · 哀：负面、低唤醒（伤感、遗憾、孤独、怀旧）
+  · 平静：正负与唤醒都不明显（叙事、氛围、无明确情绪）
+- reason：不超过 18 个字，写判断依据。
+
+注意：
+- 伤感情歌不要因为歌名里有"快乐""笑""好"就打正面分，要看整首的基调；
+- 不确定具体歌曲时，按歌名语义与这位歌手的常见风格保守判断，拿不准就给 0 附近；
+- 只输出 JSON 数组，不要 markdown，不要解释。
+
+输入是 [{"index":1,"name":"...","artist":"...","album":"..."}]，输出：
+[{"index":1,"valence":-0.6,"energy":0.3,"label":"哀","reason":"失恋主题，慢板钢琴"}]
+"""
+
+
+def track_key(track: dict) -> str:
+    ident = track.get("id") or track.get("track_id") or ""
+    return f"{track.get('source') or 'netease'}:{ident}"
+
+
+def cached_emotion(store, track: dict):
+    row = store.one(
+        "SELECT valence,energy,label,reason FROM music_emotions WHERE track_key=?",
+        (track_key(track),),
+    )
+    return dict(row) if row else None
+
+
+def remember_emotion(store, track: dict, emotion: dict):
+    store.execute(
+        "INSERT INTO music_emotions(track_key,valence,energy,label,reason,created)"
+        " VALUES(?,?,?,?,?,?) ON CONFLICT(track_key) DO UPDATE SET"
+        " valence=excluded.valence,energy=excluded.energy,label=excluded.label,"
+        " reason=excluded.reason,created=excluded.created",
+        (
+            track_key(track),
+            float(emotion["valence"]),
+            float(emotion["energy"]),
+            str(emotion["label"]),
+            str(emotion.get("reason") or "")[:80],
+            time.time(),
+        ),
+    )
+
+
+def apply_to_plays(store, track: dict, emotion: dict):
+    """校准结果回填到已播放记录，历史氛围跟着一起修正。"""
+    store.execute(
+        "UPDATE music_plays SET valence=?,energy=?,label=?"
+        " WHERE track_id=? AND source=?",
+        (
+            float(emotion["valence"]),
+            float(emotion["energy"]),
+            str(emotion["label"]),
+            str(track.get("id") or track.get("track_id") or ""),
+            str(track.get("source") or "netease"),
+        ),
+    )
+
+
+def _parse_scores(text: str) -> list[dict]:
+    start, end = text.find("["), text.rfind("]")
+    if start < 0 or end <= start:
+        return []
+    try:
+        rows = json.loads(text[start : end + 1])
+    except ValueError:
+        return []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+async def score_tracks(store, gateway, tracks: list[dict]) -> dict:
+    """缓存优先；没缓存的批量问一次模型；模型不可用时保留词表结果。"""
+    emotions: dict[str, dict] = {}
+    pending: list[tuple[str, dict]] = []
+    for track in tracks[:30]:
+        if not track.get("id"):
+            continue
+        cached = cached_emotion(store, track)
+        if cached:
+            emotions[track_key(track)] = {**cached, "source": "cache"}
+            apply_to_plays(store, track, cached)
+        else:
+            pending.append((track_key(track), track))
+    if not pending or gateway is None:
+        return {"emotions": emotions, "scored": 0}
+    listing = [
+        {
+            "index": index + 1,
+            "name": track.get("name") or "",
+            "artist": track.get("artist") or "",
+            "album": track.get("album") or "",
+        }
+        for index, (_, track) in enumerate(pending)
+    ]
+    message = await gateway.apredict(
+        [
+            {"role": "system", "content": SCORE_PROMPT},
+            {"role": "user", "content": json.dumps(listing, ensure_ascii=False)},
+        ],
+        stream=False,
+        temperature=0.2,
+    )
+    scored = 0
+    for row in _parse_scores(str(message.get("content") or "")):
+        index = row.get("index")
+        if not isinstance(index, int) or not 1 <= index <= len(pending):
+            continue
+        try:
+            valence = max(-1.0, min(1.0, float(row.get("valence"))))
+            energy = max(0.0, min(1.0, float(row.get("energy"))))
+        except (TypeError, ValueError):
+            continue
+        # 标签一律由分数推导：模型偶尔会给出与分数矛盾的标签
+        # （例如 v=+0.2 却标「怒」），以分数为准才不会自相矛盾。
+        label = label_for(valence, energy)
+        emotion = {
+            "valence": round(valence, 3),
+            "energy": round(energy, 3),
+            "label": label,
+            "reason": str(row.get("reason") or "")[:80],
+            "source": "model",
+        }
+        key, track = pending[index - 1]
+        remember_emotion(store, track, emotion)
+        apply_to_plays(store, track, emotion)
+        emotions[key] = emotion
+        scored += 1
+    return {"emotions": emotions, "scored": scored}
+
+
+# ----------------------------------------------------------------------
 # 情绪聚合：播放记录 -> 当前氛围
 # ----------------------------------------------------------------------
 def record_play(store, track: dict) -> dict:
-    """记一次播放。情绪只由本地词表推断，不接受客户端传值。"""
-    emotion = emotion_for(
+    """记一次播放。优先用已校准的情绪，没有再用词表；不接受客户端传值。"""
+    emotion = cached_emotion(store, track) or emotion_for(
         track.get("name", ""), track.get("artist", ""), track.get("album", "")
     )
     store.execute(
