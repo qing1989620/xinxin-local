@@ -198,6 +198,39 @@ function Add-DesktopFlag([string]$Url) {
   return $Url.TrimEnd('/') + '/?desktop=1'
 }
 
+function Reset-StaleWebCache([string]$Profile) {
+  # 前端重新构建后，旧的 Service Worker 会把旧界面一直留在窗口里（整包离线缓存）。
+  # 开窗前按 dist/index.html 的哈希比对一次，变了就清掉这个独立配置目录的离线缓存。
+  # 只在没有窗口运行时调用，避免删掉正在使用的缓存。
+  $indexPath = Join-Path $projectPath 'frontend\dist\index.html'
+  if (-not (Test-Path -LiteralPath $indexPath)) { return }
+  $stamp = ''
+  try {
+    $stamp = (Get-FileHash -LiteralPath $indexPath -Algorithm SHA256).Hash
+  } catch {
+    return
+  }
+  $stampPath = Join-Path $Profile 'build-stamp.txt'
+  $previous = ''
+  if (Test-Path -LiteralPath $stampPath) {
+    $saved = Get-Content -LiteralPath $stampPath -Raw -ErrorAction SilentlyContinue
+    if ($null -ne $saved) { $previous = $saved.Trim() }
+  }
+  if ($previous -eq $stamp) { return }
+  foreach ($name in @('Service Worker', 'Cache', 'Code Cache')) {
+    $target = Join-Path $Profile ('Default\' + $name)
+    if (Test-Path -LiteralPath $target) {
+      Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+      Write-Log ('cleared stale ' + $name + ' (new frontend build)')
+    }
+  }
+  try {
+    Set-Content -LiteralPath $stampPath -Value $stamp -Encoding ASCII
+  } catch {
+  }
+  Write-Log 'offline cache reset for the new frontend build'
+}
+
 function Show-ErrorWindow([string]$Message) {
   $templatePath = Join-Path $assetsPath 'error-template.html'
   if (-not (Test-Path -LiteralPath $templatePath)) { return }
@@ -336,6 +369,7 @@ if ($entryUrl) {
     }
     exit 0
   }
+  Reset-StaleWebCache $appProfile
   Open-AppWindow (Add-DesktopFlag $entryUrl) $appProfile $Width $Height | Out-Null
   exit 0
 }
@@ -377,6 +411,7 @@ try {
   if ($splash -and -not $splash.HasExited) {
     try { Stop-WindowTree $splash.Id } catch {}
   }
+  Reset-StaleWebCache $appProfile
   Open-AppWindow (Add-DesktopFlag $entryUrl) $appProfile $Width $Height | Out-Null
   exit 0
 } catch {
