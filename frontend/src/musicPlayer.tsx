@@ -2,11 +2,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Music2, Pause, Play, X } from "lucide-react";
 import { api, post } from "./api";
 import { useToast } from "./ui";
@@ -28,8 +29,11 @@ type Player = {
   playing: boolean;
   loading: boolean;
   progress: { current: number; duration: number };
+  volume: number;
   play: (track: PlayerTrack) => Promise<void>;
   toggle: () => Promise<void>;
+  seek: (seconds: number) => void;
+  setVolume: (value: number) => void;
   stop: () => void;
 };
 
@@ -46,6 +50,31 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, duration: 0 });
+  const [volume, setVolumeState] = useState(() => {
+    const stored = localStorage.getItem("xinxin-volume");
+    // 没存过时 Number(null) 会得到 0，直接当成静音；先区分"没设置"。
+    const saved = stored === null ? Number.NaN : Number(stored);
+    return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.8;
+  });
+
+  useEffect(() => {
+    if (audio.current) audio.current.volume = volume;
+    localStorage.setItem("xinxin-volume", String(volume));
+  }, [volume]);
+
+  const setVolume = useCallback((value: number) => {
+    setVolumeState(Math.max(0, Math.min(1, value)));
+  }, []);
+
+  const seek = useCallback((seconds: number) => {
+    const element = audio.current;
+    if (!element || !Number.isFinite(element.duration)) return;
+    element.currentTime = Math.max(0, Math.min(seconds, element.duration));
+    setProgress({
+      current: element.currentTime,
+      duration: element.duration || 0,
+    });
+  }, []);
 
   const toggle = useCallback(async () => {
     const element = audio.current;
@@ -127,7 +156,19 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   return (
     <Context.Provider
-      value={{ track, cover, playing, loading, progress, play, toggle, stop }}
+      value={{
+        track,
+        cover,
+        playing,
+        loading,
+        progress,
+        volume,
+        play,
+        toggle,
+        seek,
+        setVolume,
+        stop,
+      }}
     >
       {children}
       <audio
@@ -156,21 +197,37 @@ export function useMusicPlayer() {
 export function MiniPlayer() {
   const player = useMusicPlayer();
   const location = useLocation();
-  if (!player?.track || location.pathname === "/music") return null;
-  const { track, cover, playing, toggle, stop } = player;
+  const navigate = useNavigate();
+  if (!player?.track) return null;
+  const onMusicPage = location.pathname === "/music";
+  const { track, cover, playing, toggle, stop, progress } = player;
+  const percent = progress.duration
+    ? Math.min(100, (progress.current / progress.duration) * 100)
+    : 0;
   return (
-    <div className="mini-player" role="region" aria-label="背景音乐">
-      <span className="mini-cover">
-        {cover ? (
-          <img src={cover} alt="" referrerPolicy="no-referrer" loading="lazy" />
-        ) : (
-          <Music2 size={15} />
-        )}
-      </span>
-      <span className="mini-meta">
-        <strong>{track.name}</strong>
-        <small>{track.artist}</small>
-      </span>
+    <div
+      className={`mini-player${onMusicPage ? " on-music" : ""}`}
+      role="region"
+      aria-label="背景音乐"
+    >
+      <button
+        className="mini-open"
+        onClick={() => navigate("/music")}
+        aria-label="打开背景音乐页"
+        aria-current={onMusicPage ? "page" : undefined}
+      >
+        <span className="mini-cover">
+          {cover ? (
+            <img src={cover} alt="" referrerPolicy="no-referrer" loading="lazy" />
+          ) : (
+            <Music2 size={15} />
+          )}
+        </span>
+        <span className="mini-meta">
+          <strong>{track.name}</strong>
+          <small>{track.artist}</small>
+        </span>
+      </button>
       <button
         className="mini-toggle"
         onClick={() => void toggle()}
@@ -181,6 +238,7 @@ export function MiniPlayer() {
       <button className="mini-close" onClick={stop} aria-label="停止背景音乐">
         <X size={13} />
       </button>
+      <span className="mini-progress" style={{ width: `${percent}%` }} />
     </div>
   );
 }

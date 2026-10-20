@@ -3679,22 +3679,83 @@ kbd {
   place-items: center;
   background: var(--accent-soft);
 }
-.player-track {
+.player-timeline {
   flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.player-range {
+  --played: 0%;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.player-range::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--played),
+    var(--line) var(--played)
+  );
 }
-.player-progress {
-  height: 100%;
+.player-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -3.5px;
+  border-radius: 50%;
   background: var(--accent);
-  transition: width 0.2s linear;
+  border: 2px solid var(--surface);
 }
-.player-controls small {
+.player-range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.player-times {
+  display: flex;
+  justify-content: space-between;
   font-size: 10px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+.player-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+}
+.player-volume input {
+  --played: 80%;
+  flex: 1;
+  height: 12px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.player-volume input::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--muted) var(--played),
+    var(--line) var(--played)
+  );
+}
+.player-volume input::-webkit-slider-thumb {
+  appearance: none;
+  width: 8px;
+  height: 8px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1.5px solid var(--surface);
 }
 .lyric-box {
   margin-top: 14px;
@@ -3957,4 +4018,144 @@ kbd {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* 音乐页细节：清空搜索、列表悬停、情绪坐标 */
+.field-clear {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--line);
+  flex-shrink: 0;
+}
+.field-clear:hover {
+  color: var(--ink);
+}
+.track-list.loading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.track-list li:hover {
+  background: var(--paper);
+}
+.track-list li.active:hover {
+  background: var(--accent-soft);
+}
+.mood-visual {
+  display: grid;
+  gap: 12px;
+}
+.mood-plot {
+  position: relative;
+  width: 100%;
+  height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat,
+    linear-gradient(var(--line), var(--line)) center / 1px 100% no-repeat,
+    var(--paper);
+}
+.mood-plot i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translate(-50%, -50%);
+  transition:
+    left 0.45s ease,
+    top 0.45s ease;
+}
+.plot-label {
+  position: absolute;
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.plot-label.tl {
+  left: 5px;
+  top: 4px;
+}
+.plot-label.tr {
+  right: 5px;
+  top: 4px;
+}
+.plot-label.bl {
+  left: 5px;
+  bottom: 4px;
+}
+.plot-label.br {
+  right: 5px;
+  bottom: 4px;
+}
+.mood-visual .mood-meters {
+  min-width: 0;
+}
+.mini-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
+.mini-player {
+  overflow: hidden;
+}
+.mini-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.2s linear;
+}
+
+/* 音乐页窄屏：网格项默认 min-width:auto 会被搜索行撑破，必须归零 */
+.music-layout > * {
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .music-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .music-panel {
+    padding: 16px;
+  }
+  .music-search {
+    flex-wrap: wrap;
+  }
+  .music-search-field {
+    flex-basis: 100%;
+  }
+  .music-search select {
+    flex: 1;
+    min-width: 0;
+    height: 36px;
+  }
+  .music-search .button {
+    flex: 0 0 auto;
+    height: 36px;
+  }
+  .player-times {
+    font-size: 9.5px;
+  }
+}
+
+/* 宽屏在音乐页已有「正在播放」卡片，小播放条只在其他页面出现；
+   窄屏则始终保留，避免要滚到底才能控制播放。 */
+@media (min-width: 761px) {
+  .mini-player.on-music {
+    display: none;
+  }
 }

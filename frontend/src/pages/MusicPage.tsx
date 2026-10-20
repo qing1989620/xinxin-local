@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CloudOff,
@@ -8,7 +15,9 @@ import {
   Play,
   Search,
   Trash2,
+  Volume2,
   Waves,
+  X,
 } from "lucide-react";
 import { api, put, remove } from "../api";
 import { Empty, Loading, PageHeader, useToast } from "../ui";
@@ -74,6 +83,7 @@ export default function MusicPage() {
   const [query, setQuery] = useState(""),
     [source, setSource] = useState<string>("netease"),
     [tracks, setTracks] = useState<Track[] | null>(null),
+    [searching, setSearching] = useState(false),
     [pending, setPending] = useState(""),
     [mood, setMood] = useState<Mood | null>(null),
     [plays, setPlays] = useState<Play[]>([]),
@@ -100,42 +110,70 @@ export default function MusicPage() {
     return () => window.removeEventListener("xinxin:music-played", refresh);
   }, [loadMood]);
 
+  const runSearch = useCallback(
+    async (text: string, src: string) => {
+      setSearching(true);
+      try {
+        const result = await api<{ tracks: Track[] }>(
+          `/music/search?q=${encodeURIComponent(text)}&source=${src}`,
+        );
+        setTracks(result.tracks);
+        if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
+        sessionStorage.setItem(
+          "xinxin-music-search",
+          JSON.stringify({ q: text, source: src }),
+        );
+      } catch (error) {
+        toast((error as Error).message, true);
+      } finally {
+        setSearching(false);
+      }
+    },
+    [toast],
+  );
+
   async function search(event?: FormEvent) {
     event?.preventDefault();
-    if (!query.trim()) return;
+    if (!query.trim() || searching) return;
     setPending("");
-    try {
-      const result = await api<{ tracks: Track[] }>(
-        `/music/search?q=${encodeURIComponent(query.trim())}&source=${source}`,
-      );
-      setTracks(result.tracks);
-      if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
-    } catch (error) {
-      toast((error as Error).message, true);
-    }
+    await runSearch(query.trim(), source);
   }
 
-  // /music?q=… 直达一次检索（便于分享，也方便从别处跳进来）。
+  // /music?q=… 直达一次检索；否则恢复上次搜过的关键词（切页回来列表还在）。
+  const restored = useRef(false);
   useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
     const wanted = params.get("q");
-    if (!wanted) return;
-    setQuery(wanted);
-    void api<{ tracks: Track[] }>(
-      `/music/search?q=${encodeURIComponent(wanted)}&source=${
-        params.get("source") || "netease"
-      }`,
-    )
-      .then((result) => setTracks(result.tracks))
-      .catch((failure) => toast((failure as Error).message, true));
-    setParams(
-      (previous) => {
-        const next = new URLSearchParams(previous);
-        next.delete("q");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [params]);
+    if (wanted) {
+      const src = params.get("source") || "netease";
+      setQuery(wanted);
+      setSource(src);
+      void runSearch(wanted, src);
+      setParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          next.delete("q");
+          return next;
+        },
+        { replace: true },
+      );
+      return;
+    }
+    const saved = sessionStorage.getItem("xinxin-music-search");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as { q?: string; source?: string };
+      if (!parsed?.q) return;
+      const src = parsed.source || "netease";
+      setQuery(parsed.q);
+      setSource(src);
+      void runSearch(parsed.q, src);
+    } catch {
+      // 缓存损坏就当作没有
+    }
+    // 只在挂载时跑一次；runSearch/params 的后续变化不需要重放。
+  }, []);
 
   // 换歌时拉一次歌词；没有 lyric_id 就清空。
   const lyricId = player?.track?.lyric_id || "";
@@ -229,6 +267,19 @@ export default function MusicPage() {
                 placeholder="歌名、歌手或专辑"
                 aria-label="搜索音乐"
               />
+              {query && (
+                <button
+                  type="button"
+                  className="field-clear"
+                  onClick={() => {
+                    setQuery("");
+                    setTracks(null);
+                  }}
+                  aria-label="清空搜索"
+                >
+                  <X size={13} />
+                </button>
+              )}
             </div>
             <select
               value={source}
@@ -241,7 +292,9 @@ export default function MusicPage() {
                 </option>
               ))}
             </select>
-            <button className="button secondary">搜索</button>
+            <button className="button secondary" disabled={searching}>
+              {searching ? "搜索中…" : "搜索"}
+            </button>
           </form>
           {tracks === null ? (
             <div className="music-hint">
@@ -252,7 +305,7 @@ export default function MusicPage() {
               </p>
             </div>
           ) : tracks.length ? (
-            <ul className="track-list">
+            <ul className={`track-list${searching ? " loading" : ""}`}>
               {tracks.map((track) => (
                 <li
                   key={`${track.source}-${track.id}`}
@@ -336,13 +389,47 @@ export default function MusicPage() {
                   >
                     {player?.playing ? <Pause size={18} /> : <Play size={18} />}
                   </button>
-                  <div className="player-track">
-                    <div
-                      className="player-progress"
-                      style={{ width: `${percent}%` }}
+                  <div className="player-timeline">
+                    <input
+                      type="range"
+                      className="player-range"
+                      min={0}
+                      max={Math.max(1, Math.floor(progress.duration || 0))}
+                      value={Math.min(
+                        Math.floor(progress.current),
+                        Math.max(1, Math.floor(progress.duration || 0)),
+                      )}
+                      onChange={(event) =>
+                        player?.seek(Number(event.target.value))
+                      }
+                      aria-label="播放进度"
+                      style={{ "--played": `${percent}%` } as CSSProperties}
                     />
+                    <div className="player-times">
+                      <small>{clock(progress.current)}</small>
+                      <small>
+                        {progress.duration ? clock(progress.duration) : "--:--"}
+                      </small>
+                    </div>
                   </div>
-                  <small>{clock(progress.current)}</small>
+                </div>
+                <div className="player-volume">
+                  <Volume2 size={13} />
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round((player?.volume ?? 0.8) * 100)}
+                    onChange={(event) =>
+                      player?.setVolume(Number(event.target.value) / 100)
+                    }
+                    aria-label="音量"
+                    style={
+                      {
+                        "--played": `${Math.round((player?.volume ?? 0.8) * 100)}%`,
+                      } as CSSProperties
+                    }
+                  />
                 </div>
                 {lyric && (
                   <details className="lyric-box">
@@ -371,29 +458,47 @@ export default function MusicPage() {
                   </strong>
                   <small>{mood.tracks} 首近期播放</small>
                 </div>
-                <div className="mood-meters">
-                  <div>
-                    <span>愉悦</span>
-                    <div className="mood-bar">
-                      <i
-                        style={{
-                          width: `${Math.round(((mood.valence + 1) / 2) * 100)}%`,
-                        }}
-                      />
-                    </div>
+                <div className="mood-visual">
+                  <div className="mood-plot" aria-hidden="true">
+                    <span className="plot-label tl">怒</span>
+                    <span className="plot-label tr">乐</span>
+                    <span className="plot-label bl">哀</span>
+                    <span className="plot-label br">喜</span>
+                    <i
+                      style={{
+                        left: `${((mood.valence + 1) / 2) * 100}%`,
+                        top: `${(1 - mood.energy) * 100}%`,
+                      }}
+                    />
                   </div>
-                  <div>
-                    <span>能量</span>
-                    <div className="mood-bar">
-                      <i style={{ width: `${Math.round(mood.energy * 100)}%` }} />
+                  <div className="mood-meters">
+                    <div>
+                      <span>愉悦</span>
+                      <div className="mood-bar">
+                        <i
+                          style={{
+                            width: `${Math.round(((mood.valence + 1) / 2) * 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <span>强度</span>
-                    <div className="mood-bar">
-                      <i
-                        style={{ width: `${Math.round(mood.intensity * 100)}%` }}
-                      />
+                    <div>
+                      <span>能量</span>
+                      <div className="mood-bar">
+                        <i
+                          style={{ width: `${Math.round(mood.energy * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span>强度</span>
+                      <div className="mood-bar">
+                        <i
+                          style={{
+                            width: `${Math.round(mood.intensity * 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
