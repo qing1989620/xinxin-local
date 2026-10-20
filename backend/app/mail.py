@@ -207,9 +207,56 @@ class MailCodes:
             f'如果这次操作不是你发起的，请忽略此邮件。'
         )
         if config["provider"] == "resend":
-            self._send_resend(config, recipient, subject, text, code, scene)
+            self._send_resend(config, recipient, subject, text, self._code_html(code, scene))
         else:
             self._send_smtp(config, recipient, subject, text)
+
+    def test_delivery(self):
+        """配置后台测试发信：只发给绑定邮箱，不占用验证码配额。"""
+        config = self.configuration()
+        recipient = config["email"].strip().lower()
+        if not recipient:
+            raise HTTPException(400, "请先填写绑定邮箱并保存")
+        if not self.enabled():
+            missing = (
+                "Resend API Key 与发件人"
+                if config["provider"] == "resend"
+                else "SMTP 授权码"
+            )
+            raise HTTPException(400, f"还缺{missing}，请先保存完整配置")
+        subject = "Xinxin · 配置测试"
+        text = (
+            "这是一封配置测试邮件。\n\n"
+            "收到它说明 Xinxin 的验证码邮件通道已经可用；"
+            "之后登录和找回密码都可以用邮箱验证码。\n"
+            "如果这不是你发起的操作，请忽略此邮件。"
+        )
+        html = (
+            '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',sans-serif;'
+            'max-width:520px;margin:0 auto;padding:32px 24px;color:#292e2b">'
+            '<p style="font-size:12px;letter-spacing:.18em;color:#626d64;margin:0 0 18px">'
+            "XINXIN · A SPACE OF YOUR OWN</p>"
+            '<h1 style="font-size:22px;font-weight:550;margin:0 0 14px">邮件通道测试</h1>'
+            '<p style="font-size:13px;line-height:1.9;color:#626d64;margin:0">'
+            "收到这封邮件说明验证码通道可用；之后登录和找回密码都可以用邮箱验证码。</p>"
+            "</div>"
+        )
+        try:
+            if config["provider"] == "resend":
+                self._send_resend(config, recipient, subject, text, html)
+            else:
+                self._send_smtp(config, recipient, subject, text)
+        except Exception as failure:  # noqa: BLE001 -- 上游失败一律转成可读提示
+            self.store.audit("email.test_failed", {"provider": config["provider"]})
+            if isinstance(failure, RuntimeError) and str(failure).startswith("Resend"):
+                raise HTTPException(
+                    503, f"发信失败（{str(failure)[:80]}），请检查 Resend 配置"
+                ) from None
+            raise HTTPException(
+                503, "发信失败，请检查 SMTP 服务器、端口、加密方式与授权码"
+            ) from None
+        self.store.audit("email.tested", {"provider": config["provider"]})
+        return {"ok": True, "provider": config["provider"], "to": recipient}
 
     def _send_smtp(self, config, recipient, subject, text):
         host, port = config["smtp_host"], config["smtp_port"]
@@ -234,9 +281,9 @@ class MailCodes:
             smtp.login(username, password)
             smtp.send_message(message)
 
-    def _send_resend(self, config, recipient, subject, text, code, scene):
-        """Resend HTTP API，直调不引 SDK；失败只保留状态码与错误名。"""
-        html = (
+    @staticmethod
+    def _code_html(code, scene):
+        return (
             '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',sans-serif;'
             'max-width:520px;margin:0 auto;padding:32px 24px;color:#292e2b">'
             '<p style="font-size:12px;letter-spacing:.18em;color:#626d64;margin:0 0 18px">'
@@ -248,6 +295,9 @@ class MailCodes:
             "10 分钟内有效，仅可使用一次。如果这次操作不是你发起的，请忽略此邮件。</p>"
             "</div>"
         )
+
+    def _send_resend(self, config, recipient, subject, text, html):
+        """Resend HTTP API，直调不引 SDK；失败只保留状态码与错误名。"""
         response = httpx.post(
             RESEND_API + "/emails",
             headers={"Authorization": "Bearer " + config["resend_api_key"]},

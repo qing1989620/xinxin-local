@@ -3952,3 +3952,9 @@ kbd {
     width: auto;
   }
 }
+
+.email-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}

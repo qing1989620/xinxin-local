@@ -167,6 +167,54 @@ def test_domain_can_be_added_and_verified(tmp_path, monkeypatch):
     )
 
 
+def test_test_mail_reports_missing_configuration(tmp_path):
+    app, client = setup(tmp_path)
+    client.put(
+        "/api/v1/settings/email",
+        json={"email": "owner@example.com", "smtp_password": ""},
+    )
+    response = client.post("/api/v1/settings/email/test")
+    assert response.status_code == 400
+    assert "SMTP 授权码" in response.json()["detail"]
+
+
+def test_test_mail_goes_through_the_configured_transport(tmp_path, monkeypatch):
+    app, client = setup(tmp_path)
+    configure_resend(client)
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append((url, json))
+        return FakeResponse(200, {"id": "email_test"})
+
+    monkeypatch.setattr(mail_module.httpx, "post", fake_post)
+    response = client.post("/api/v1/settings/email/test")
+    assert response.status_code == 200
+    assert response.json() == {
+        "ok": True,
+        "provider": "resend",
+        "to": "owner@example.com",
+    }
+    payload = calls[0][1]
+    assert payload["subject"] == "Xinxin · 配置测试"
+    assert "邮件通道" in payload["text"]
+    assert payload["to"] == ["owner@example.com"]
+
+
+def test_test_mail_failure_is_reported_without_leaking_the_key(tmp_path, monkeypatch):
+    app, client = setup(tmp_path)
+    configure_resend(client)
+
+    monkeypatch.setattr(
+        mail_module.httpx,
+        "post",
+        lambda *_, **__: FakeResponse(403, {"name": "validation_error"}),
+    )
+    response = client.post("/api/v1/settings/email/test")
+    assert response.status_code == 503
+    assert "Resend" in response.text and "re_synthetic_key" not in response.text
+
+
 def test_resend_requires_key_before_domain_calls(tmp_path):
     app, client = setup(tmp_path)
     assert (

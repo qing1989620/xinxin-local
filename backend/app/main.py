@@ -431,6 +431,11 @@ def create_app(config=None):
         store.audit("email.configured", {"provider": body.provider})
         return email_settings()
 
+    @app.post("/api/v1/settings/email/test", dependencies=[Depends(owner)])
+    def test_email_settings():
+        """只发给绑定邮箱，不占用验证码配额。"""
+        return mail.test_delivery()
+
     @app.get("/api/v1/settings/email/domains", dependencies=[Depends(owner)])
     def email_domains():
         return {"domains": mail.domains()}

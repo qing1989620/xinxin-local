@@ -1,5 +1,13 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Globe, Loader2, Mail, Plus, Save } from "lucide-react";
+import {
+  CheckCircle2,
+  Globe,
+  Loader2,
+  Mail,
+  Plus,
+  Save,
+  Send,
+} from "lucide-react";
 import { api, post, put } from "../api";
 import { ErrorState, Loading, useResource, useToast } from "../ui";
 
@@ -57,6 +65,7 @@ export default function EmailSettings() {
       resend_api_key: "",
     }),
     [busy, setBusy] = useState(false),
+    [testing, setTesting] = useState(false),
     [domains, setDomains] = useState<Domain[] | null>(null),
     [domainError, setDomainError] = useState(""),
     [domainBusy, setDomainBusy] = useState(""),
@@ -105,8 +114,24 @@ export default function EmailSettings() {
       setBusy(false);
     }
   }
-  async function addDomain() {
-    if (!newDomain.trim()) return;
+  async function testDelivery() {
+    setTesting(true);
+    try {
+      const result = await post<{ to: string; provider: string }>(
+        "/settings/email/test",
+        {},
+      );
+      toast(
+        `测试邮件已发出，收件人 ${result.to}；几十秒内没收到就看一眼垃圾箱`,
+      );
+    } catch (error) {
+      toast((error as Error).message, true);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  async function addDomain() {    if (!newDomain.trim()) return;
     setDomainBusy("add");
     try {
       await post("/settings/email/domains", { name: newDomain.trim() });
@@ -383,10 +408,26 @@ export default function EmailSettings() {
           6 位验证码，10 分钟有效，60 秒发送间隔。凭据只在后端加密保存，
           接口永远不会回显。
         </p>
-        <button className="button secondary" disabled={busy}>
-          <Save size={15} />
-          {busy ? "正在保存…" : "保存邮箱设置"}
-        </button>
+        <div className="email-actions">
+          <button className="button secondary" disabled={busy}>
+            <Save size={15} />
+            {busy ? "正在保存…" : "保存邮箱设置"}
+          </button>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => void testDelivery()}
+            disabled={!data.configured || testing}
+            title={
+              data.configured
+                ? "发一封测试邮件到绑定邮箱"
+                : "先保存完整的发信配置"
+            }
+          >
+            {testing ? <Loader2 size={15} className="spin" /> : <Send size={15} />}
+            {testing ? "正在发送…" : "发送测试邮件"}
+          </button>
+        </div>
       </form>
     </section>
   );
