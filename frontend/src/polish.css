@@ -242,10 +242,6 @@ body::after {
     color 0.16s ease;
 }
 
-.nav-link.active {
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--accent) 14%, transparent);
-}
 
 .new-task {
   border-radius: var(--radius-sm);
@@ -439,16 +435,6 @@ pre code {
   position: relative;
 }
 
-.nav-link.active::before {
-  content: "";
-  position: absolute;
-  left: -7px;
-  top: 11px;
-  bottom: 11px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
 
 .mission-card,
 .resource-console,

@@ -8,19 +8,18 @@ import {
 } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  CloudOff,
-  Disc3,
+  ArrowUpRight,
+  CornerDownLeft,
   Music2,
   Pause,
   Play,
   Search,
   Trash2,
   Volume2,
-  Waves,
   X,
 } from "lucide-react";
 import { api, put, remove } from "../api";
-import { Empty, Loading, PageHeader, useToast } from "../ui";
+import { Loading, useToast } from "../ui";
 import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
 
 type Emotion = {
@@ -56,11 +55,19 @@ const SOURCES = [
   ["tencent", "QQ 音乐"],
 ] as const;
 
-function moodTone(label: string) {
+const MOOD_PHRASE: Record<string, string> = {
+  喜: "安静的愉悦",
+  乐: "明亮的兴奋",
+  怒: "绷紧的强烈",
+  哀: "低回的安静",
+  平静: "没什么起伏",
+};
+
+function tone(label: string) {
   return (
-    { 喜: "calm-joy", 乐: "bright", 怒: "intense", 哀: "low", 平静: "neutral" }[
+    { 喜: "tone-joy", 乐: "tone-bright", 怒: "tone-intense", 哀: "tone-low" }[
       label
-    ] || "neutral"
+    ] || "tone-neutral"
   );
 }
 
@@ -75,6 +82,16 @@ function clock(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(
     Math.floor(seconds % 60),
   ).padStart(2, "0")}`;
+}
+
+function Equalizer() {
+  return (
+    <span className="equalizer" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
 }
 
 export default function MusicPage() {
@@ -139,7 +156,7 @@ export default function MusicPage() {
     await runSearch(query.trim(), source);
   }
 
-  // /music?q=… 直达一次检索；否则恢复上次搜过的关键词（切页回来列表还在）。
+  // /music?q=… 直达一次检索；否则恢复上次搜过的关键词。
   const restored = useRef(false);
   useEffect(() => {
     if (restored.current) return;
@@ -172,7 +189,6 @@ export default function MusicPage() {
     } catch {
       // 缓存损坏就当作没有
     }
-    // 只在挂载时跑一次；runSearch/params 的后续变化不需要重放。
   }, []);
 
   // 换歌时拉一次歌词；没有 lyric_id 就清空。
@@ -231,11 +247,6 @@ export default function MusicPage() {
         influence: !mood.influence,
       });
       setMood(result.mood);
-      toast(
-        result.mood.influence
-          ? "已开启：当前氛围会影响 Xinxin 的语气"
-          : "已关闭：Xinxin 不再受音乐影响",
-      );
     } catch (error) {
       toast((error as Error).message, true);
     }
@@ -248,305 +259,315 @@ export default function MusicPage() {
   const percent = progress.duration
     ? Math.min(100, (progress.current / progress.duration) * 100)
     : 0;
+  const active = Boolean(mood && mood.intensity > 0);
 
   return (
-    <div className="page-enter">
-      <PageHeader
-        overline="AMBIENT LISTENING"
-        title="背景音乐"
-        description="放一首，房间的氛围会跟着变——Xinxin 的语气也会。音频直接从音乐平台 CDN 播放，不经过这台机器；切到别的页面也会继续放。"
-      />
-      <div className="music-layout">
-        <section className="music-panel">
-          <form className="music-search" onSubmit={search}>
-            <div className="music-search-field">
-              <Search size={16} />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="歌名、歌手或专辑"
-                aria-label="搜索音乐"
-              />
-              {query && (
-                <button
-                  type="button"
-                  className="field-clear"
-                  onClick={() => {
-                    setQuery("");
-                    setTracks(null);
-                  }}
-                  aria-label="清空搜索"
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-            <select
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-              aria-label="音乐源"
-            >
-              {SOURCES.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <button className="button secondary" disabled={searching}>
-              {searching ? "搜索中…" : "搜索"}
-            </button>
+    <div className="page-enter listening">
+      <header className="listening-head">
+        <p className="eyebrow">AMBIENT LISTENING</p>
+        <div className="listening-title">
+          <h1>背景音乐</h1>
+          <span className={`listening-state${player?.playing ? " live" : ""}`}>
+            <i />
+            {current ? (player?.playing ? "正在播放" : "已暂停") : "等待第一首"}
+          </span>
+        </div>
+        <p className="lead">
+          放一首歌，房间就有了底噪。音乐只改变 Xinxin 的语气，不影响它做事。
+        </p>
+      </header>
+
+      <div className="listening-body">
+        <section className="listening-index" aria-label="曲目检索">
+          <form className="search-line" onSubmit={search} role="search">
+            <Search size={19} strokeWidth={1.5} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜一首歌、一张专辑，或者一个歌手"
+              aria-label="搜索音乐"
+            />
+            {query ? (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => {
+                  setQuery("");
+                  setTracks(null);
+                }}
+                aria-label="清空搜索"
+              >
+                <X size={14} />
+              </button>
+            ) : (
+              <span className="search-hint" aria-hidden="true">
+                <CornerDownLeft size={12} />
+              </span>
+            )}
           </form>
+
+          <div className="source-tabs" role="tablist" aria-label="音乐源">
+            {SOURCES.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={source === value}
+                className={source === value ? "active" : ""}
+                onClick={() => setSource(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="index-head">
+            <span>曲目</span>
+            <span>
+              {searching
+                ? "检索中"
+                : tracks
+                  ? `${tracks.length} 首`
+                  : "按回车开始"}
+            </span>
+          </div>
+
           {tracks === null ? (
-            <div className="music-hint">
-              <Music2 size={22} strokeWidth={1.3} />
+            <div className="index-empty">
+              <Music2 size={22} strokeWidth={1.1} />
               <p>
-                搜索一首歌开始。每首歌会根据标题与专辑的词义给出一个情绪指数，
-                最近播放的整体倾向决定此刻的氛围。
+                还没有检索。每首歌会按标题与专辑的词义给出一个情绪指数，
+                最近播放的整体倾向，决定此刻房间的氛围。
               </p>
             </div>
           ) : tracks.length ? (
-            <ul className={`track-list${searching ? " loading" : ""}`}>
-              {tracks.map((track) => (
-                <li
-                  key={`${track.source}-${track.id}`}
-                  className={isCurrent(track) ? "active" : ""}
-                >
+            <ol className={`track-index${searching ? " is-loading" : ""}`}>
+              {tracks.map((track, index) => (
+                <li key={`${track.source}-${track.id}`}>
                   <button
-                    className="track-play"
+                    className={`track-row${isCurrent(track) ? " active" : ""}`}
                     onClick={() => void play(track)}
-                    aria-label={`播放 ${track.name}`}
+                    aria-current={isCurrent(track) || undefined}
                   >
-                    {pending === `${track.source}:${track.id}` ? (
-                      <span className="track-loading" />
-                    ) : isCurrent(track) && player?.playing ? (
-                      <Pause size={15} />
-                    ) : (
-                      <Play size={15} />
-                    )}
+                    <span className="track-ordinal">
+                      {pending === `${track.source}:${track.id}` ? (
+                        <span className="track-loading" />
+                      ) : isCurrent(track) && player?.playing ? (
+                        <Equalizer />
+                      ) : (
+                        String(index + 1).padStart(2, "0")
+                      )}
+                    </span>
+                    <span className="track-title">
+                      <strong>{track.name}</strong>
+                      <small>
+                        {track.artist}
+                        {track.album ? ` · ${track.album}` : ""}
+                      </small>
+                    </span>
+                    <span
+                      className={`emotion-word ${tone(track.emotion.label)}`}
+                      title={
+                        track.emotion.hits.length
+                          ? `命中：${track.emotion.hits.join("、")}`
+                          : "没有命中情绪词，按中性处理"
+                      }
+                    >
+                      {track.emotion.label}
+                    </span>
                   </button>
-                  <div className="track-meta">
-                    <strong>{track.name}</strong>
-                    <small>
-                      {track.artist}
-                      {track.album ? ` · ${track.album}` : ""}
-                    </small>
-                  </div>
-                  <span
-                    className={`emotion-chip ${moodTone(track.emotion.label)}`}
-                    title={
-                      track.emotion.hits.length
-                        ? `命中：${track.emotion.hits.join("、")}`
-                        : "没有命中情绪词，按中性处理"
-                    }
-                  >
-                    {track.emotion.label}
-                  </span>
                 </li>
               ))}
-            </ul>
+            </ol>
           ) : (
-            <Empty
-              title="没有结果"
-              description="换一个关键词，或者切换到酷我 / JOOX 音源再试。"
-            />
+            <div className="index-empty">
+              <p>没有结果。换个关键词，或者切到酷我 / JOOX 再试。</p>
+            </div>
           )}
         </section>
 
-        <aside className="music-side">
-          <section className="music-panel now-playing">
-            <div className="panel-label">
-              <Disc3 size={14} />
-              正在播放
+        <aside className="listening-room">
+          <section className={`sleeve${player?.playing ? " is-playing" : ""}`}>
+            <div className={`sleeve-art${player?.cover ? " has-cover" : ""}`}>
+              <span className="sleeve-vinyl" aria-hidden="true">
+                <span className="vinyl-label">
+                  <b>{(current?.name || "X").slice(0, 1)}</b>
+                  <i>XINXIN · AMBIENT</i>
+                </span>
+              </span>
+              {player?.cover && (
+                <img
+                  src={player.cover}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
+              )}
             </div>
+
             {current ? (
               <>
-                <div className="now-head">
-                  <span className="now-cover">
-                    {player?.cover ? (
-                      <img
-                        src={player.cover}
-                        alt=""
-                        referrerPolicy="no-referrer"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <Music2 size={16} />
-                    )}
-                  </span>
-                  <div>
-                    <h3>{current.name}</h3>
-                    <p className="muted">
-                      {current.artist}
-                      {current.album ? ` · ${current.album}` : ""}
-                    </p>
-                  </div>
+                <div className="sleeve-meta">
+                  <p className="sleeve-kicker">
+                    {player?.playing ? "NOW PLAYING" : "PAUSED"}
+                  </p>
+                  <h2>{current.name}</h2>
+                  <p className="sleeve-artist">
+                    {current.artist}
+                    {current.album ? ` — ${current.album}` : ""}
+                  </p>
                 </div>
-                <div className="player-controls">
+
+                <div className="transport">
                   <button
-                    className="play-toggle"
+                    className="transport-play"
                     onClick={() => void player?.toggle()}
                     aria-label={player?.playing ? "暂停" : "播放"}
                   >
-                    {player?.playing ? <Pause size={18} /> : <Play size={18} />}
+                    {player?.playing ? (
+                      <Pause size={16} fill="currentColor" />
+                    ) : (
+                      <Play size={16} fill="currentColor" />
+                    )}
                   </button>
-                  <div className="player-timeline">
-                    <input
-                      type="range"
-                      className="player-range"
-                      min={0}
-                      max={Math.max(1, Math.floor(progress.duration || 0))}
-                      value={Math.min(
-                        Math.floor(progress.current),
-                        Math.max(1, Math.floor(progress.duration || 0)),
-                      )}
-                      onChange={(event) =>
-                        player?.seek(Number(event.target.value))
-                      }
-                      aria-label="播放进度"
-                      style={{ "--played": `${percent}%` } as CSSProperties}
-                    />
-                    <div className="player-times">
-                      <small>{clock(progress.current)}</small>
-                      <small>
-                        {progress.duration ? clock(progress.duration) : "--:--"}
-                      </small>
-                    </div>
+                  <div className="transport-time">
+                    <small>{clock(progress.current)}</small>
+                    <small>
+                      {progress.duration ? clock(progress.duration) : "--:--"}
+                    </small>
                   </div>
                 </div>
-                <div className="player-volume">
-                  <Volume2 size={13} />
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round((player?.volume ?? 0.8) * 100)}
-                    onChange={(event) =>
-                      player?.setVolume(Number(event.target.value) / 100)
-                    }
-                    aria-label="音量"
+
+                <input
+                  type="range"
+                  className="seek"
+                  min={0}
+                  max={Math.max(1, Math.floor(progress.duration || 0))}
+                  value={Math.min(
+                    Math.floor(progress.current),
+                    Math.max(1, Math.floor(progress.duration || 0)),
+                  )}
+                  onChange={(event) => player?.seek(Number(event.target.value))}
+                  aria-label="播放进度"
+                  style={{ "--played": `${percent}%` } as CSSProperties}
+                />
+
+                <div className="sleeve-foot">
+                  <label className="volume">
+                    <Volume2 size={13} strokeWidth={1.6} />
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={Math.round((player?.volume ?? 0.8) * 100)}
+                      onChange={(event) =>
+                        player?.setVolume(Number(event.target.value) / 100)
+                      }
+                      aria-label="音量"
+                      style={
+                        {
+                          "--played": `${Math.round((player?.volume ?? 0.8) * 100)}%`,
+                        } as CSSProperties
+                      }
+                    />
+                  </label>
+                  {current.lyric_id && lyric && (
+                    <details className="lyric">
+                      <summary>歌词</summary>
+                      <pre>{lyric}</pre>
+                    </details>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="sleeve-empty">
+                <p>还没放歌。</p>
+                <p className="muted">从左边挑一首，封面和唱片会在这里展开。</p>
+              </div>
+            )}
+          </section>
+
+          <section className="mood-plate">
+            <div className="mood-plate-head">
+              <span className="plate-label">此刻的氛围</span>
+              {plays.length > 0 && (
+                <button className="link-quiet" onClick={() => void clearMood()}>
+                  <Trash2 size={12} />
+                  清空
+                </button>
+              )}
+            </div>
+
+            {mood ? (
+              <>
+                <div className="mood-summary">
+                  <strong className={`mood-word ${tone(mood.label)}`}>
+                    {mood.label}
+                  </strong>
+                  <span>
+                    {active
+                      ? `${MOOD_PHRASE[mood.label] ?? "没什么起伏"} · 强度 ${mood.intensity.toFixed(2)}`
+                      : "还没有播放记录"}
+                  </span>
+                </div>
+
+                <div className="compass" aria-hidden="true">
+                  <span className="compass-axis x" />
+                  <span className="compass-axis y" />
+                  <span className="compass-label tl">怒</span>
+                  <span className="compass-label tr">乐</span>
+                  <span className="compass-label bl">哀</span>
+                  <span className="compass-label br">喜</span>
+                  <span
+                    className={`compass-dot${active ? "" : " idle"}`}
                     style={
                       {
-                        "--played": `${Math.round((player?.volume ?? 0.8) * 100)}%`,
+                        left: `${((mood.valence + 1) / 2) * 100}%`,
+                        top: `${(1 - mood.energy) * 100}%`,
+                        "--halo": `${4 + Math.round(mood.intensity * 9)}px`,
                       } as CSSProperties
                     }
                   />
                 </div>
-                {lyric && (
-                  <details className="lyric-box">
-                    <summary>歌词</summary>
-                    <pre>{lyric}</pre>
-                  </details>
-                )}
-              </>
-            ) : (
-              <p className="muted">
-                还没放歌。选一首，房间会安静地开始有声音。
-              </p>
-            )}
-          </section>
 
-          <section className="music-panel mood-card">
-            <div className="panel-label">
-              <Waves size={14} />
-              此刻的氛围
-            </div>
-            {mood ? (
-              <>
-                <div className="mood-head">
-                  <strong className={`mood-label ${moodTone(mood.label)}`}>
-                    {mood.label}
-                  </strong>
-                  <small>{mood.tracks} 首近期播放</small>
-                </div>
-                <div className="mood-visual">
-                  <div className="mood-plot" aria-hidden="true">
-                    <span className="plot-label tl">怒</span>
-                    <span className="plot-label tr">乐</span>
-                    <span className="plot-label bl">哀</span>
-                    <span className="plot-label br">喜</span>
-                    <i
-                      style={{
-                        left: `${((mood.valence + 1) / 2) * 100}%`,
-                        top: `${(1 - mood.energy) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="mood-meters">
-                    <div>
-                      <span>愉悦</span>
-                      <div className="mood-bar">
-                        <i
-                          style={{
-                            width: `${Math.round(((mood.valence + 1) / 2) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <span>能量</span>
-                      <div className="mood-bar">
-                        <i
-                          style={{ width: `${Math.round(mood.energy * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <span>强度</span>
-                      <div className="mood-bar">
-                        <i
-                          style={{
-                            width: `${Math.round(mood.intensity * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <label className="mood-toggle">
-                  <input
-                    type="checkbox"
-                    checked={mood.influence}
-                    onChange={() => void toggleInfluence()}
-                  />
-                  让音乐影响 Xinxin 的语气
-                </label>
-                {!mood.influence && (
-                  <p className="field-help">
-                    已关闭：只记录播放，不改变人格提示。
-                  </p>
-                )}
+                <button
+                  role="switch"
+                  aria-checked={mood.influence}
+                  className={`switch${mood.influence ? " on" : ""}`}
+                  onClick={() => void toggleInfluence()}
+                >
+                  <span className="switch-track" aria-hidden="true">
+                    <i />
+                  </span>
+                  <span>让音乐影响 Xinxin 的语气</span>
+                </button>
+
                 {plays.length > 0 && (
-                  <>
-                    <div className="mood-history-label">
-                      最近播放
-                      <button
-                        className="text-button"
-                        onClick={() => void clearMood()}
-                      >
-                        <Trash2 size={13} />
-                        清空
-                      </button>
-                    </div>
-                    <ul className="mood-history">
-                      {plays.slice(0, 8).map((play, index) => (
-                        <li key={`${play.track_id}-${play.created}-${index}`}>
-                          <span
-                            className={`emotion-dot ${moodTone(play.label)}`}
-                          />
-                          <span className="mood-history-name">{play.name}</span>
-                          <small>{minutesAgo(play.created)}</small>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
+                  <ul className="history">
+                    {plays.slice(0, 5).map((play, index) => (
+                      <li key={`${play.track_id}-${play.created}-${index}`}>
+                        <i className={`history-dot ${tone(play.label)}`} />
+                        <span>{play.name}</span>
+                        <small>{minutesAgo(play.created)}</small>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </>
             ) : (
               <Loading />
             )}
-            <p className="field-help music-source-note">
-              <CloudOff size={12} /> 音乐数据来自 GD 音乐台（music.gdstudio.xyz），
-              仅供个人学习使用；音频与封面由原平台 CDN 提供，不下载、不转存。
+
+            <p className="plate-note">
+              音乐数据来自 GD 音乐台（music.gdstudio.xyz），仅供个人学习使用；
+              音频与封面由原平台 CDN 提供，不下载、不转存。
+              <a
+                href="https://music.gdstudio.xyz"
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                访问原站 <ArrowUpRight size={11} />
+              </a>
             </p>
           </section>
         </aside>

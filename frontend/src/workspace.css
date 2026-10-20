@@ -14,20 +14,11 @@
   --ink: #26322e;
   --muted: #657168;
 }
-.nav-link {
-  font-size: 13px;
-  min-height: 42px;
-}
 .sidebar-caption {
   font-size: 11px;
 }
 .button {
   font-size: 13px;
-}
-.page-heading h1 {
-  font-size: 34px;
-  letter-spacing: -1px;
-  font-weight: 550;
 }
 .page-heading > p,
 .page-heading > div > p {
