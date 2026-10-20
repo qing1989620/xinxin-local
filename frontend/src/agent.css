@@ -817,6 +817,7 @@
 @media (max-width: 760px) {
   .agent-v2 {
     min-height: 0;
+    height: calc(100vh - 60px - 66px - env(safe-area-inset-bottom));
     height: calc(100dvh - 60px - 66px - env(safe-area-inset-bottom));
   }
   .agent-v2 .chat-header {
@@ -936,6 +937,7 @@
     flex-shrink: 0;
   }
   .keyboard-open .agent-v2 {
+    height: calc(100vh - 60px);
     height: calc(100dvh - 60px);
     min-height: 260px;
   }

@@ -257,6 +257,7 @@ code,
   transform: translateY(0);
 }
 .app-shell {
+  min-height: 100vh;
   min-height: 100dvh;
 }
 .sidebar {
@@ -403,6 +404,7 @@ code,
 }
 .workspace {
   margin-left: var(--sidebar);
+  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -1017,6 +1019,7 @@ kbd {
 }
 .agent-layout {
   display: flex;
+  height: calc(100vh - 72px);
   height: calc(100dvh - 72px);
   min-height: 500px;
   position: relative;
@@ -1903,6 +1906,7 @@ kbd {
   background: var(--surface);
   color: var(--ink);
   width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   max-height: calc(100dvh - 48px);
   box-shadow: 0 20px 100px #17211915;
 }
@@ -1997,6 +2001,7 @@ kbd {
   background: #803e32;
 }
 .boot {
+  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -2023,15 +2028,38 @@ kbd {
   text-align: left;
 }
 .auth-page {
+  min-height: 100vh;
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
 .auth-editorial {
+  position: relative;
   padding: 55px 10%;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--line);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(
+      172deg,
+      rgba(247, 245, 239, 0.62) 0%,
+      rgba(247, 245, 239, 0.32) 34%,
+      rgba(247, 245, 239, 0.36) 64%,
+      rgba(247, 245, 239, 0.72) 100%
+    ),
+    url("/textures/auth-ink.jpg");
+  background-size: cover, cover;
+  background-position: center, center 32%;
+  background-repeat: no-repeat;
+}
+/* 画廊式细框：一层几乎看不见的内边线，把"纸面"收成装裱过的展品 */
+.auth-editorial::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border: 1px solid rgba(41, 46, 43, 0.07);
+  pointer-events: none;
 }
 .auth-story {
   flex: 1;
@@ -2602,6 +2630,7 @@ kbd {
   }
   .workspace {
     margin: 0;
+    min-height: 100vh;
     min-height: 100dvh;
   }
   .topbar {
@@ -2962,6 +2991,7 @@ kbd {
     width: 100%;
   }
   .dialog {
+    max-height: calc(100vh - 26px);
     max-height: calc(100dvh - 26px);
     border-radius: 11px;
   }
@@ -3006,6 +3036,18 @@ kbd {
   .auth-editorial {
     padding: 30px 28px 35px;
     border: 0;
+    /* 手机端编辑区变成窄条：加重纸色蒙版，只留一层水墨肌理 */
+    background-image:
+      linear-gradient(
+        180deg,
+        rgba(247, 245, 239, 0.9) 0%,
+        rgba(247, 245, 239, 0.78) 100%
+      ),
+      url("/textures/auth-ink.jpg");
+    background-position: center, center 22%;
+  }
+  .auth-editorial::after {
+    inset: 12px;
   }
   .auth-story {
     padding: 40px 0 0;
@@ -3040,10 +3082,12 @@ kbd {
     padding: 0;
   }
   .agent-layout {
+    height: calc(100vh - 60px - 66px - env(safe-area-inset-bottom));
     height: calc(100dvh - 60px - 66px - env(safe-area-inset-bottom));
     min-height: 360px;
   }
   .keyboard-open .agent-layout {
+    height: calc(100vh - 60px);
     height: calc(100dvh - 60px);
   }
   .chat-header {
