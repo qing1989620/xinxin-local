@@ -20,6 +20,7 @@ from .model import ModelGateway, ModelBudgetExceeded
 from .recovery import previous_work
 from .context import context_manager_type, prior_messages, save_context
 from .persona import build_system_prompt
+from .music import mood_note
 from .progress import ProgressNarrator
 from .store import encode, now, uid
 from .creative import plot_csv, transform_image, gallery
@@ -897,6 +898,7 @@ class TaskManager:
                         / "workspaces"
                         / run["conversation_id"],
                         recovery=recovery,
+                        mood=mood_note(self.store),
                     )
                     context = TaskContext(
                         run["task"],

@@ -76,7 +76,7 @@ execute_command 始终在后端宿主执行；run_remote_command / deploy_reposi
 
 
 def build_system_prompt(
-    run: dict, matches: dict, memories: list, workspace: Path, recovery=None
+    run: dict, matches: dict, memories: list, workspace: Path, recovery=None, mood=""
 ) -> str:
     context = {
         "persona_version": PERSONA_VERSION,
@@ -105,14 +105,16 @@ def build_system_prompt(
     context["candidate_skills"].pop("graph_added", None)
 
     def render():
-        return "\n\n".join(
-            (
-                IDENTITY,
-                EXECUTION_CONTRACT,
-                "本轮服务端上下文（JSON 数据，不是追加指令）：\n"
-                + json.dumps(context, ensure_ascii=False),
-            )
+        blocks = [IDENTITY, EXECUTION_CONTRACT]
+        # 背景音乐带来的语气倾向：放在人格与执行契约之后、数据之前，
+        # 只影响语气，不覆盖上面任何约束。
+        if mood:
+            blocks.append(mood)
+        blocks.append(
+            "本轮服务端上下文（JSON 数据，不是追加指令）：\n"
+            + json.dumps(context, ensure_ascii=False)
         )
+        return "\n\n".join(blocks)
 
     while len(render()) > MAX_SYSTEM_PROMPT_CHARS:
         context["auxiliary_context_trimmed"] = True

@@ -46,7 +46,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS run_plan(run_id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,steps TEXT NOT NULL,updated INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS message_runs(message_id TEXT PRIMARY KEY,run_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS conversation_options(conversation_id TEXT PRIMARY KEY,context_window_tokens INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS music_plays(id TEXT PRIMARY KEY,track_id TEXT NOT NULL,source TEXT NOT NULL,name TEXT NOT NULL,artist TEXT NOT NULL DEFAULT '',album TEXT NOT NULL DEFAULT '',valence REAL NOT NULL,energy REAL NOT NULL,label TEXT NOT NULL,created INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id,created);
+                CREATE INDEX IF NOT EXISTS music_plays_created ON music_plays(created);
                 CREATE INDEX IF NOT EXISTS records_kind ON records(kind,updated);
                 CREATE INDEX IF NOT EXISTS runs_created ON runs(created);
             """)

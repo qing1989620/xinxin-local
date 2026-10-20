@@ -37,6 +37,8 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  SpellCheck,
+  Music2,
 } from "lucide-react";
 import { registerSW } from "virtual:pwa-register";
 import { Capacitor } from "@capacitor/core";
@@ -73,6 +75,7 @@ import AgentPage from "./pages/AgentPage";
 import { configureConversationLocation } from "./conversationLocation";
 import TasksPage from "./pages/TasksPage";
 import FilesPage from "./pages/FilesPage";
+import MusicPage from "./pages/MusicPage";
 import ErrorBoundary from "./ErrorBoundary";
 import {
   ServersPage,
@@ -93,6 +96,7 @@ const navigation = [
   { to: "/skills", label: "技能", icon: Sparkles },
   { to: "/content", label: "个人内容", icon: BookOpen },
   { to: "/tools", label: "工具", icon: WandSparkles },
+  { to: "/music", label: "音乐", icon: Music2 },
   { to: "/memories", label: "记忆", icon: Bookmark },
   { to: "/schedules", label: "自动化", icon: Clock3 },
 ];
@@ -687,7 +691,7 @@ export default function App() {
           {navigation.map((item, index) => (
             <div key={item.to}>
               {index === 3 && <p className="nav-section">我的资源</p>}
-              {index === 8 && <p className="nav-section">长期协作</p>}
+              {index === 9 && <p className="nav-section">长期协作</p>}
               <NavLink
                 to={item.to}
                 aria-label={item.label}
@@ -820,6 +824,7 @@ export default function App() {
                 <Route path="/skills" element={<SkillsPage />} />
                 <Route path="/content/*" element={<ContentPage />} />
                 <Route path="/tools" element={<ToolsPage />} />
+                <Route path="/music" element={<MusicPage />} />
                 <Route path="/memories" element={<MemoriesPage />} />
                 <Route path="/schedules" element={<SchedulesPage />} />
                 <Route

@@ -1,7 +1,9 @@
 """Single-owner email codes. No registration and no plaintext codes at rest.
 
 Adapted design: lankhub email/verify-code.ts (MIT), pinned in THIRD_PARTY.md.
-The sender here uses TLS SMTP instead of lankhub's Resend transport.
+Two transports: TLS SMTP (default) or Resend's HTTP API called directly with
+httpx — no SDK, no extra dependency. Resend also exposes domain management so
+the owner can send from a verified custom domain.
 """
 
 from __future__ import annotations
@@ -9,15 +11,19 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import smtplib
 import ssl
 import time
 from email.message import EmailMessage
 
+import httpx
 from fastapi import HTTPException
 
 from .store import uid
+
+RESEND_API = "https://api.resend.com"
 
 
 class MailCodes:
@@ -39,18 +45,21 @@ class MailCodes:
 
     def enabled(self):
         config = self.configuration()
-        return bool(
-            config["email"]
-            and config["smtp_password"]
-            and self.store.one("SELECT id FROM owner")
-        )
+        if not config["email"] or not self.store.one("SELECT id FROM owner"):
+            return False
+        if config["provider"] == "resend":
+            return bool(config["resend_api_key"] and config["resend_from"])
+        return bool(config["smtp_password"])
 
     def configuration(self):
-        # A single SELECT observes one committed set of TLS and credentials.
+        # A single SELECT observes one committed set of credentials.
         rows = {
             row["key"]: json.loads(row["value"])
             for row in self.store.all(
-                "SELECT key,value FROM settings WHERE key IN ('secret:owner_email','secret:smtp_username','secret:smtp_password','smtp_host','smtp_port','smtp_mode')"
+                "SELECT key,value FROM settings WHERE key IN ("
+                "'email_provider','secret:owner_email','secret:smtp_username',"
+                "'secret:smtp_password','smtp_host','smtp_port','smtp_mode',"
+                "'resend_from','secret:resend_api_key')"
             )
         }
 
@@ -59,24 +68,36 @@ class MailCodes:
             return self.auth.vault.decrypt(value.encode()).decode() if value else ""
 
         email = secret("owner_email")
+        provider = rows.get("email_provider", "smtp")
         return {
+            "provider": provider if provider in {"smtp", "resend"} else "smtp",
             "email": email,
             "smtp_username": secret("smtp_username") or email,
             "smtp_password": secret("smtp_password"),
             "smtp_host": rows.get("smtp_host", "smtp.qq.com"),
             "smtp_port": rows.get("smtp_port", 465),
             "smtp_mode": rows.get("smtp_mode", "ssl"),
+            "resend_from": rows.get("resend_from", ""),
+            "resend_api_key": secret("resend_api_key"),
         }
 
     def configure(self, values):
         email = values["email"].strip().lower()
-        plain = {key: values[key] for key in ("smtp_host", "smtp_port", "smtp_mode")}
+        plain = {
+            "email_provider": values.get("provider", "smtp"),
+            "smtp_host": values["smtp_host"],
+            "smtp_port": values["smtp_port"],
+            "smtp_mode": values["smtp_mode"],
+            "resend_from": (values.get("resend_from") or "").strip(),
+        }
         to_save = {
             "owner_email": email,
             "smtp_username": values["smtp_username"] or email,
         }
         if values["smtp_password"]:
             to_save["smtp_password"] = values["smtp_password"]
+        if values.get("resend_api_key"):
+            to_save["resend_api_key"] = values["resend_api_key"]
         encrypted = {
             "secret:" + key: self.auth.vault.encrypt(value.encode()).decode()
             for key, value in to_save.items()
@@ -150,8 +171,13 @@ class MailCodes:
             )
         try:
             self._send(recipient, code, scene)
-        except Exception:
+        except Exception as failure:  # noqa: BLE001 -- 上游失败一律转成可读提示
             self.store.execute("UPDATE email_codes SET used=1 WHERE id=?", (ident,))
+            if isinstance(failure, RuntimeError) and str(failure).startswith("Resend"):
+                raise HTTPException(
+                    503,
+                    f"邮件发送失败（{str(failure)[:80]}），请检查 Resend 配置；账号密码登录仍可使用",
+                ) from None
             raise HTTPException(
                 503, "邮件发送失败，请检查 SMTP 配置后重试；账号密码登录仍可使用"
             ) from None
@@ -166,25 +192,30 @@ class MailCodes:
         config = self.configuration()
         if config["email"].strip().lower() != recipient:
             raise RuntimeError("邮件配置已改变，请重新获取验证码")
-        host, port, username, mode, password = (
-            config[key]
-            for key in (
-                "smtp_host",
-                "smtp_port",
-                "smtp_username",
-                "smtp_mode",
-                "smtp_password",
-            )
+        subject = "Xinxin · " + ("登录验证码" if scene == "login" else "重置密码验证码")
+        text = (
+            f'你的 Xinxin 验证码是：{code}\n\n'
+            f'此验证码 10 分钟内有效，仅可使用一次。\n'
+            f'用途：{"登录" if scene == "login" else "重置密码"}。\n'
+            f'如果这次操作不是你发起的，请忽略此邮件。'
+        )
+        if config["provider"] == "resend":
+            self._send_resend(config, recipient, subject, text, code, scene)
+        else:
+            self._send_smtp(config, recipient, subject, text)
+
+    def _send_smtp(self, config, recipient, subject, text):
+        host, port = config["smtp_host"], config["smtp_port"]
+        username, mode, password = (
+            config["smtp_username"],
+            config["smtp_mode"],
+            config["smtp_password"],
         )
         message = EmailMessage()
         message["From"] = username
         message["To"] = recipient
-        message["Subject"] = "Xinxin · " + (
-            "登录验证码" if scene == "login" else "重置密码验证码"
-        )
-        message.set_content(
-            f'你的 Xinxin 验证码是：{code}\n\n此验证码 10 分钟内有效，仅可使用一次。\n用途：{"登录" if scene == "login" else "重置密码"}。\n如果这次操作不是你发起的，请忽略此邮件。'
-        )
+        message["Subject"] = subject
+        message.set_content(text)
         context = ssl.create_default_context()
         if mode == "ssl":
             connection = smtplib.SMTP_SSL(host, port, timeout=10, context=context)
@@ -195,6 +226,111 @@ class MailCodes:
                 smtp.starttls(context=context)
             smtp.login(username, password)
             smtp.send_message(message)
+
+    def _send_resend(self, config, recipient, subject, text, code, scene):
+        """Resend HTTP API，直调不引 SDK；失败只保留状态码与错误名。"""
+        html = (
+            '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',sans-serif;'
+            'max-width:520px;margin:0 auto;padding:32px 24px;color:#292e2b">'
+            '<p style="font-size:12px;letter-spacing:.18em;color:#626d64;margin:0 0 18px">'
+            "XINXIN · A SPACE OF YOUR OWN</p>"
+            '<h1 style="font-size:22px;font-weight:550;margin:0 0 14px">'
+            f'{"登录" if scene == "login" else "重置密码"}验证码</h1>'
+            f'<p style="font-size:30px;letter-spacing:8px;margin:18px 0;font-weight:600">{code}</p>'
+            '<p style="font-size:13px;line-height:1.8;color:#626d64;margin:0">'
+            "10 分钟内有效，仅可使用一次。如果这次操作不是你发起的，请忽略此邮件。</p>"
+            "</div>"
+        )
+        response = httpx.post(
+            RESEND_API + "/emails",
+            headers={"Authorization": "Bearer " + config["resend_api_key"]},
+            json={
+                "from": config["resend_from"],
+                "to": [recipient],
+                "subject": subject,
+                "text": text,
+                "html": html,
+            },
+            timeout=20,
+        )
+        if response.status_code >= 300:
+            detail = ""
+            try:
+                payload = response.json()
+                detail = str(payload.get("name") or payload.get("message") or "")
+            except ValueError:
+                pass
+            raise RuntimeError(
+                f"Resend {response.status_code} {detail}".strip()[:200]
+            )
+
+    # ------------------------------------------------------------------
+    # Resend 域名管理（用于"用自己域名发信"）
+    # ------------------------------------------------------------------
+    def _resend_headers(self):
+        key = self.auth.secret("resend_api_key")
+        if not key:
+            raise HTTPException(400, "请先在设置中保存 Resend API Key")
+        return {"Authorization": "Bearer " + key}
+
+    def domains(self):
+        response = httpx.get(
+            RESEND_API + "/domains", headers=self._resend_headers(), timeout=20
+        )
+        if response.status_code == 401:
+            raise HTTPException(400, "Resend API Key 无效或已被撤销")
+        if response.status_code >= 300:
+            raise HTTPException(502, f"读取域名失败（{response.status_code}）")
+        data = response.json().get("data") or []
+        return [
+            {
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "status": row.get("status"),
+                "region": row.get("region"),
+                "created_at": row.get("created_at"),
+                "records": [
+                    {
+                        "record": record.get("record"),
+                        "name": record.get("name"),
+                        "type": record.get("type"),
+                        "value": record.get("value"),
+                        "ttl": record.get("ttl"),
+                        "priority": record.get("priority"),
+                        "status": record.get("status"),
+                    }
+                    for record in (row.get("records") or [])
+                ],
+            }
+            for row in data
+        ]
+
+    def add_domain(self, name):
+        response = httpx.post(
+            RESEND_API + "/domains",
+            headers=self._resend_headers(),
+            json={"name": name},
+            timeout=25,
+        )
+        if response.status_code == 401:
+            raise HTTPException(400, "Resend API Key 无效或已被撤销")
+        if response.status_code >= 300:
+            raise HTTPException(400, f"添加域名失败（{response.status_code}）")
+        return {"ok": True, **response.json()}
+
+    def verify_domain(self, domain_id):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", domain_id):
+            raise HTTPException(400, "域名标识无效")
+        response = httpx.post(
+            f"{RESEND_API}/domains/{domain_id}/verify",
+            headers=self._resend_headers(),
+            timeout=30,
+        )
+        if response.status_code == 401:
+            raise HTTPException(400, "Resend API Key 无效或已被撤销")
+        if response.status_code >= 300:
+            raise HTTPException(400, f"验证请求失败（{response.status_code}）")
+        return {"ok": True}
 
     def consume(self, email, scene, code, verified):
         if not self.enabled():

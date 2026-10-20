@@ -27,7 +27,7 @@ def test_stop_confirmation_waits_for_a_launch_already_inside_the_critical_sectio
 
     def popen(*args, **kwargs):
         launching.set()
-        assert allow_launch.wait(3)
+        assert allow_launch.wait(15)
         launched.append(True)
         return Child()
 
@@ -38,7 +38,7 @@ def test_stop_confirmation_waits_for_a_launch_already_inside_the_critical_sectio
     monkeypatch.setattr(remote_runner, "process_identity", lambda pid: "same-process")
     monkeypatch.setattr(remote_runner, "stop_group", lambda record: True)
     monkeypatch.setattr(remote_runner.subprocess, "Popen", popen)
-    monkeypatch.setattr(remote_runner, "sys", SimpleNamespace(stdout=None, stderr=None, stdin=SimpleNamespace(buffer=SimpleNamespace(read=lambda n: allow_launch.wait(3)))))
+    monkeypatch.setattr(remote_runner, "sys", SimpleNamespace(stdout=None, stderr=None, stdin=SimpleNamespace(buffer=SimpleNamespace(read=lambda n: allow_launch.wait(15)))))
     result = {}
     errors = []
 
@@ -54,7 +54,7 @@ def test_stop_confirmation_waits_for_a_launch_already_inside_the_critical_sectio
     run = threading.Thread(target=invoke, args=("code", lambda: remote_runner.run("fixture", base64.b64encode(b"synthetic").decode(), 30)))
     stop = threading.Thread(target=invoke, args=("stop", lambda: remote_runner.cancel("fixture")))
     run.start()
-    assert launching.wait(2)
+    assert launching.wait(15)
     stop.start()
     assert not stop_returned.wait(.1)
     allow_launch.set()

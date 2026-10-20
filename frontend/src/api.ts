@@ -266,7 +266,8 @@ export const post = <T = any>(path: string, data: any) =>
   api<T>(path, { method: "POST", body: JSON.stringify(data) });
 export const put = <T = any>(path: string, data: any) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(data) });
-export const remove = (path: string) => api(path, { method: "DELETE" });
+export const remove = <T = any>(path: string) =>
+  api<T>(path, { method: "DELETE" });
 export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
 export async function upload(
   file: File,

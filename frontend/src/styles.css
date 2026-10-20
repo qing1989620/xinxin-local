@@ -3398,3 +3398,439 @@ kbd {
   max-height: 220px;
   overflow: auto;
 }
+
+/* 邮件设置：发送方式切换与 Resend 域名管理 */
+.provider-switch {
+  display: flex;
+  gap: 8px;
+}
+.provider-switch button {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  transition:
+    border-color 0.16s ease,
+    color 0.16s ease,
+    background 0.16s ease;
+}
+.provider-switch button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.provider-switch button.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.domain-block {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 4px;
+}
+.domain-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.domain-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 550;
+}
+.domain-head .text-button {
+  margin-left: auto;
+  font-size: 11px;
+}
+.domain-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.domain-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--surface);
+}
+.domain-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.domain-status.verified {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.domain-records {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.domain-records code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  word-break: break-all;
+  color: var(--ink);
+}
+.domain-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.domain-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 背景音乐页 */
+.music-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.music-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 20px;
+}
+.music-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.music-search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--paper);
+  color: var(--muted);
+}
+.music-search-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 13px;
+}
+.music-search-field input:focus {
+  outline: none;
+}
+.music-search select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.music-hint {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  color: var(--muted);
+  padding: 26px 6px;
+}
+.music-hint p {
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: 460px;
+}
+.track-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.track-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 8px;
+  border-top: 1px solid var(--line);
+  border-radius: 8px;
+}
+.track-list li:first-child {
+  border-top: 0;
+}
+.track-list li.active {
+  background: var(--accent-soft);
+}
+.track-play {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  background: var(--surface);
+}
+.track-play:hover {
+  border-color: var(--accent);
+}
+.track-loading {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.track-meta {
+  flex: 1;
+  min-width: 0;
+}
+.track-meta strong {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.track-meta small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.emotion-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.emotion-chip.calm-joy,
+.emotion-dot.calm-joy {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.emotion-chip.bright,
+.emotion-dot.bright {
+  color: var(--surface);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.emotion-chip.intense,
+.emotion-dot.intense {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.emotion-chip.low,
+.emotion-dot.low {
+  color: var(--muted);
+  border-color: var(--muted);
+}
+.music-side {
+  display: grid;
+  gap: 16px;
+}
+.panel-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.now-playing h3 {
+  font-size: 18px;
+  font-weight: 550;
+  margin: 12px 0 4px;
+  letter-spacing: -0.3px;
+}
+.now-playing > p {
+  font-size: 11px;
+  margin: 0 0 16px;
+}
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.play-toggle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+}
+.player-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.player-progress {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear;
+}
+.player-controls small {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.lyric-box {
+  margin-top: 14px;
+  font-size: 11px;
+}
+.lyric-box summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.lyric-box pre {
+  margin: 10px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.mood-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+.mood-label {
+  font-size: 30px;
+  font-weight: 550;
+  letter-spacing: -1px;
+  color: var(--ink);
+}
+.mood-label.bright,
+.mood-label.calm-joy {
+  color: var(--accent);
+}
+.mood-label.intense {
+  color: var(--danger);
+}
+.mood-head small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.mood-meters {
+  display: grid;
+  gap: 9px;
+}
+.mood-meters > div {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.mood-meters span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.mood-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.mood-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.mood-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.mood-toggle input {
+  accent-color: var(--accent);
+}
+.mood-history-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.mood-history-label .text-button {
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.mood-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.mood-history li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.emotion-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+.mood-history-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mood-history small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.music-source-note {
+  display: flex;
+  gap: 5px;
+  align-items: flex-start;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+  line-height: 1.7;
+}
+@media (max-width: 900px) {
+  .music-layout {
+    grid-template-columns: 1fr;
+  }
+}

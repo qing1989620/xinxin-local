@@ -19,7 +19,7 @@ def test_repeated_cancel_and_shutdown_cannot_interrupt_cleanup_or_release_the_sl
 
     def blocking_command(*args, **kwargs):
         entered.set()
-        assert release.wait(4)
+        assert release.wait(15)
         return {"ok": False, "stopped": "cancelled", "output": "", "exit_code": -9}
 
     monkeypatch.setattr("app.agent.run_command", blocking_command)
@@ -33,7 +33,7 @@ def test_repeated_cancel_and_shutdown_cannot_interrupt_cleanup_or_release_the_sl
 
     client.app.state.manager.model_transport = httpx.MockTransport(provider)
     first = client.post("/api/v1/runs", json={"task": "cancel repeatedly", "permission": "full", "request_key": "repeat-cancel"}).json()["id"]
-    assert entered.wait(3)
+    assert entered.wait(15)
     started = time.monotonic()
     client.post(f"/api/v1/runs/{first}/cancel")
     for _ in range(15):

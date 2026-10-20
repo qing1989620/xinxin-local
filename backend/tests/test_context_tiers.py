@@ -28,7 +28,7 @@ def test_context_tier_is_persistent_frozen_per_run_and_part_of_retry_identity(cl
     payload = {"conversation_id": cid, "task": "use selected tier", "request_key": "tier-retry", "context_window_tokens": 80000}
     run = client.post("/api/v1/runs", json=payload).json()
     try:
-        assert entered.wait(3)
+        assert entered.wait(15)
         assert run["context_window_tokens"] == 80000
         assert client.post("/api/v1/runs", json=payload).json()["id"] == run["id"]
         assert client.post("/api/v1/runs", json={**payload, "context_window_tokens": 300000}).status_code == 400

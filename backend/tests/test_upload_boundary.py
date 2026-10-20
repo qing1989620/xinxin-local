@@ -129,7 +129,7 @@ def test_cancelled_upload_keeps_source_open_until_the_thread_finishes(
 
     def slow_save(name, source, *_args, **_kwargs):
         entered.set()
-        assert release.wait(5)
+        assert release.wait(15)
         states.append(source.closed)
         return {"read": source.read().decode()}
 

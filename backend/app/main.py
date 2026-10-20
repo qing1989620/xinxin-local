@@ -34,6 +34,7 @@ from .creative import gallery, plot_csv, transform_image
 from .conversations import deletion_preview, purge_conversation, batch_deletion_preview, purge_conversations
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
+from . import music
 from .model import endpoint
 from .network import local_addresses
 from .mail import MailCodes
@@ -87,11 +88,35 @@ class EmailReset(EmailLogin):
 
 
 class EmailSettings(EmailAddress):
+    provider: Literal["smtp", "resend"] = "smtp"
     smtp_host: str = Field(default="smtp.qq.com", pattern=r"^[A-Za-z0-9.-]{1,200}$")
     smtp_port: int = Field(default=465, ge=1, le=65535)
     smtp_mode: Literal["ssl", "starttls"] = "ssl"
     smtp_username: str = Field(default="", max_length=254, pattern=r"^[\x21-\x7e]*$")
     smtp_password: str = Field(default="", max_length=500, pattern=r"^[\x21-\x7e]*$")
+    resend_from: str = Field(default="", max_length=320)
+    resend_api_key: str = Field(default="", max_length=200, pattern=r"^[\x21-\x7e]*$")
+
+
+class DomainInput(Input):
+    name: str = Field(
+        max_length=253,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9-]{0,62}(\.[A-Za-z0-9][A-Za-z0-9-]{0,62})+$",
+    )
+
+
+class MusicPlay(Input):
+    id: str = Field(min_length=1, max_length=120)
+    source: str = Field(default="netease", max_length=20)
+    name: str = Field(min_length=1, max_length=200)
+    artist: str = Field(default="", max_length=200)
+    album: str = Field(default="", max_length=200)
+    valence: float | None = Field(default=None, ge=-1, le=1)
+    energy: float | None = Field(default=None, ge=0, le=1)
+
+
+class MusicSetting(Input):
+    influence: bool
 
 
 class ExecutionInput(Input):
@@ -391,15 +416,100 @@ def create_app(config=None):
     def email_settings():
         config = mail.configuration()
         return {
-            **{key: value for key, value in config.items() if key != "smtp_password"},
-            "configured": bool(config["smtp_password"]),
+            "email": config["email"],
+            "provider": config["provider"],
+            "smtp_host": config["smtp_host"],
+            "smtp_port": config["smtp_port"],
+            "smtp_mode": config["smtp_mode"],
+            "smtp_username": config["smtp_username"],
+            "resend_from": config["resend_from"],
+            "resend_configured": bool(config["resend_api_key"]),
+            "configured": mail.enabled(),
         }
 
     @app.put("/api/v1/settings/email", dependencies=[Depends(owner)])
     def save_email_settings(body: EmailSettings):
         mail.configure(body.model_dump())
-        store.audit("email.configured", {})
+        store.audit("email.configured", {"provider": body.provider})
         return email_settings()
+
+    @app.get("/api/v1/settings/email/domains", dependencies=[Depends(owner)])
+    def email_domains():
+        return {"domains": mail.domains()}
+
+    @app.post("/api/v1/settings/email/domains", dependencies=[Depends(owner)])
+    def add_email_domain(body: DomainInput):
+        result = mail.add_domain(body.name)
+        store.audit("email.domain_added", {"name": body.name})
+        return result
+
+    @app.post(
+        "/api/v1/settings/email/domains/{domain_id}/verify",
+        dependencies=[Depends(owner)],
+    )
+    def verify_email_domain(domain_id: str):
+        result = mail.verify_domain(domain_id)
+        store.audit("email.domain_verified", {"id": domain_id})
+        return result
+
+    # ------------------------------------------------------------------
+    # 背景音乐：GD 音乐台 JSON 代理 + 情绪聚合
+    # 音频不经过本机：这里只返回 CDN 直链，由客户端播放。
+    # ------------------------------------------------------------------
+    @app.get("/api/v1/music/search", dependencies=[Depends(owner)])
+    def music_search(
+        q: str = Query(min_length=1, max_length=80),
+        source: str = "netease",
+        page: int = Query(default=1, ge=1, le=20),
+    ):
+        return music.client.search(q.strip(), source, page)
+
+    @app.get("/api/v1/music/url", dependencies=[Depends(owner)])
+    def music_url(
+        id: str = Query(min_length=1, max_length=120),
+        source: str = "netease",
+        br: int = 320,
+    ):
+        return music.client.url(id, source, br)
+
+    @app.get("/api/v1/music/lyric", dependencies=[Depends(owner)])
+    def music_lyric(id: str = Query(min_length=1, max_length=120), source: str = "netease"):
+        return music.client.lyric(id, source)
+
+    @app.get("/api/v1/music/pic", dependencies=[Depends(owner)])
+    def music_pic(id: str = Query(min_length=1, max_length=120), source: str = "netease"):
+        return music.client.pic(id, source)
+
+    @app.get("/api/v1/music/mood", dependencies=[Depends(owner)])
+    def music_mood():
+        return {
+            "mood": music.current_mood(store),
+            "plays": music.recent_plays(store),
+        }
+
+    @app.post("/api/v1/music/play", dependencies=[Depends(owner)])
+    def music_play(body: MusicPlay):
+        emotion = None
+        if body.valence is not None and body.energy is not None:
+            emotion = {
+                "valence": body.valence,
+                "energy": body.energy,
+                "label": music.label_for(body.valence, body.energy),
+                "confidence": 1.0,
+                "hits": [],
+            }
+        mood = music.record_play(store, body.model_dump(), emotion)
+        return {"ok": True, "mood": mood}
+
+    @app.delete("/api/v1/music/mood", dependencies=[Depends(owner)])
+    def music_clear_mood():
+        music.clear_plays(store)
+        return {"ok": True, "mood": music.current_mood(store)}
+
+    @app.put("/api/v1/music/settings", dependencies=[Depends(owner)])
+    def music_settings(body: MusicSetting):
+        music.set_influence(store, body.influence)
+        return {"ok": True, "mood": music.current_mood(store)}
 
     @app.get("/api/v1/auth/me", dependencies=[Depends(owner)])
     def me():
