@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { ToastProvider } from "./ui";
 import App from "./App";
 import { UploadProvider } from "./Uploads";
+import { MusicPlayerProvider } from "./musicPlayer";
 import ErrorBoundary from "./ErrorBoundary";
 import "./styles.css";
 import "./workspace.css";
@@ -17,7 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <BrowserRouter>
         <ToastProvider>
           <UploadProvider>
-            <App />
+            <MusicPlayerProvider>
+              <App />
+            </MusicPlayerProvider>
           </UploadProvider>
         </ToastProvider>
       </BrowserRouter>

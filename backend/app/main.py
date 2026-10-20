@@ -111,8 +111,6 @@ class MusicPlay(Input):
     name: str = Field(min_length=1, max_length=200)
     artist: str = Field(default="", max_length=200)
     album: str = Field(default="", max_length=200)
-    valence: float | None = Field(default=None, ge=-1, le=1)
-    energy: float | None = Field(default=None, ge=0, le=1)
 
 
 class MusicSetting(Input):
@@ -489,17 +487,7 @@ def create_app(config=None):
 
     @app.post("/api/v1/music/play", dependencies=[Depends(owner)])
     def music_play(body: MusicPlay):
-        emotion = None
-        if body.valence is not None and body.energy is not None:
-            emotion = {
-                "valence": body.valence,
-                "energy": body.energy,
-                "label": music.label_for(body.valence, body.energy),
-                "confidence": 1.0,
-                "hits": [],
-            }
-        mood = music.record_play(store, body.model_dump(), emotion)
-        return {"ok": True, "mood": mood}
+        return {"ok": True, "mood": music.record_play(store, body.model_dump())}
 
     @app.delete("/api/v1/music/mood", dependencies=[Depends(owner)])
     def music_clear_mood():

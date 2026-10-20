@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   CloudOff,
@@ -10,8 +10,9 @@ import {
   Trash2,
   Waves,
 } from "lucide-react";
-import { api, post, put, remove } from "../api";
+import { api, put, remove } from "../api";
 import { Empty, Loading, PageHeader, useToast } from "../ui";
+import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
 
 type Emotion = {
   valence: number;
@@ -20,16 +21,7 @@ type Emotion = {
   confidence: number;
   hits: string[];
 };
-type Track = {
-  id: string;
-  name: string;
-  artist: string;
-  album: string;
-  pic_id: string;
-  lyric_id: string;
-  source: string;
-  emotion: Emotion;
-};
+type Track = PlayerTrack & { emotion: Emotion };
 type Mood = {
   label: string;
   valence: number;
@@ -56,9 +48,11 @@ const SOURCES = [
 ] as const;
 
 function moodTone(label: string) {
-  return { 喜: "calm-joy", 乐: "bright", 怒: "intense", 哀: "low", 平静: "neutral" }[
-    label
-  ] || "neutral";
+  return (
+    { 喜: "calm-joy", 乐: "bright", 怒: "intense", 哀: "low", 平静: "neutral" }[
+      label
+    ] || "neutral"
+  );
 }
 
 function minutesAgo(created: number) {
@@ -68,22 +62,22 @@ function minutesAgo(created: number) {
   return `${Math.round(minutes / 60)} 小时前`;
 }
 
+function clock(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(
+    Math.floor(seconds % 60),
+  ).padStart(2, "0")}`;
+}
+
 export default function MusicPage() {
   const toast = useToast();
+  const player = useMusicPlayer();
   const [query, setQuery] = useState(""),
     [source, setSource] = useState<string>("netease"),
     [tracks, setTracks] = useState<Track[] | null>(null),
-    [busy, setBusy] = useState(false),
-    [current, setCurrent] = useState<Track | null>(null),
-    [stream, setStream] = useState(""),
-    [playing, setPlaying] = useState(false),
-    [loadingTrack, setLoadingTrack] = useState(""),
+    [pending, setPending] = useState(""),
     [mood, setMood] = useState<Mood | null>(null),
     [plays, setPlays] = useState<Play[]>([]),
-    [progress, setProgress] = useState({ current: 0, duration: 0 }),
-    [lyric, setLyric] = useState("");
-  const audio = useRef<HTMLAudioElement>(null),
-    logged = useRef(""),
+    [lyric, setLyric] = useState(""),
     [params, setParams] = useSearchParams();
 
   const loadMood = useCallback(async () => {
@@ -92,12 +86,34 @@ export default function MusicPage() {
       setMood(result.mood);
       setPlays(result.plays);
     } catch {
-      // 氛围读取失败不阻断播放；下次操作会重试。
+      // 氛围读取失败不阻断播放；下一次操作会重试。
     }
   }, []);
   useEffect(() => {
     void loadMood();
   }, [loadMood]);
+
+  // 播放器记录一次播放后，这里刷新氛围（两个组件通过事件解耦）。
+  useEffect(() => {
+    const refresh = () => void loadMood();
+    window.addEventListener("xinxin:music-played", refresh);
+    return () => window.removeEventListener("xinxin:music-played", refresh);
+  }, [loadMood]);
+
+  async function search(event?: FormEvent) {
+    event?.preventDefault();
+    if (!query.trim()) return;
+    setPending("");
+    try {
+      const result = await api<{ tracks: Track[] }>(
+        `/music/search?q=${encodeURIComponent(query.trim())}&source=${source}`,
+      );
+      setTracks(result.tracks);
+      if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
+    } catch (error) {
+      toast((error as Error).message, true);
+    }
+  }
 
   // /music?q=… 直达一次检索（便于分享，也方便从别处跳进来）。
   useEffect(() => {
@@ -105,7 +121,9 @@ export default function MusicPage() {
     if (!wanted) return;
     setQuery(wanted);
     void api<{ tracks: Track[] }>(
-      `/music/search?q=${encodeURIComponent(wanted)}&source=${params.get("source") || "netease"}`,
+      `/music/search?q=${encodeURIComponent(wanted)}&source=${
+        params.get("source") || "netease"
+      }`,
     )
       .then((result) => setTracks(result.tracks))
       .catch((failure) => toast((failure as Error).message, true));
@@ -119,76 +137,42 @@ export default function MusicPage() {
     );
   }, [params]);
 
-  async function search(event?: FormEvent) {
-    event?.preventDefault();
-    if (!query.trim()) return;
-    setBusy(true);
-    try {
-      const result = await api<{ tracks: Track[] }>(
-        `/music/search?q=${encodeURIComponent(query.trim())}&source=${source}`,
-      );
-      setTracks(result.tracks);
-      if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
-    } catch (error) {
-      toast((error as Error).message, true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function play(track: Track) {
-    if (loadingTrack) return;
-    // 同一首歌再次点击：不重新取链，直接续播 / 暂停。
-    if (current?.id === track.id && stream) {
-      void toggle();
+  // 换歌时拉一次歌词；没有 lyric_id 就清空。
+  const lyricId = player?.track?.lyric_id || "";
+  const trackSource = player?.track?.source || "netease";
+  useEffect(() => {
+    if (!lyricId) {
+      setLyric("");
       return;
     }
-    setLoadingTrack(track.id);
-    setLyric("");
-    try {
-      const result = await api<{ url: string }>(
-        `/music/url?id=${encodeURIComponent(track.id)}&source=${track.source}`,
-      );
-      setCurrent(track);
-      setStream(result.url);
-      if (logged.current !== track.id) {
-        logged.current = track.id;
-        const result = await post<{ mood: Mood }>("/music/play", {
-          id: track.id,
-          source: track.source,
-          name: track.name,
-          artist: track.artist,
-          album: track.album,
-        });
-        setMood(result.mood);
-        void loadMood();
-      }
-      if (track.lyric_id) {
-        void api<{ lyric: string; tlyric: string }>(
-          `/music/lyric?id=${encodeURIComponent(track.lyric_id)}&source=${track.source}`,
-        )
-          .then((value) => setLyric(value.tlyric || value.lyric || ""))
-          .catch(() => setLyric(""));
-      }
-    } catch (error) {
-      toast((error as Error).message, true);
-    } finally {
-      setLoadingTrack("");
+    let alive = true;
+    void api<{ lyric: string; tlyric: string }>(
+      `/music/lyric?id=${encodeURIComponent(lyricId)}&source=${trackSource}`,
+    )
+      .then((value) => {
+        if (alive) setLyric(value.tlyric || value.lyric || "");
+      })
+      .catch(() => {
+        if (alive) setLyric("");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [lyricId, trackSource]);
+
+  async function play(track: Track) {
+    if (!player) return;
+    const key = `${track.source}:${track.id}`;
+    if (player.track?.id === track.id && player.track?.source === track.source) {
+      await player.toggle();
+      return;
     }
-  }
-
-  useEffect(() => {
-    if (!stream || !audio.current) return;
-    audio.current.src = stream;
-    void audio.current.play().catch(() => setPlaying(false));
-  }, [stream]);
-
-  async function toggle() {
-    const element = audio.current;
-    if (!element) return;
-    if (element.paused) {
-      await element.play().catch(() => toast("浏览器阻止了自动播放，点一下播放键", true));
-    } else element.pause();
+    setPending(key);
+    try {
+      await player.play(track);
+    } finally {
+      setPending("");
+    }
   }
 
   async function clearMood() {
@@ -196,7 +180,6 @@ export default function MusicPage() {
       const result = await remove<{ mood: Mood }>("/music/mood");
       setMood(result.mood);
       setPlays([]);
-      logged.current = "";
       toast("已清空播放记录，氛围回到平静");
     } catch (error) {
       toast((error as Error).message, true);
@@ -220,12 +203,20 @@ export default function MusicPage() {
     }
   }
 
+  const current = player?.track || null;
+  const isCurrent = (track: Track) =>
+    current?.id === track.id && current?.source === track.source;
+  const progress = player?.progress || { current: 0, duration: 0 };
+  const percent = progress.duration
+    ? Math.min(100, (progress.current / progress.duration) * 100)
+    : 0;
+
   return (
     <div className="page-enter">
       <PageHeader
         overline="AMBIENT LISTENING"
         title="背景音乐"
-        description="放一首，房间的氛围会跟着变——Xinxin 的语气也会。音频直接从音乐平台 CDN 播放，不经过这台机器。"
+        description="放一首，房间的氛围会跟着变——Xinxin 的语气也会。音频直接从音乐平台 CDN 播放，不经过这台机器；切到别的页面也会继续放。"
       />
       <div className="music-layout">
         <section className="music-panel">
@@ -250,9 +241,7 @@ export default function MusicPage() {
                 </option>
               ))}
             </select>
-            <button className="button secondary" disabled={busy}>
-              {busy ? "搜索中…" : "搜索"}
-            </button>
+            <button className="button secondary">搜索</button>
           </form>
           {tracks === null ? (
             <div className="music-hint">
@@ -267,16 +256,16 @@ export default function MusicPage() {
               {tracks.map((track) => (
                 <li
                   key={`${track.source}-${track.id}`}
-                  className={current?.id === track.id ? "active" : ""}
+                  className={isCurrent(track) ? "active" : ""}
                 >
                   <button
                     className="track-play"
                     onClick={() => void play(track)}
                     aria-label={`播放 ${track.name}`}
                   >
-                    {loadingTrack === track.id ? (
+                    {pending === `${track.source}:${track.id}` ? (
                       <span className="track-loading" />
-                    ) : current?.id === track.id && playing ? (
+                    ) : isCurrent(track) && player?.playing ? (
                       <Pause size={15} />
                     ) : (
                       <Play size={15} />
@@ -318,49 +307,43 @@ export default function MusicPage() {
             </div>
             {current ? (
               <>
-                <h3>{current.name}</h3>
-                <p className="muted">
-                  {current.artist}
-                  {current.album ? ` · ${current.album}` : ""}
-                </p>
+                <div className="now-head">
+                  <span className="now-cover">
+                    {player?.cover ? (
+                      <img
+                        src={player.cover}
+                        alt=""
+                        referrerPolicy="no-referrer"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Music2 size={16} />
+                    )}
+                  </span>
+                  <div>
+                    <h3>{current.name}</h3>
+                    <p className="muted">
+                      {current.artist}
+                      {current.album ? ` · ${current.album}` : ""}
+                    </p>
+                  </div>
+                </div>
                 <div className="player-controls">
                   <button
                     className="play-toggle"
-                    onClick={() => void toggle()}
-                    aria-label={playing ? "暂停" : "播放"}
+                    onClick={() => void player?.toggle()}
+                    aria-label={player?.playing ? "暂停" : "播放"}
                   >
-                    {playing ? <Pause size={18} /> : <Play size={18} />}
+                    {player?.playing ? <Pause size={18} /> : <Play size={18} />}
                   </button>
                   <div className="player-track">
                     <div
                       className="player-progress"
-                      style={{
-                        width: `${
-                          progress.duration
-                            ? Math.min(100, (progress.current / progress.duration) * 100)
-                            : 0
-                        }%`,
-                      }}
+                      style={{ width: `${percent}%` }}
                     />
                   </div>
-                  <small>
-                    {Math.floor(progress.current / 60)}:
-                    {String(Math.floor(progress.current % 60)).padStart(2, "0")}
-                  </small>
+                  <small>{clock(progress.current)}</small>
                 </div>
-                <audio
-                  ref={audio}
-                  onPlay={() => setPlaying(true)}
-                  onPause={() => setPlaying(false)}
-                  onEnded={() => setPlaying(false)}
-                  onTimeUpdate={(event) =>
-                    setProgress({
-                      current: event.currentTarget.currentTime,
-                      duration: event.currentTarget.duration || 0,
-                    })
-                  }
-                  preload="none"
-                />
                 {lyric && (
                   <details className="lyric-box">
                     <summary>歌词</summary>
@@ -408,7 +391,9 @@ export default function MusicPage() {
                   <div>
                     <span>强度</span>
                     <div className="mood-bar">
-                      <i style={{ width: `${Math.round(mood.intensity * 100)}%` }} />
+                      <i
+                        style={{ width: `${Math.round(mood.intensity * 100)}%` }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -429,7 +414,10 @@ export default function MusicPage() {
                   <>
                     <div className="mood-history-label">
                       最近播放
-                      <button className="text-button" onClick={() => void clearMood()}>
+                      <button
+                        className="text-button"
+                        onClick={() => void clearMood()}
+                      >
                         <Trash2 size={13} />
                         清空
                       </button>
@@ -437,7 +425,9 @@ export default function MusicPage() {
                     <ul className="mood-history">
                       {plays.slice(0, 8).map((play, index) => (
                         <li key={`${play.track_id}-${play.created}-${index}`}>
-                          <span className={`emotion-dot ${moodTone(play.label)}`} />
+                          <span
+                            className={`emotion-dot ${moodTone(play.label)}`}
+                          />
                           <span className="mood-history-name">{play.name}</span>
                           <small>{minutesAgo(play.created)}</small>
                         </li>
@@ -451,7 +441,7 @@ export default function MusicPage() {
             )}
             <p className="field-help music-source-note">
               <CloudOff size={12} /> 音乐数据来自 GD 音乐台（music.gdstudio.xyz），
-              仅供个人学习使用；音频由原平台 CDN 提供，不下载、不转存。
+              仅供个人学习使用；音频与封面由原平台 CDN 提供，不下载、不转存。
             </p>
           </section>
         </aside>

@@ -91,17 +91,7 @@ export default function EmailSettings() {
     e.preventDefault();
     setBusy(true);
     try {
-      await put("/settings/email", {
-        email: form.email,
-        provider: form.provider,
-        smtp_host: form.smtp_host,
-        smtp_port: form.smtp_port,
-        smtp_mode: form.smtp_mode,
-        smtp_username: form.smtp_username,
-        smtp_password: form.smtp_password,
-        resend_from: form.resend_from,
-        resend_api_key: form.resend_api_key,
-      });
+      await put("/settings/email", form);
       setForm((v) => ({ ...v, smtp_password: "", resend_api_key: "" }));
       reload();
       toast(
@@ -323,14 +313,29 @@ export default function EmailSettings() {
                         >
                           {STATUS_LABEL[domain.status] || domain.status}
                         </span>
-                        <button
-                          type="button"
-                          className="text-button"
-                          disabled={domainBusy === domain.id}
-                          onClick={() => void verify(domain.id)}
-                        >
-                          {domainBusy === domain.id ? "验证中…" : "验证"}
-                        </button>
+                        {domain.status === "verified" ? (
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                resend_from: `Xinxin <no-reply@${domain.name}>`,
+                              })
+                            }
+                          >
+                            用于发件
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-button"
+                            disabled={domainBusy === domain.id}
+                            onClick={() => void verify(domain.id)}
+                          >
+                            {domainBusy === domain.id ? "验证中…" : "验证"}
+                          </button>
+                        )}
                       </div>
                       {domain.status !== "verified" &&
                         domain.records?.length > 0 && (

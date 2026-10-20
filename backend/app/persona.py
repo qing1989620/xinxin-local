@@ -76,7 +76,13 @@ execute_command 始终在后端宿主执行；run_remote_command / deploy_reposi
 
 
 def build_system_prompt(
-    run: dict, matches: dict, memories: list, workspace: Path, recovery=None, mood=""
+    run: dict,
+    matches: dict,
+    memories: list,
+    workspace: Path,
+    recovery=None,
+    mood="",
+    ambient=None,
 ) -> str:
     context = {
         "persona_version": PERSONA_VERSION,
@@ -98,6 +104,9 @@ def build_system_prompt(
         "candidate_skills": copy.deepcopy(matches),
         "owner_memory": copy.deepcopy(memories),
     }
+    # 背景音乐的结构化数据（曲名属于外部内容，只放在 JSON 数据段里）
+    if ambient:
+        context["ambient_music"] = copy.deepcopy(ambient)
     context["candidate_skills"].pop("query", None)
     # candidates / graph_added 是检索审计数据，模型只需要入选技能与顺序；
     # 把它们塞进提示会挤掉前轮工具证据。

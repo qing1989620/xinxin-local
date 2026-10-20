@@ -83,12 +83,19 @@ class MailCodes:
 
     def configure(self, values):
         email = values["email"].strip().lower()
+        provider = values.get("provider", "smtp")
+        resend_from = (values.get("resend_from") or "").strip()
+        if provider == "resend" and resend_from and not re.search(
+            r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}>?\s*$",
+            resend_from,
+        ):
+            raise HTTPException(400, "发件人格式应为：Xinxin <no-reply@你的域名>")
         plain = {
-            "email_provider": values.get("provider", "smtp"),
+            "email_provider": provider,
             "smtp_host": values["smtp_host"],
             "smtp_port": values["smtp_port"],
             "smtp_mode": values["smtp_mode"],
-            "resend_from": (values.get("resend_from") or "").strip(),
+            "resend_from": resend_from,
         }
         to_save = {
             "owner_email": email,

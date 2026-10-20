@@ -76,6 +76,7 @@ import { configureConversationLocation } from "./conversationLocation";
 import TasksPage from "./pages/TasksPage";
 import FilesPage from "./pages/FilesPage";
 import MusicPage from "./pages/MusicPage";
+import { MiniPlayer, useMusicPlayer } from "./musicPlayer";
 import ErrorBoundary from "./ErrorBoundary";
 import {
   ServersPage,
@@ -397,6 +398,7 @@ function AuthScreen({
 }
 
 export default function App() {
+  const player = useMusicPlayer();
   const [state, setState] = useState<"loading" | "auth" | "ready" | "offline">(
       "loading",
     ),
@@ -740,6 +742,7 @@ export default function App() {
               title="退出登录"
               aria-label="退出登录"
               onClick={async () => {
+                player?.stop();
                 try {
                   await post("/auth/logout", {});
                 } finally {
@@ -861,6 +864,7 @@ export default function App() {
           <span>专注于下一件值得完成的事。</span>
         </footer>
       </div>
+      <MiniPlayer />
       <nav
         className="mobile-tabs"
         aria-label="手机导航"
