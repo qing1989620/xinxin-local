@@ -50,6 +50,7 @@ import {
   useResource,
   useToast,
   useMedia,
+  MarkdownImage,
 } from "../ui";
 import AgentInspector from "./AgentInspector";
 import ImageStudio from "./ImageStudio";
@@ -844,11 +845,7 @@ export default function AgentPage() {
                         remarkPlugins={[remarkGfm]}
                         skipHtml
                         components={{
-                          img: ({ alt }) => (
-                            <span className="muted">
-                              [图片：{alt || "参考图片"}]
-                            </span>
-                          ),
+                          img: MarkdownImage,
                         }}
                       >
                         {message.role === "user"
@@ -919,7 +916,7 @@ export default function AgentPage() {
                         remarkPlugins={[remarkGfm]}
                         skipHtml
                         components={{
-                          img: ({ alt }) => <span>[图片：{alt}]</span>,
+                          img: MarkdownImage,
                         }}
                       >
                         {stream}

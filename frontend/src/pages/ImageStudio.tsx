@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { api, getBlob, saveBlob } from "../api";
+import { loadPrivateImage } from "../privateImages";
 import { useToast } from "../ui";
 
 type ImageResult = {
@@ -60,7 +61,8 @@ function ImageThumb({
   useEffect(() => {
     let url = "";
     let alive = true;
-    getBlob(`/files/${fileId}/download`)
+    // 与画廊一致：优先后端有界预览图（几十~一两百 KB），没有预览再回退原图。
+    loadPrivateImage(`/files/${fileId}/download`)
       .then((blob) => {
         if (!alive) return;
         url = URL.createObjectURL(blob);

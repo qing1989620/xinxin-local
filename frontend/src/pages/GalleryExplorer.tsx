@@ -19,6 +19,7 @@ import {
   PrivateImage,
   useResource,
   useToast,
+  MarkdownImage,
 } from "../ui";
 
 type Reference = {
@@ -186,7 +187,7 @@ export default function GalleryExplorer() {
             。这是结构与风格参考；真实图表将使用你的数据重新生成。
           </p>
           <div className="markdown">
-            <ReactMarkdown skipHtml>
+            <ReactMarkdown skipHtml components={{ img: MarkdownImage }}>
               {(detail.markdown || "").replace(
                 /^---\r?\n[\s\S]*?\r?\n---\r?\n/,
                 "",

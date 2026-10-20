@@ -1181,6 +1181,16 @@ kbd {
   line-height: 1.9;
   overflow-wrap: anywhere;
 }
+/* Markdown 正文里的私有图片：随栏宽收缩、圆角、纸色兜底 */
+.markdown-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
 .message-body p {
   margin: 10px 0;
 }

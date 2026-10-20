@@ -252,6 +252,20 @@ export function PrivateImage({
     </span>
   );
 }
+/** Markdown 正文里的图片：本机私有文件走鉴权加载，其余一律降级为文字说明。 */
+export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const path = typeof src === "string" ? src : "";
+  if (/^\/files\/[^/?#]+/.test(path))
+    return (
+      <PrivateImage
+        path={path}
+        alt={alt || ""}
+        className="markdown-image"
+        loading="lazy"
+      />
+    );
+  return <span className="muted">[图片：{alt || "参考图片"}]</span>;
+}
 export function useResource<T>(path: string) {
   const [resource, setResource] = useState<{ path: string; data: T } | null>(
       null,

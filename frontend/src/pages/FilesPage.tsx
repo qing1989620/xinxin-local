@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowUpRight,
   Download,
@@ -37,7 +37,8 @@ export default function FilesPage() {
   const picker = useRef<HTMLInputElement>(null),
     previewId = useRef(""),
     toast = useToast(),
-    navigate = useNavigate();
+    navigate = useNavigate(),
+    [params, setParams] = useSearchParams();
   const uploads = useUploads();
   const completed = uploads.entries.filter(
     (entry) => entry.state === "completed",
@@ -45,6 +46,21 @@ export default function FilesPage() {
   useEffect(() => {
     reload();
   }, [completed]);
+  // 支持 /files?file=<id> 直达：Agent 交付物、聊天里的文件链接可以直接打开预览。
+  useEffect(() => {
+    const wanted = params.get("file");
+    if (!wanted || !data) return;
+    const target = data.find((file) => file.id === wanted);
+    if (target && previewId.current !== target.id) void open(target);
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.delete("file");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [data, params]);
   function receive(files: FileList | File[]) {
     const list = Array.from(files);
     if (uploads.add(list).length < list.length)

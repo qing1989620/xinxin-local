@@ -963,6 +963,31 @@ def create_app(config=None):
         except Exception:
             raise ValueError("无法读取 CSV 列，请检查文件编码与格式") from None
 
+    @app.get("/api/v1/files/{ident}/preview", dependencies=[Depends(owner)])
+    def file_preview(ident: str, size: int = Query(1600)):
+        """有界预览图：长边 480 / 1600，JPEG，磁盘缓存。
+
+        前端画廊、缩略图、正文配图都优先走这里；原图动辄数 MB，
+        预览图通常只有几十到一两百 KB。非图片返回 404，前端会回退原图。
+        """
+        size = 1600 if size not in (480, 1600) else size
+        try:
+            cached = library.preview(ident, size)
+        except ValueError:
+            raise
+        except Exception:  # noqa: BLE001 -- 解码失败等任何异常都不该 500
+            raise HTTPException(404, "此文件暂时无法生成预览") from None
+        if cached is None:
+            raise HTTPException(404, "此文件没有预览图")
+        return FileResponse(
+            cached,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "private, max-age=604800",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @app.get("/api/v1/files/{ident}/download", dependencies=[Depends(owner)])
     def download(ident: str, inline: bool = False):
         row = library.get(ident)
