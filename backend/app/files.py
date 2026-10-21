@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from .skillnet.index import BM25Index
-from .store import now, uid
+from .store import clean_text, now, uid
 
 MAX_UPLOAD = 64 * 1024 * 1024
 MAX_EXTRACT = 16 * 1024 * 1024
@@ -77,7 +77,7 @@ class FileLibrary:
         self, name, source, mime=None, run_id=None, extract=True, request_id=None
     ):
         """Bounded disk copy; a retry key commits with the resource in one transaction."""
-        name = Path(name.replace("\\", "/")).name[:180]
+        name = clean_text(Path(name.replace("\\", "/")).name[:180])
         if not name or name in {".", ".."}:
             raise ValueError("文件为空")
         mime = mime or mimetypes.guess_type(name)[0] or "application/octet-stream"
@@ -103,7 +103,9 @@ class FileLibrary:
             text, parse_error = "", ""
             if extract and total <= MAX_EXTRACT:
                 try:
-                    text = self.extract(name, staging.read_bytes())[:2_000_000]
+                    text = clean_text(
+                        self.extract(name, staging.read_bytes())[:2_000_000]
+                    )
                 except Exception:  # noqa: BLE001 -- optional document parsers may raise format-specific errors; retain the original.
                     parse_error = "已保存原文件，暂时无法提取文本"
             elif extract:
@@ -151,6 +153,10 @@ class FileLibrary:
 
     @staticmethod
     def extract(name, content):
+        return clean_text(FileLibrary._extract(name, content))
+
+    @staticmethod
+    def _extract(name, content):
         ext = Path(name).suffix.lower()
         if ext in TEXT_EXT:
             return content.decode("utf-8", errors="replace")
