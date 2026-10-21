@@ -50,6 +50,21 @@ class Store:
                 CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id,created);
                 CREATE INDEX IF NOT EXISTS music_plays_created ON music_plays(created);
                 CREATE TABLE IF NOT EXISTS music_emotions(track_key TEXT PRIMARY KEY,valence REAL NOT NULL,energy REAL NOT NULL,label TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS books(id TEXT PRIMARY KEY,file_id TEXT,title TEXT NOT NULL,author TEXT NOT NULL DEFAULT '',subject TEXT NOT NULL DEFAULT '',pages INTEGER NOT NULL DEFAULT 0,char_count INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'ready',created INTEGER NOT NULL,updated INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS books_updated ON books(updated);
+                CREATE TABLE IF NOT EXISTS book_chapters(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,idx INTEGER NOT NULL,title TEXT NOT NULL,page_from INTEGER,page_to INTEGER,content TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS book_chapters_book ON book_chapters(book_id,idx);
+                CREATE TABLE IF NOT EXISTS questions(id TEXT PRIMARY KEY,book_id TEXT,chapter_id TEXT,hash TEXT NOT NULL UNIQUE,kind TEXT NOT NULL,stem TEXT NOT NULL,options TEXT NOT NULL DEFAULT '[]',answer TEXT NOT NULL DEFAULT '',explanation TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',difficulty INTEGER NOT NULL DEFAULT 2,created INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS questions_chapter ON questions(chapter_id);
+                CREATE TABLE IF NOT EXISTS quiz_sessions(id TEXT PRIMARY KEY,book_id TEXT,chapter_id TEXT,title TEXT NOT NULL DEFAULT '',total INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL,finished INTEGER);
+                CREATE TABLE IF NOT EXISTS quiz_session_questions(session_id TEXT NOT NULL,question_id TEXT NOT NULL,idx INTEGER NOT NULL,PRIMARY KEY(session_id,question_id));
+                CREATE TABLE IF NOT EXISTS quiz_answers(id TEXT PRIMARY KEY,session_id TEXT NOT NULL,question_id TEXT NOT NULL,answer TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,grade_method TEXT NOT NULL DEFAULT 'exact',ai_reason TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
+                CREATE INDEX IF NOT EXISTS quiz_answers_session ON quiz_answers(session_id,created);
+                CREATE TABLE IF NOT EXISTS tutor_messages(id TEXT PRIMARY KEY,question_id TEXT NOT NULL,role TEXT NOT NULL,content TEXT NOT NULL,created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS music_favorites(track_key TEXT PRIMARY KEY,track_id TEXT,source TEXT,name TEXT NOT NULL,artist TEXT NOT NULL DEFAULT '',album TEXT NOT NULL DEFAULT '',cover TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS music_playlists(id TEXT PRIMARY KEY,name TEXT NOT NULL,created INTEGER NOT NULL,updated INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS music_playlist_tracks(playlist_id TEXT NOT NULL,track_key TEXT NOT NULL,position INTEGER NOT NULL,track_id TEXT,source TEXT,name TEXT NOT NULL,artist TEXT NOT NULL DEFAULT '',album TEXT NOT NULL DEFAULT '',cover TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL,PRIMARY KEY(playlist_id,track_key));
+                CREATE INDEX IF NOT EXISTS tutor_messages_question ON tutor_messages(question_id,created);
                 CREATE INDEX IF NOT EXISTS records_kind ON records(kind,updated);
                 CREATE INDEX IF NOT EXISTS runs_created ON runs(created);
             """)
@@ -62,6 +77,12 @@ class Store:
                 )
             if "server_id" not in schedule_columns:
                 db.execute("ALTER TABLE schedules ADD COLUMN server_id TEXT")
+            if "moods" not in {
+                row["name"] for row in db.execute("PRAGMA table_info(music_emotions)")
+            }:
+                db.execute(
+                    "ALTER TABLE music_emotions ADD COLUMN moods TEXT NOT NULL DEFAULT '[]'"
+                )
             if "request_signature" not in {
                 row["name"] for row in db.execute("PRAGMA table_info(runs)")
             }:

@@ -442,3 +442,57 @@ def test_calibration_backfills_existing_plays(tmp_path):
         json={"tracks": [{"id": "5", "source": "netease", "name": "演员", "artist": "薛之谦"}]},
     )
     assert store.one("SELECT label FROM music_plays")["label"] == "哀"
+
+
+def test_favorites_roundtrip_and_search_flag(tmp_path, monkeypatch):
+    app, client = setup(tmp_path)
+    track = {"id": "t1", "source": "netease", "name": "夏天的风", "artist": "温岚", "album": "温岚"}
+    assert client.post("/api/v1/music/favorites", json=track).json()["favorited"] is True
+    listed = client.get("/api/v1/music/favorites").json()
+    assert [item["name"] for item in listed["favorites"]] == ["夏天的风"]
+    assert listed["keys"] == ["netease:t1"]
+
+    monkeypatch.setattr(
+        music_module.client,
+        "search",
+        lambda *args, **kwargs: {"tracks": [dict(track)]},
+    )
+    found = client.get("/api/v1/music/search", params={"q": "夏天的风"}).json()["tracks"]
+    assert found[0]["favorited"] is True
+
+    client.delete("/api/v1/music/favorites", params={"key": "netease:t1"})
+    assert client.get("/api/v1/music/favorites").json()["favorites"] == []
+
+
+def test_playlists_create_add_and_dedupe(tmp_path):
+    app, client = setup(tmp_path)
+    playlist = client.post("/api/v1/music/playlists", json={"name": "深夜"}).json()["playlist"]
+    track = {"id": "a", "source": "netease", "name": "夜曲", "artist": "周杰伦"}
+    assert client.post(f"/api/v1/music/playlists/{playlist['id']}/tracks", json=track).json()["added"] is True
+    again = client.post(f"/api/v1/music/playlists/{playlist['id']}/tracks", json=track).json()
+    assert again["added"] is False
+
+    items = client.get(f"/api/v1/music/playlists/{playlist['id']}").json()
+    assert len(items["tracks"]) == 1
+    assert client.get("/api/v1/music/playlists").json()["playlists"][0]["tracks"] == 1
+
+    client.delete(
+        f"/api/v1/music/playlists/{playlist['id']}/tracks", params={"key": "netease:a"}
+    )
+    assert client.get(f"/api/v1/music/playlists/{playlist['id']}").json()["tracks"] == []
+
+    client.delete(f"/api/v1/music/playlists/{playlist['id']}")
+    assert client.get("/api/v1/music/playlists").json()["playlists"] == []
+
+
+def test_mood_words_follow_calibrated_scores(tmp_path):
+    app, client = setup(tmp_path)
+    store = app.state.store
+    remember_emotion(
+        store,
+        {"id": "x1", "source": "netease"},
+        {"valence": -0.5, "energy": 0.3, "label": "哀", "moods": ["怀旧", "孤独"]},
+    )
+    record_play(store, {"id": "x1", "source": "netease", "name": "演员", "artist": "薛之谦"})
+    mood = music_module.current_mood(store)
+    assert {item["mood"] for item in mood["moods"]} == {"怀旧", "孤独"}

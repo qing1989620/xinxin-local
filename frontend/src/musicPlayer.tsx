@@ -25,12 +25,17 @@ export type PlayerTrack = {
 
 type Player = {
   track: PlayerTrack | null;
+  queue: PlayerTrack[];
   cover: string;
   playing: boolean;
   loading: boolean;
   progress: { current: number; duration: number };
   volume: number;
-  play: (track: PlayerTrack) => Promise<void>;
+  play: (track: PlayerTrack, list?: PlayerTrack[]) => Promise<void>;
+  playQueue: (list: PlayerTrack[], start?: number) => void;
+  next: () => void;
+  prev: () => void;
+  hasNext: boolean;
   toggle: () => Promise<void>;
   seek: (seconds: number) => void;
   setVolume: (value: number) => void;
@@ -46,6 +51,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const active = useRef("");
   const busy = useRef(false);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
+  const [queue, setQueue] = useState<PlayerTrack[]>([]);
+  const queueRef = useRef<PlayerTrack[]>([]);
+  const positionRef = useRef(0);
   const [cover, setCover] = useState("");
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -89,7 +97,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const play = useCallback(
-    async (next: PlayerTrack) => {
+    async (next: PlayerTrack, list?: PlayerTrack[]) => {
       const key = `${next.source}:${next.id}`;
       if (busy.current) return;
       if (active.current === key && audio.current?.src) {
@@ -98,6 +106,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
       busy.current = true;
       setLoading(true);
+      if (list && list.length) {
+        queueRef.current = list;
+        positionRef.current = Math.max(
+          0,
+          list.findIndex((item) => item.id === next.id && item.source === next.source),
+        );
+        setQueue(list);
+      } else if (!queueRef.current.length) {
+        queueRef.current = [next];
+        positionRef.current = 0;
+        setQueue([next]);
+      }
       try {
         const result = await api<{ url: string }>(
           `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
@@ -144,11 +164,40 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     [toggle, toast],
   );
 
+  const next = useCallback(() => {
+    const list = queueRef.current;
+    if (positionRef.current + 1 >= list.length) return;
+    positionRef.current += 1;
+    void play(list[positionRef.current], list);
+  }, [play]);
+
+  const prev = useCallback(() => {
+    const list = queueRef.current;
+    if (positionRef.current <= 0) return;
+    positionRef.current -= 1;
+    void play(list[positionRef.current], list);
+  }, [play]);
+
+  const playQueue = useCallback(
+    (list: PlayerTrack[], start = 0) => {
+      if (!list.length) return;
+      const index = Math.max(0, Math.min(start, list.length - 1));
+      queueRef.current = list;
+      positionRef.current = index;
+      setQueue(list);
+      void play(list[index], list);
+    },
+    [play],
+  );
+
   const stop = useCallback(() => {
     audio.current?.pause();
     if (audio.current) audio.current.removeAttribute("src");
     active.current = "";
     setTrack(null);
+    queueRef.current = [];
+    positionRef.current = 0;
+    setQueue([]);
     setCover("");
     setPlaying(false);
     setProgress({ current: 0, duration: 0 });
@@ -158,12 +207,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         track,
+        queue,
         cover,
         playing,
         loading,
         progress,
         volume,
         play,
+        playQueue,
+        next,
+        prev,
+        hasNext: queue.length > 0 && positionRef.current + 1 < queue.length,
         toggle,
         seek,
         setVolume,
@@ -176,7 +230,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          next();
+        }}
         onTimeUpdate={(event) =>
           setProgress({
             current: event.currentTarget.currentTime,

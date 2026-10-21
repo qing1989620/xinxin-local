@@ -215,7 +215,11 @@ class GDClient:
                 f"连接音乐接口失败：{type(failure).__name__}"
             ) from None
         if response.status_code >= 400:
-            raise MusicUnavailable(f"音乐接口返回 {response.status_code}")
+            # 上游最近会直接返回 nginx 400 / 风控页；这不是本地参数写错，说得直白些。
+            detail = "音乐台暂时拒绝了请求（可能是限流或被风控），过几分钟再试"
+            if response.status_code == 404:
+                detail = "音乐台找不到这个资源"
+            raise MusicUnavailable(f"{detail}（{response.status_code}）")
         try:
             data = response.json()
         except ValueError:
@@ -297,6 +301,11 @@ client = GDClient()
 # 情绪标注：词表兜底 + 模型校准（按歌曲缓存）
 # ----------------------------------------------------------------------
 LABELS = ("喜", "怒", "哀", "乐", "平静")
+# 比四象限更细的说法：模型从这组词里挑 1~3 个，用来描述"这首歌是什么感觉"
+MOODS = (
+    "温柔", "浪漫", "治愈", "明亮", "雀跃", "热血", "躁动", "跳脱",
+    "孤独", "怀旧", "压抑", "悲伤", "疏离", "空灵", "慵懒", "庄严",
+)
 _LABEL_SET = frozenset(LABELS)
 
 SCORE_PROMPT = """你是中文音乐情绪标注员。根据歌名、歌手、专辑，以及你对这首歌歌词主题与编曲气质的了解，判断整首歌的情绪。
@@ -310,6 +319,8 @@ SCORE_PROMPT = """你是中文音乐情绪标注员。根据歌名、歌手、�
   · 怒：负面、高唤醒（愤怒、控诉、爆发）
   · 哀：负面、低唤醒（伤感、遗憾、孤独、怀旧）
   · 平静：正负与唤醒都不明显（叙事、氛围、无明确情绪）
+- moods：从这组词里挑 1~3 个，描述这首歌的具体感觉（按贴切程度排序）：
+  温柔 / 浪漫 / 治愈 / 明亮 / 雀跃 / 热血 / 躁动 / 跳脱 / 孤独 / 怀旧 / 压抑 / 悲伤 / 疏离 / 空灵 / 慵懒 / 庄严
 - reason：不超过 18 个字，写判断依据。
 
 注意：
@@ -318,7 +329,7 @@ SCORE_PROMPT = """你是中文音乐情绪标注员。根据歌名、歌手、�
 - 只输出 JSON 数组，不要 markdown，不要解释。
 
 输入是 [{"index":1,"name":"...","artist":"...","album":"..."}]，输出：
-[{"index":1,"valence":-0.6,"energy":0.3,"label":"哀","reason":"失恋主题，慢板钢琴"}]
+[{"index":1,"valence":-0.6,"energy":0.3,"label":"哀","moods":["悲伤","怀旧"],"reason":"失恋主题，慢板钢琴"}]
 """
 
 
@@ -329,24 +340,29 @@ def track_key(track: dict) -> str:
 
 def cached_emotion(store, track: dict):
     row = store.one(
-        "SELECT valence,energy,label,reason FROM music_emotions WHERE track_key=?",
+        "SELECT valence,energy,label,reason,moods FROM music_emotions WHERE track_key=?",
         (track_key(track),),
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    data = dict(row)
+    data["moods"] = json.loads(data.get("moods") or "[]")
+    return data
 
 
 def remember_emotion(store, track: dict, emotion: dict):
     store.execute(
-        "INSERT INTO music_emotions(track_key,valence,energy,label,reason,created)"
-        " VALUES(?,?,?,?,?,?) ON CONFLICT(track_key) DO UPDATE SET"
+        "INSERT INTO music_emotions(track_key,valence,energy,label,reason,moods,created)"
+        " VALUES(?,?,?,?,?,?,?) ON CONFLICT(track_key) DO UPDATE SET"
         " valence=excluded.valence,energy=excluded.energy,label=excluded.label,"
-        " reason=excluded.reason,created=excluded.created",
+        " reason=excluded.reason,moods=excluded.moods,created=excluded.created",
         (
             track_key(track),
             float(emotion["valence"]),
             float(emotion["energy"]),
             str(emotion["label"]),
             str(emotion.get("reason") or "")[:80],
+            json.dumps(emotion.get("moods") or [], ensure_ascii=False),
             time.time(),
         ),
     )
@@ -423,10 +439,13 @@ async def score_tracks(store, gateway, tracks: list[dict]) -> dict:
         # 标签一律由分数推导：模型偶尔会给出与分数矛盾的标签
         # （例如 v=+0.2 却标「怒」），以分数为准才不会自相矛盾。
         label = label_for(valence, energy)
+        moods = row.get("moods")
+        moods = [str(item)[:8] for item in moods if str(item) in MOODS][:3] if isinstance(moods, list) else []
         emotion = {
             "valence": round(valence, 3),
             "energy": round(energy, 3),
             "label": label,
+            "moods": moods,
             "reason": str(row.get("reason") or "")[:80],
             "source": "model",
         }
@@ -472,7 +491,7 @@ def record_play(store, track: dict) -> dict:
 
 def recent_plays(store, limit: int = 12) -> list[dict]:
     rows = store.all(
-        "SELECT track_id,name,artist,album,valence,energy,label,created"
+        "SELECT track_id,source,name,artist,album,valence,energy,label,created"
         " FROM music_plays ORDER BY created DESC LIMIT ?",
         (max(1, min(limit, 50)),),
     )
@@ -496,6 +515,7 @@ def current_mood(store) -> dict:
             "energy": 0.4,
             "intensity": 0.0,
             "tracks": 0,
+            "moods": [],
             "influence": influence_enabled(store),
         }
     valence /= total
@@ -506,8 +526,31 @@ def current_mood(store) -> dict:
         "energy": round(energy, 3),
         "intensity": round(min(1.0, total / 3), 3),
         "tracks": len(plays),
+        "moods": mood_words(store, plays),
         "influence": influence_enabled(store),
     }
+
+
+def mood_words(store, plays) -> list[dict]:
+    """最近播放里出现最多的情绪词，带上占比。"""
+    if not plays:
+        return []
+    lookup: dict[str, list[str]] = {}
+    for row in store.all("SELECT track_key,moods FROM music_emotions"):
+        try:
+            lookup[row["track_key"]] = json.loads(row["moods"] or "[]")
+        except ValueError:
+            continue
+    counts: dict[str, int] = {}
+    for play in plays:
+        key = f"{play['source']}:{play['track_id']}"
+        for word in lookup.get(key, [])[:2]:
+            counts[word] = counts.get(word, 0) + 1
+    total = sum(counts.values())
+    if not total:
+        return []
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:3]
+    return [{"mood": word, "share": round(count / total, 2)} for word, count in ranked]
 
 
 def influence_enabled(store) -> bool:
@@ -570,3 +613,174 @@ def ambient(store) -> dict | None:
     """给系统上下文的结构化背景。曲名来自外部曲库，只作为数据、且已清洗截断。"""
     mood = _active_mood(store)
     return _ambient(store, mood) if mood else None
+
+
+# ----------------------------------------------------------------------
+# 收藏与歌单
+# ----------------------------------------------------------------------
+def _track_fields(track: dict) -> tuple:
+    return (
+        track_key(track),
+        str(track.get("id") or track.get("track_id") or "")[:120],
+        str(track.get("source") or "netease")[:20],
+        str(track.get("name") or "")[:200],
+        str(track.get("artist") or "")[:200],
+        str(track.get("album") or "")[:200],
+        str(track.get("cover") or track.get("pic") or "")[:500],
+    )
+
+
+def format_saved(row: dict) -> dict:
+    return {
+        "key": row["track_key"],
+        "id": row.get("track_id") or "",
+        "source": row.get("source") or "netease",
+        "name": row["name"],
+        "artist": row.get("artist") or "",
+        "album": row.get("album") or "",
+        "cover": row.get("cover") or "",
+    }
+
+
+def favorites(store) -> list[dict]:
+    """收藏列表带上已校准的情绪，和搜索结果看起来一致。"""
+    cached: dict[str, dict] = {}
+    for row in store.all("SELECT * FROM music_emotions"):
+        try:
+            moods = json.loads(row["moods"] or "[]")
+        except ValueError:
+            moods = []
+        cached[row["track_key"]] = {
+            "label": row["label"],
+            "valence": row["valence"],
+            "energy": row["energy"],
+            "reason": row["reason"],
+            "moods": moods,
+        }
+    out = []
+    for row in store.all("SELECT * FROM music_favorites ORDER BY created DESC"):
+        item = format_saved(dict(row))
+        found = cached.get(row["track_key"])
+        if found:
+            item["emotion"] = found
+        out.append(item)
+    return out
+
+
+def favorite_keys(store) -> set[str]:
+    return {row["track_key"] for row in store.all("SELECT track_key FROM music_favorites")}
+
+
+def add_favorite(store, track: dict) -> dict:
+    if not str(track.get("name") or "").strip():
+        raise ValueError("这首歌没有名字，收藏不了")
+    store.execute(
+        "INSERT OR REPLACE INTO music_favorites(track_key,track_id,source,name,artist,album,cover,created)"
+        " VALUES(?,?,?,?,?,?,?,?)",
+        _track_fields(track) + (time.time(),),
+    )
+    return {"favorited": True, "key": track_key(track)}
+
+
+def remove_favorite(store, key: str) -> dict:
+    store.execute("DELETE FROM music_favorites WHERE track_key=?", (key,))
+    return {"favorited": False, "key": key}
+
+
+def playlists(store) -> list[dict]:
+    rows = store.all(
+        "SELECT p.id,p.name,p.created,p.updated,count(t.track_key) AS tracks"
+        " FROM music_playlists p LEFT JOIN music_playlist_tracks t ON t.playlist_id = p.id"
+        " GROUP BY p.id ORDER BY p.updated DESC"
+    )
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "tracks": int(row["tracks"] or 0),
+            "created": row["created"],
+            "updated": row["updated"],
+        }
+        for row in rows
+    ]
+
+
+def create_playlist(store, name: str) -> dict:
+    title = (name or "").strip()[:60]
+    if not title:
+        raise ValueError("给歌单起个名字")
+    now = time.time()
+    ident = uid()
+    store.execute(
+        "INSERT INTO music_playlists(id,name,created,updated) VALUES(?,?,?,?)",
+        (ident, title, now, now),
+    )
+    return {"id": ident, "name": title, "tracks": 0}
+
+
+def rename_playlist(store, playlist_id: str, name: str) -> dict:
+    title = (name or "").strip()[:60]
+    if not title:
+        raise ValueError("名字不能为空")
+    if not store.one("SELECT id FROM music_playlists WHERE id=?", (playlist_id,)):
+        raise ValueError("歌单不存在")
+    store.execute(
+        "UPDATE music_playlists SET name=?,updated=? WHERE id=?",
+        (title, time.time(), playlist_id),
+    )
+    return {"id": playlist_id, "name": title}
+
+
+def delete_playlist(store, playlist_id: str) -> dict:
+    store.execute("DELETE FROM music_playlist_tracks WHERE playlist_id=?", (playlist_id,))
+    store.execute("DELETE FROM music_playlists WHERE id=?", (playlist_id,))
+    return {"ok": True}
+
+
+def playlist_items(store, playlist_id: str) -> dict:
+    playlist = store.one("SELECT * FROM music_playlists WHERE id=?", (playlist_id,))
+    if not playlist:
+        raise ValueError("歌单不存在")
+    rows = store.all(
+        "SELECT * FROM music_playlist_tracks WHERE playlist_id=? ORDER BY position", (playlist_id,)
+    )
+    return {
+        "playlist": {"id": playlist["id"], "name": playlist["name"]},
+        "tracks": [dict(format_saved(dict(row)), position=row["position"]) for row in rows],
+    }
+
+
+def add_to_playlist(store, playlist_id: str, track: dict) -> dict:
+    if not store.one("SELECT id FROM music_playlists WHERE id=?", (playlist_id,)):
+        raise ValueError("歌单不存在")
+    key = track_key(track)
+    exists = store.one(
+        "SELECT 1 FROM music_playlist_tracks WHERE playlist_id=? AND track_key=?",
+        (playlist_id, key),
+    )
+    if exists:
+        return {"added": False, "key": key, "reason": "已经在歌单里了"}
+    last = store.one(
+        "SELECT coalesce(max(position), -1) AS top FROM music_playlist_tracks WHERE playlist_id=?",
+        (playlist_id,),
+    )
+    position = int(last["top"]) + 1
+    key, ident, source, name, artist, album, cover = _track_fields(track)
+    store.execute(
+        "INSERT INTO music_playlist_tracks(playlist_id,track_key,position,track_id,source,name,"
+        "artist,album,cover,created) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (playlist_id, key, position, ident, source, name, artist, album, cover, time.time()),
+    )
+    store.execute(
+        "UPDATE music_playlists SET updated=? WHERE id=?", (time.time(), playlist_id)
+    )
+    return {"added": True, "key": key, "position": position}
+
+
+def remove_from_playlist(store, playlist_id: str, key: str) -> dict:
+    store.execute(
+        "DELETE FROM music_playlist_tracks WHERE playlist_id=? AND track_key=?",
+        (playlist_id, key),
+    )
+    store.execute("UPDATE music_playlists SET updated=? WHERE id=?", (time.time(), playlist_id))
+    return {"ok": True}
