@@ -39,7 +39,11 @@ type Emotion = {
   reason?: string;
   source?: string;
 };
-type Track = PlayerTrack & { emotion?: Emotion; favorited?: boolean; vip?: boolean };
+type Track = PlayerTrack & {
+  emotion?: Emotion;
+  favorited?: boolean;
+  vip?: boolean;
+};
 type Mood = {
   label: string;
   valence: number;
@@ -48,6 +52,7 @@ type Mood = {
   tracks: number;
   moods: Array<{ mood: string; share: number }>;
   influence: boolean;
+  influence_level: number;
 };
 type Play = {
   track_id: string;
@@ -66,6 +71,25 @@ const SOURCES = [
   ["joox", "JOOX"],
   ["tencent", "QQ 音乐"],
 ] as const;
+
+const INFLUENCE_LEVELS = [
+  {
+    level: 1,
+    name: "轻微",
+    description: "偶尔在措辞里带一点氛围，保持平常的节奏。",
+  },
+  {
+    level: 2,
+    name: "自然",
+    description: "自然调整语气和互动，适合平时边听边聊。",
+  },
+  { level: 3, name: "明显", description: "更明显地改变回应、鼓励和互动方式。" },
+  {
+    level: 4,
+    name: "沉浸",
+    description: "让音乐持续带动 Xinxin 的表达与性格，氛围更鲜明。",
+  },
+];
 
 const MOOD_PHRASE: Record<string, string> = {
   喜: "安静的愉悦",
@@ -110,9 +134,117 @@ function trackKey(track: { id: string; source: string }) {
   return `${track.source}:${track.id}`;
 }
 
+// 定义放在页面外，播放进度更新时保留同一批 DOM 与 hover/focus 状态。
+function TrackList({
+  list,
+  empty,
+  queue,
+  searching,
+  pending,
+  favoriteKeys,
+  onPlay,
+  onFavorite,
+  onAdd,
+}: {
+  list: Track[];
+  empty: React.ReactNode;
+  queue?: Track[];
+  searching: boolean;
+  pending: string;
+  favoriteKeys: Set<string>;
+  onPlay: (track: Track, list?: Track[]) => Promise<void>;
+  onFavorite: (track: Track) => Promise<void>;
+  onAdd: (track: Track) => void;
+}) {
+  const player = useMusicPlayer();
+  if (!list.length) return <div className="index-empty">{empty}</div>;
+  return (
+    <ol className={`track-index${searching ? " is-loading" : ""}`}>
+      {list.map((track, index) => {
+        const key = trackKey(track);
+        const liked = favoriteKeys.has(key);
+        const current =
+          player?.track?.id === track.id &&
+          player?.track?.source === track.source;
+        return (
+          <li key={key} className="track-item">
+            <button
+              className={`track-row${current ? " active" : ""}`}
+              onClick={() => void onPlay(track, queue)}
+              onMouseEnter={() => player?.prefetch(track)}
+              onFocus={() => player?.prefetch(track)}
+              aria-current={current || undefined}
+              aria-label={`${current && player?.playing ? "暂停" : "播放"} ${track.name}，${track.artist}`}
+            >
+              <span className="track-ordinal">
+                {pending === key ? (
+                  <span className="track-loading" />
+                ) : current && player?.playing ? (
+                  <Equalizer />
+                ) : (
+                  String(index + 1).padStart(2, "0")
+                )}
+              </span>
+              <span className="track-title">
+                <strong>{track.name}</strong>
+                <small>
+                  {track.artist}
+                  {track.album ? ` · ${track.album}` : ""}
+                </small>
+              </span>
+              <span className="track-tags">
+                {track.vip && <span className="vip-tag">会员</span>}
+                {track.emotion?.moods?.slice(0, 2).map((word) => (
+                  <span key={word} className="mood-word">
+                    {word}
+                  </span>
+                ))}
+                {track.emotion && (
+                  <span
+                    className={`emotion-word ${tone(track.emotion.label)}`}
+                    title={
+                      track.emotion.reason ||
+                      (track.emotion.hits?.length
+                        ? `命中：${track.emotion.hits.join("、")}`
+                        : "还没有校准，按中性处理")
+                    }
+                  >
+                    {track.emotion.label}
+                  </span>
+                )}
+              </span>
+            </button>
+            <div className="row-actions">
+              <button
+                className={`row-icon${liked ? " liked" : ""}`}
+                aria-label={liked ? "取消收藏" : "收藏"}
+                onClick={() => void onFavorite(track)}
+              >
+                <Heart size={13} fill={liked ? "currentColor" : "none"} />
+              </button>
+              <button
+                className="row-icon"
+                aria-label="加入歌单"
+                onClick={() => onAdd(track)}
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 export default function MusicPage() {
   const toast = useToast();
   const player = useMusicPlayer();
+  const searchRequest = useRef(0);
+  const moodRequest = useRef(0);
+  const playRequest = useRef(0);
+  const settingBusy = useRef(false);
+  const [savingInfluence, setSavingInfluence] = useState(false);
   const [query, setQuery] = useState(""),
     [source, setSource] = useState<string>("netease"),
     [tracks, setTracks] = useState<Track[] | null>(null),
@@ -126,7 +258,9 @@ export default function MusicPage() {
     [view, setView] = useState<"search" | "favorites" | "playlists">("search"),
     [favorites, setFavorites] = useState<Track[]>([]),
     [playlists, setPlaylists] = useState<Playlist[]>([]),
-    [openList, setOpenList] = useState<{ id: string; name: string } | null>(null),
+    [openList, setOpenList] = useState<{ id: string; name: string } | null>(
+      null,
+    ),
     [listTracks, setListTracks] = useState<Track[]>([]),
     [addingTrack, setAddingTrack] = useState<Track | null>(null),
     [creating, setCreating] = useState(false),
@@ -135,8 +269,11 @@ export default function MusicPage() {
     [params, setParams] = useSearchParams();
 
   const loadMood = useCallback(async () => {
+    if (settingBusy.current) return;
+    const request = ++moodRequest.current;
     try {
       const result = await api<{ mood: Mood; plays: Play[] }>("/music/mood");
+      if (request !== moodRequest.current) return;
       setMood(result.mood);
       setPlays(result.plays);
     } catch {
@@ -169,56 +306,71 @@ export default function MusicPage() {
   }, [loadMood]);
 
   // 词表只给保守估计；检索后异步让模型按歌曲本身校准，结果写进后端缓存。
-  const calibrate = useCallback(async (list: Track[]) => {
-    if (!list.length) return;
-    setCalibrating(true);
-    try {
-      const result = await post<{ emotions: Record<string, Emotion> }>(
-        "/music/score",
-        {
-          tracks: list.map(({ id, source: src, name, artist, album }) => ({
-            id,
-            source: src,
-            name,
-            artist,
-            album,
-          })),
-        },
-      );
-      setTracks((current) =>
-        current
-          ? current.map((track) => {
-              const found = result.emotions[trackKey(track)];
-              return found ? { ...track, emotion: { ...track.emotion, ...found } } : track;
-            })
-          : current,
-      );
-    } catch {
-      // 模型不可用时保留词表结果，不打断播放
-    } finally {
-      setCalibrating(false);
-    }
-  }, []);
+  const calibrate = useCallback(
+    async (list: Track[], request: number) => {
+      if (!list.length) return;
+      setCalibrating(true);
+      try {
+        const result = await post<{ emotions: Record<string, Emotion> }>(
+          "/music/score",
+          {
+            tracks: list.map(({ id, source: src, name, artist, album }) => ({
+              id,
+              source: src,
+              name,
+              artist,
+              album,
+            })),
+          },
+        );
+        if (request !== searchRequest.current) return;
+        setTracks((current) =>
+          current
+            ? current.map((track) => {
+                const found = result.emotions[trackKey(track)];
+                return found
+                  ? { ...track, emotion: { ...track.emotion, ...found } }
+                  : track;
+              })
+            : current,
+        );
+        void loadMood();
+      } catch {
+        // 模型不可用时保留词表结果，不打断播放
+      } finally {
+        if (request === searchRequest.current) setCalibrating(false);
+      }
+    },
+    [loadMood],
+  );
 
   const runSearch = useCallback(
     async (text: string, src: string) => {
+      const request = ++searchRequest.current;
       setSearching(true);
+      setCalibrating(false);
       try {
         const result = await api<{ tracks: Track[]; fallback?: boolean }>(
           `/music/search?q=${encodeURIComponent(text)}&source=${src}`,
         );
+        if (request !== searchRequest.current) return;
         setTracks(result.tracks);
         setFallback(Boolean(result.fallback));
         if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
-        else void calibrate(result.tracks);
-        sessionStorage.setItem(
-          "xinxin-music-search",
-          JSON.stringify({ q: text, source: src }),
-        );
+        else void calibrate(result.tracks, request);
+        try {
+          sessionStorage.setItem(
+            "xinxin-music-search",
+            JSON.stringify({ q: text, source: src }),
+          );
+        } catch {
+          /* 浏览器禁用缓存仍可正常搜索。 */
+        }
       } catch (error) {
-        toast((error as Error).message, true);
+        if (request === searchRequest.current)
+          toast((error as Error).message, true);
       } finally {
-        setSearching(false);
+        if (request === searchRequest.current) setSearching(false);
       }
     },
     [calibrate, toast],
@@ -253,9 +405,9 @@ export default function MusicPage() {
       );
       return;
     }
-    const saved = sessionStorage.getItem("xinxin-music-search");
-    if (!saved) return;
     try {
+      const saved = sessionStorage.getItem("xinxin-music-search");
+      if (!saved) return;
       const parsed = JSON.parse(saved) as { q?: string; source?: string };
       if (!parsed?.q) return;
       const src = parsed.source || "netease";
@@ -271,9 +423,9 @@ export default function MusicPage() {
   const lyricId = player?.track?.lyric_id || "";
   const trackSource = player?.track?.source || "netease";
   useEffect(() => {
+    setLyric("");
+    setTlyric("");
     if (!lyricId) {
-      setLyric("");
-      setTlyric("");
       return;
     }
     let alive = true;
@@ -297,8 +449,12 @@ export default function MusicPage() {
 
   async function play(track: Track, list?: Track[]) {
     if (!player) return;
+    const generation = ++playRequest.current;
     const key = trackKey(track);
-    if (player.track?.id === track.id && player.track?.source === track.source) {
+    if (
+      player.track?.id === track.id &&
+      player.track?.source === track.source
+    ) {
       await player.toggle();
       return;
     }
@@ -306,7 +462,7 @@ export default function MusicPage() {
     try {
       await player.play(track, list);
     } finally {
-      setPending("");
+      if (generation === playRequest.current) setPending("");
     }
   }
 
@@ -323,7 +479,9 @@ export default function MusicPage() {
     try {
       if (favorited) {
         await remove(`/music/favorites?key=${encodeURIComponent(key)}`);
-        setFavorites((current) => current.filter((item) => trackKey(item) !== key));
+        setFavorites((current) =>
+          current.filter((item) => trackKey(item) !== key),
+        );
       } else {
         await post("/music/favorites", {
           id: track.id,
@@ -333,12 +491,16 @@ export default function MusicPage() {
           album: track.album,
           cover: "",
         });
-        setFavorites((current) => [{ ...track, favorited: true }, ...current] as Track[]);
+        setFavorites(
+          (current) => [{ ...track, favorited: true }, ...current] as Track[],
+        );
       }
       setTracks((current) =>
         current
           ? current.map((item) =>
-              trackKey(item) === key ? { ...item, favorited: !favorited } : item,
+              trackKey(item) === key
+                ? { ...item, favorited: !favorited }
+                : item,
             )
           : current,
       );
@@ -362,7 +524,9 @@ export default function MusicPage() {
         },
       );
       toast(
-        result.added ? `已加入「${playlist.name}」` : result.reason || "已经在歌单里了",
+        result.added
+          ? `已加入「${playlist.name}」`
+          : result.reason || "已经在歌单里了",
       );
       setAddingTrack(null);
       void loadLibrary();
@@ -440,21 +604,30 @@ export default function MusicPage() {
     }
   }
 
-  async function toggleInfluence() {
-    if (!mood) return;
+  async function updateInfluence(settings: {
+    influence?: boolean;
+    influence_level?: number;
+  }) {
+    if (!mood || settingBusy.current) return;
+    const previous = mood;
+    moodRequest.current += 1;
+    settingBusy.current = true;
+    setMood({ ...mood, ...settings });
+    setSavingInfluence(true);
     try {
-      const result = await put<{ mood: Mood }>("/music/settings", {
-        influence: !mood.influence,
-      });
+      const result = await put<{ mood: Mood }>("/music/settings", settings);
       setMood(result.mood);
     } catch (error) {
+      setMood(previous);
       toast((error as Error).message, true);
+    } finally {
+      settingBusy.current = false;
+      setSavingInfluence(false);
+      void loadMood();
     }
   }
 
   const current = player?.track || null;
-  const isCurrent = (track: Track) =>
-    current?.id === track.id && current?.source === track.source;
   const progress = player?.progress || { current: 0, duration: 0 };
   const percent = progress.duration
     ? Math.min(100, (progress.current / progress.duration) * 100)
@@ -476,94 +649,20 @@ export default function MusicPage() {
     if (!node) return;
     roll.scrollTo({
       top: node.offsetTop - roll.clientHeight / 2 + node.clientHeight / 2,
-      behavior: "smooth",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
     });
   }, [activeLine]);
 
-  function TrackList({
-    list,
-    empty,
-    queue,
-  }: {
-    list: Track[];
-    empty: React.ReactNode;
-    queue?: Track[];
-  }) {
-    if (!list.length) return <div className="index-empty">{empty}</div>;
-    return (
-      <ol className={`track-index${searching ? " is-loading" : ""}`}>
-        {list.map((track, index) => {
-          const key = trackKey(track);
-          const liked = favoriteKeys.has(key);
-          return (
-            <li key={key} className="track-item">
-              <button
-                className={`track-row${isCurrent(track) ? " active" : ""}`}
-                onClick={() => void play(track, queue)}
-                onMouseEnter={() => player?.prefetch(track)}
-                onFocus={() => player?.prefetch(track)}
-                aria-current={isCurrent(track) || undefined}
-              >
-                <span className="track-ordinal">
-                  {pending === key ? (
-                    <span className="track-loading" />
-                  ) : isCurrent(track) && player?.playing ? (
-                    <Equalizer />
-                  ) : (
-                    String(index + 1).padStart(2, "0")
-                  )}
-                </span>
-                <span className="track-title">
-                  <strong>{track.name}</strong>
-                  <small>
-                    {track.artist}
-                    {track.album ? ` · ${track.album}` : ""}
-                  </small>
-                </span>
-                <span className="track-tags">
-                  {track.vip && <span className="vip-tag">会员</span>}
-                  {track.emotion?.moods?.slice(0, 2).map((word) => (
-                    <span key={word} className="mood-word">
-                      {word}
-                    </span>
-                  ))}
-                  {track.emotion && (
-                    <span
-                      className={`emotion-word ${tone(track.emotion.label)}`}
-                      title={
-                        track.emotion.reason ||
-                        (track.emotion.hits?.length
-                          ? `命中：${track.emotion.hits.join("、")}`
-                          : "还没有校准，按中性处理")
-                      }
-                    >
-                      {track.emotion.label}
-                    </span>
-                  )}
-                </span>
-              </button>
-              <div className="row-actions">
-                <button
-                  className={`row-icon${liked ? " liked" : ""}`}
-                  aria-label={liked ? "取消收藏" : "收藏"}
-                  onClick={() => void toggleFavorite(track)}
-                >
-                  <Heart size={13} fill={liked ? "currentColor" : "none"} />
-                </button>
-                <button
-                  className="row-icon"
-                  aria-label="加入歌单"
-                  onClick={() => setAddingTrack(track)}
-                >
-                  <Plus size={14} />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    );
-  }
+  const trackListProps = {
+    searching,
+    pending,
+    favoriteKeys,
+    onPlay: play,
+    onFavorite: toggleFavorite,
+    onAdd: setAddingTrack,
+  };
 
   return (
     <div className="page-enter listening">
@@ -639,8 +738,17 @@ export default function MusicPage() {
                     type="button"
                     className="search-clear"
                     onClick={() => {
+                      searchRequest.current += 1;
                       setQuery("");
                       setTracks(null);
+                      setSearching(false);
+                      setCalibrating(false);
+                      setFallback(false);
+                      try {
+                        sessionStorage.removeItem("xinxin-music-search");
+                      } catch {
+                        /* 可选缓存 */
+                      }
                     }}
                     aria-label="清空搜索"
                   >
@@ -655,7 +763,8 @@ export default function MusicPage() {
 
               {fallback && (
                 <p className="source-note">
-                  GD 音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
+                  GD
+                  音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
                   换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
                 </p>
               )}
@@ -698,6 +807,7 @@ export default function MusicPage() {
                 <span>{listTracks.length} 首</span>
               </div>
               <TrackList
+                {...trackListProps}
                 list={listTracks}
                 queue={listTracks}
                 empty={<p>这个歌单还是空的。去搜几首，点「+」放进来。</p>}
@@ -721,7 +831,10 @@ export default function MusicPage() {
             <>
               <div className="index-head">
                 <span>歌单</span>
-                <button className="link-quiet" onClick={() => setCreating(true)}>
+                <button
+                  className="link-quiet"
+                  onClick={() => setCreating(true)}
+                >
                   <Plus size={12} />
                   新建
                 </button>
@@ -729,7 +842,9 @@ export default function MusicPage() {
               {playlists.length === 0 ? (
                 <div className="index-empty">
                   <ListMusic size={22} strokeWidth={1.1} />
-                  <p>还没有歌单。建一个「深夜」「通勤」这样的清单，把喜欢的歌攒起来。</p>
+                  <p>
+                    还没有歌单。建一个「深夜」「通勤」这样的清单，把喜欢的歌攒起来。
+                  </p>
                 </div>
               ) : (
                 <ul className="playlist-list">
@@ -767,9 +882,12 @@ export default function MusicPage() {
                 <span>{favorites.length} 首</span>
               </div>
               <TrackList
+                {...trackListProps}
                 list={favorites}
                 queue={favorites}
-                empty={<p>还没有收藏。在搜索结果里点歌名右边的心，就会留在这里。</p>}
+                empty={
+                  <p>还没有收藏。在搜索结果里点歌名右边的心，就会留在这里。</p>
+                }
               />
               {favorites.length > 0 && (
                 <button
@@ -805,9 +923,12 @@ export default function MusicPage() {
                 </div>
               ) : (
                 <TrackList
+                  {...trackListProps}
                   list={tracks}
                   queue={tracks}
-                  empty={<p>没有结果。换个关键词，或者切到酷我 / JOOX 再试。</p>}
+                  empty={
+                    <p>没有结果。换个关键词，或者切到酷我 / JOOX 再试。</p>
+                  }
                 />
               )}
             </>
@@ -980,13 +1101,51 @@ export default function MusicPage() {
                   role="switch"
                   aria-checked={mood.influence}
                   className={`switch${mood.influence ? " on" : ""}`}
-                  onClick={() => void toggleInfluence()}
+                  disabled={savingInfluence}
+                  onClick={() =>
+                    void updateInfluence({ influence: !mood.influence })
+                  }
                 >
                   <span className="switch-track" aria-hidden="true">
                     <i />
                   </span>
                   <span>让音乐影响 Xinxin 的语气</span>
                 </button>
+
+                <fieldset
+                  className="influence-levels"
+                  disabled={!mood.influence || savingInfluence}
+                >
+                  <legend>音乐影响程度</legend>
+                  <div className="influence-options">
+                    {INFLUENCE_LEVELS.map(({ level, name }) => (
+                      <label
+                        key={level}
+                        className={
+                          mood.influence_level === level ? "selected" : ""
+                        }
+                      >
+                        <input
+                          type="radio"
+                          name="music-influence"
+                          value={level}
+                          checked={mood.influence_level === level}
+                          onChange={() =>
+                            void updateInfluence({ influence_level: level })
+                          }
+                        />
+                        <span>{name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="hint" aria-live="polite">
+                    {mood.influence
+                      ? INFLUENCE_LEVELS.find(
+                          (item) => item.level === mood.influence_level,
+                        )?.description
+                      : "已关闭音乐影响，重新开启后恢复所选档位。"}
+                  </p>
+                </fieldset>
 
                 {plays.length > 0 && (
                   <ul className="history">
@@ -1034,7 +1193,9 @@ export default function MusicPage() {
                       className={index === activeLine ? "is-active" : ""}
                     >
                       {line.text}
-                      {line.trans && <span className="trans">{line.trans}</span>}
+                      {line.trans && (
+                        <span className="trans">{line.trans}</span>
+                      )}
                     </p>
                   ))}
                 </div>
@@ -1052,7 +1213,9 @@ export default function MusicPage() {
           onClose={() => setAddingTrack(null)}
         >
           <div className="stack">
-            {playlists.length === 0 && <p className="hint">还没有歌单，先建一个。</p>}
+            {playlists.length === 0 && (
+              <p className="hint">还没有歌单，先建一个。</p>
+            )}
             {playlists.map((playlist) => (
               <button
                 key={playlist.id}

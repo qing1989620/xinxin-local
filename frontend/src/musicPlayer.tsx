@@ -50,19 +50,27 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const toast = useToast();
   const audio = useRef<HTMLAudioElement | null>(null);
   const active = useRef("");
-  const busy = useRef(false);
+  const request = useRef(0);
+  const playingTrack = useRef<PlayerTrack | null>(null);
+  const recorded = useRef(false);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const queueRef = useRef<PlayerTrack[]>([]);
   // 悬停就把播放地址取回来：点击时同步换 src，保留"用户手势"，避免自动播放被拦
-  const urlCache = useRef(new Map<string, string>());
+  const urlCache = useRef(new Map<string, { url: string; expires: number }>());
+  const urlRequests = useRef(new Map<string, Promise<{ url: string }>>());
   const positionRef = useRef(0);
   const [cover, setCover] = useState("");
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, duration: 0 });
   const [volume, setVolumeState] = useState(() => {
-    const stored = localStorage.getItem("xinxin-volume");
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem("xinxin-volume");
+    } catch {
+      /* 可选偏好 */
+    }
     // 没存过时 Number(null) 会得到 0，直接当成静音；先区分"没设置"。
     const saved = stored === null ? Number.NaN : Number(stored);
     return Number.isFinite(saved) && saved >= 0 && saved <= 1 ? saved : 0.8;
@@ -70,16 +78,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (audio.current) audio.current.volume = volume;
-    localStorage.setItem("xinxin-volume", String(volume));
+    try {
+      localStorage.setItem("xinxin-volume", String(volume));
+    } catch {
+      /* 可选偏好 */
+    }
   }, [volume]);
 
   const setVolume = useCallback((value: number) => {
-    setVolumeState(Math.max(0, Math.min(1, value)));
+    if (Number.isFinite(value)) setVolumeState(Math.max(0, Math.min(1, value)));
   }, []);
 
   const seek = useCallback((seconds: number) => {
     const element = audio.current;
-    if (!element || !Number.isFinite(element.duration)) return;
+    if (
+      !element ||
+      !Number.isFinite(seconds) ||
+      !Number.isFinite(element.duration)
+    )
+      return;
     element.currentTime = Math.max(0, Math.min(seconds, element.duration));
     setProgress({
       current: element.currentTime,
@@ -99,59 +116,87 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     } else element.pause();
   }, [toast]);
 
-  const prefetch = useCallback((track: PlayerTrack) => {
+  const resolveUrl = useCallback((track: PlayerTrack) => {
     const key = `${track.source}:${track.id}`;
-    if (urlCache.current.has(key)) return;
-    void api<{ url: string }>(
+    const pending = urlRequests.current.get(key);
+    if (pending) return pending;
+    const promise = api<{ url: string }>(
       `/music/url?id=${encodeURIComponent(track.id)}&source=${track.source}`,
     )
       .then((value) => {
-        if (value.url) urlCache.current.set(key, value.url);
+        if (!value.url) throw new Error("这首暂时没有可用的播放地址");
+        if (urlCache.current.size >= 100) {
+          const oldest = urlCache.current.keys().next().value;
+          if (oldest) urlCache.current.delete(oldest);
+        }
+        urlCache.current.set(key, {
+          url: value.url,
+          expires: Date.now() + 180_000,
+        });
+        return value;
       })
-      .catch(() => {
-        // 预取失败不影响点击后的正常流程
+      .finally(() => {
+        urlRequests.current.delete(key);
       });
+    urlRequests.current.set(key, promise);
+    return promise;
   }, []);
+
+  const prefetch = useCallback(
+    (track: PlayerTrack) => {
+      const cached = urlCache.current.get(`${track.source}:${track.id}`);
+      if (cached && cached.expires > Date.now()) return;
+      void resolveUrl(track).catch(() => {
+        /* 预取失败后点击仍可重试。 */
+      });
+    },
+    [resolveUrl],
+  );
 
   const play = useCallback(
     async (next: PlayerTrack, list?: PlayerTrack[]) => {
       const key = `${next.source}:${next.id}`;
-      if (busy.current) return;
+      const generation = ++request.current;
       if (active.current === key && audio.current?.src) {
-        void toggle();
+        setLoading(false);
+        await toggle();
         return;
       }
-      busy.current = true;
       setLoading(true);
-      const cachedUrl = urlCache.current.get(key);
-      if (list && list.length) {
-        queueRef.current = list;
+      const cached = urlCache.current.get(key);
+      const cachedUrl = cached && cached.expires > Date.now() ? cached.url : "";
+      try {
+        const result = cachedUrl ? { url: cachedUrl } : await resolveUrl(next);
+        if (generation !== request.current) return;
+        const existing = queueRef.current;
+        const selected = list?.length
+          ? list
+          : existing.some(
+                (item) => item.id === next.id && item.source === next.source,
+              )
+            ? existing
+            : [next];
+        queueRef.current = selected;
         positionRef.current = Math.max(
           0,
-          list.findIndex((item) => item.id === next.id && item.source === next.source),
+          selected.findIndex(
+            (item) => item.id === next.id && item.source === next.source,
+          ),
         );
-        setQueue(list);
-      } else if (!queueRef.current.length) {
-        queueRef.current = [next];
-        positionRef.current = 0;
-        setQueue([next]);
-      }
-      try {
-        const result = cachedUrl
-          ? { url: cachedUrl }
-          : await api<{ url: string }>(
-              `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
-            );
-        if (!cachedUrl && result.url) urlCache.current.set(key, result.url);
+        setQueue(selected);
         active.current = key;
+        playingTrack.current = next;
+        recorded.current = false;
         setTrack(next);
         setCover("");
+        setPlaying(false);
         setProgress({ current: 0, duration: 0 });
         if (audio.current) {
           audio.current.src = result.url;
           try {
             await audio.current.play();
           } catch (error) {
+            if (generation !== request.current) return;
             const name = (error as DOMException)?.name;
             if (name === "NotAllowedError") {
               // 自动播放被拦时保持暂停状态，等用户点播放键。
@@ -160,79 +205,64 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
               // 预取的地址可能过期，丢掉重取一次再试
               urlCache.current.delete(key);
               try {
-                const fresh = await api<{ url: string }>(
-                  `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
-                );
-                if (fresh.url && audio.current) {
-                  urlCache.current.set(key, fresh.url);
+                const fresh = await resolveUrl(next);
+                if (generation === request.current && audio.current) {
                   audio.current.src = fresh.url;
                   await audio.current.play();
                 }
               } catch {
-                toast("这首暂时播不了，换一首试试", true);
+                if (generation === request.current)
+                  toast("这首暂时播不了，换一首试试", true);
               }
             } else {
               toast("这首暂时播不了，换一首试试", true);
             }
           }
         }
-        void post("/music/play", {
-          id: next.id,
-          source: next.source,
-          name: next.name,
-          artist: next.artist,
-          album: next.album,
-        })
-          .then(() =>
-            window.dispatchEvent(new CustomEvent("xinxin:music-played")),
-          )
-          .catch(() => {});
         if (next.pic_id) {
           void api<{ url: string }>(
             `/music/pic?id=${encodeURIComponent(next.pic_id)}&source=${next.source}`,
           )
             .then((value) => {
-              if (value.url) setCover(value.url);
+              if (active.current === key && value.url) setCover(value.url);
             })
             .catch(() => {});
         }
       } catch (failure) {
-        toast((failure as Error).message, true);
+        if (generation === request.current)
+          toast((failure as Error).message, true);
       } finally {
-        busy.current = false;
-        setLoading(false);
+        if (generation === request.current) setLoading(false);
       }
     },
-    [toggle, toast],
+    [toggle, toast, resolveUrl],
   );
 
   const next = useCallback(() => {
     const list = queueRef.current;
     if (positionRef.current + 1 >= list.length) return;
-    positionRef.current += 1;
-    void play(list[positionRef.current], list);
+    void play(list[positionRef.current + 1], list);
   }, [play]);
 
   const prev = useCallback(() => {
     const list = queueRef.current;
     if (positionRef.current <= 0) return;
-    positionRef.current -= 1;
-    void play(list[positionRef.current], list);
+    void play(list[positionRef.current - 1], list);
   }, [play]);
 
   const playQueue = useCallback(
     (list: PlayerTrack[], start = 0) => {
       if (!list.length) return;
       const index = Math.max(0, Math.min(start, list.length - 1));
-      queueRef.current = list;
-      positionRef.current = index;
-      setQueue(list);
       void play(list[index], list);
     },
     [play],
   );
 
   const stop = useCallback(() => {
+    request.current += 1;
+    playingTrack.current = null;
+    recorded.current = false;
     audio.current?.pause();
     if (audio.current) audio.current.removeAttribute("src");
     active.current = "";
@@ -242,6 +272,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     setQueue([]);
     setCover("");
     setPlaying(false);
+    setLoading(false);
     setProgress({ current: 0, duration: 0 });
   }, []);
 
@@ -271,7 +302,23 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       <audio
         ref={audio}
         preload="none"
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          const current = playingTrack.current;
+          if (!current || recorded.current) return;
+          recorded.current = true;
+          void post("/music/play", {
+            id: current.id,
+            source: current.source,
+            name: current.name,
+            artist: current.artist,
+            album: current.album,
+          })
+            .then(() =>
+              window.dispatchEvent(new CustomEvent("xinxin:music-played")),
+            )
+            .catch(() => {});
+        }}
         onPause={() => setPlaying(false)}
         onEnded={() => {
           setPlaying(false);
@@ -280,7 +327,9 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         onTimeUpdate={(event) =>
           setProgress({
             current: event.currentTarget.currentTime,
-            duration: event.currentTarget.duration || 0,
+            duration: Number.isFinite(event.currentTarget.duration)
+              ? event.currentTarget.duration
+              : 0,
           })
         }
         onError={() => setPlaying(false)}
@@ -318,7 +367,12 @@ export function MiniPlayer() {
       >
         <span className="mini-cover">
           {cover ? (
-            <img src={cover} alt="" referrerPolicy="no-referrer" loading="lazy" />
+            <img
+              src={cover}
+              alt=""
+              referrerPolicy="no-referrer"
+              loading="lazy"
+            />
           ) : (
             <Music2 size={15} />
           )}

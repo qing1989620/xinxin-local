@@ -138,6 +138,7 @@ class QuizAnswer(Input):
 
 class ExplainRequest(Input):
     message: str = Field(default="", max_length=2000)
+    mode: Literal["teacher", "xinxin"] = "teacher"
 
 
 class TrackRef(Input):
@@ -170,7 +171,8 @@ class MusicScore(Input):
 
 
 class MusicSetting(Input):
-    influence: bool
+    influence: bool | None = None
+    influence_level: int | None = Field(default=None, ge=1, le=4, strict=True)
 
 
 class ExecutionInput(Input):
@@ -640,7 +642,10 @@ def create_app(config=None):
 
     @app.put("/api/v1/music/settings", dependencies=[Depends(owner)])
     def music_settings(body: MusicSetting):
-        music.set_influence(store, body.influence)
+        if body.influence is not None:
+            music.set_influence(store, body.influence)
+        if body.influence_level is not None:
+            music.set_influence_level(store, body.influence_level)
         return {"ok": True, "mood": music.current_mood(store)}
 
     @app.get("/api/v1/auth/me", dependencies=[Depends(owner)])
@@ -1444,15 +1449,15 @@ def create_app(config=None):
             raise HTTPException(400, str(error))
 
     @app.get("/api/v1/learning/questions/{question_id}/tutor", dependencies=[Depends(owner)])
-    def learning_tutor_history(question_id: str):
+    def learning_tutor_history(question_id: str, mode: Literal["teacher", "xinxin"] = "teacher"):
         if not store.one("SELECT id FROM questions WHERE id=?", (question_id,)):
             raise HTTPException(404, "题目不存在")
-        return {"history": learning.tutor_history(store, question_id)}
+        return {"history": learning.tutor_history(store, question_id, mode), "mode": mode}
 
     @app.post("/api/v1/learning/questions/{question_id}/explain", dependencies=[Depends(owner)])
     async def learning_explain(question_id: str, body: ExplainRequest):
         try:
-            return await learning.explain(store, model_gateway(), question_id, body.message)
+            return await learning.explain(store, model_gateway(), question_id, body.message, body.mode)
         except ValueError as error:
             raise HTTPException(409, str(error))
 

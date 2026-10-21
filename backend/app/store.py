@@ -106,6 +106,12 @@ class Store:
                 db.execute(
                     "ALTER TABLE music_emotions ADD COLUMN moods TEXT NOT NULL DEFAULT '[]'"
                 )
+            if "mode" not in {
+                row["name"] for row in db.execute("PRAGMA table_info(tutor_messages)")
+            }:
+                db.execute(
+                    "ALTER TABLE tutor_messages ADD COLUMN mode TEXT NOT NULL DEFAULT 'teacher'"
+                )
             if "request_signature" not in {
                 row["name"] for row in db.execute("PRAGMA table_info(runs)")
             }:

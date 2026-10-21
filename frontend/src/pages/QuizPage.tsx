@@ -32,6 +32,8 @@ type Question = {
 
 type Session = {
   id: string;
+  book_id: string | null;
+  chapter_id: string | null;
   title: string;
   total: number;
   answered: number;
@@ -48,6 +50,7 @@ type Feedback = {
 };
 
 type TutorMessage = { role: string; content: string };
+type TutorMode = "teacher" | "xinxin";
 
 const STATUS_TEXT: Record<string, string> = {
   correct: "答对了",
@@ -101,18 +104,73 @@ export default function QuizPage() {
   const [draft, setDraft] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submitBusy = useRef(false);
+  const [reviewing, setReviewing] = useState(false);
+  const restarting = useRef(false);
+  const [restartBusy, setRestartBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorMessage[]>([]);
+  const [tutorMode, setTutorMode] = useState<TutorMode>(() => {
+    try {
+      return localStorage.getItem("xinxin-tutor-mode") === "xinxin"
+        ? "xinxin"
+        : "teacher";
+    } catch {
+      return "teacher";
+    }
+  });
   const [tutorDraft, setTutorDraft] = useState("");
   const [tutorBusy, setTutorBusy] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+  const [historyRetry, setHistoryRetry] = useState(0);
+  const tutorRequest = useRef(0);
+  const tutorInFlight = useRef(false);
   const [canvasExpr, setCanvasExpr] = useState("");
   const logRef = useRef<HTMLUListElement | null>(null);
+  const question = session?.questions[index];
+  const questionId = question?.id || "";
+  const tutorName = tutorMode === "xinxin" ? "Xinxin" : "老师";
+  const contextKey = `${id}:${questionId}:${tutorMode}`;
+  const currentContext = useRef(contextKey);
+  currentContext.current = contextKey;
+  const currentQuestion = useRef({ sessionId: id, questionId });
+  currentQuestion.current = { sessionId: id, questionId };
 
   useEffect(() => {
     if (!source.data) return;
     setSession(source.data.session);
-    const next = source.data.session.questions.findIndex((item) => !item.status);
-    setIndex(next >= 0 ? next : Math.max(0, source.data.session.questions.length - 1));
+    setReviewing(false);
+    const next = source.data.session.questions.findIndex(
+      (item) => !item.status,
+    );
+    const position =
+      next >= 0 ? next : Math.max(0, source.data.session.questions.length - 1);
+    setIndex(position);
+    const initial = source.data.session.questions[position];
+    setDraft(initial?.answered || "");
+    setFeedback(
+      initial?.status
+        ? {
+            status: initial.status,
+            reason: initial.ai_reason,
+            answer: initial.answer || "",
+            explanation: initial.explanation || "",
+          }
+        : null,
+    );
   }, [source.data]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("xinxin-tutor-mode", tutorMode);
+    } catch {
+      /* 可选偏好 */
+    }
+  }, [tutorMode]);
+
+  useEffect(() => {
+    setCanvasExpr("");
+  }, [questionId]);
 
   // 讲解、追问里出现的表达式都收集起来，统一画在右侧画布
   const plotSets = useMemo(() => {
@@ -134,30 +192,43 @@ export default function QuizPage() {
 
   // 换题时把这道题之前的讲解捞回来，离开页面也不丢
   useEffect(() => {
-    const current = session?.questions[index]?.id;
-    if (!current) return;
+    if (!questionId) return;
     let alive = true;
+    const request = ++tutorRequest.current;
+    tutorInFlight.current = false;
+    setTutorBusy(false);
     setTutor([]);
-    void api<{ history: TutorMessage[] }>(`/learning/questions/${current}/tutor`)
+    setTutorDraft("");
+    setHistoryLoading(true);
+    setHistoryError("");
+    void api<{ history: TutorMessage[] }>(
+      `/learning/questions/${questionId}/tutor?mode=${tutorMode}`,
+    )
       .then((value) => {
-        if (alive) setTutor(value.history || []);
+        if (alive && request === tutorRequest.current)
+          setTutor(value.history || []);
       })
-      .catch(() => {
-        // 没有历史就算了
+      .catch((error: Error) => {
+        if (alive && request === tutorRequest.current)
+          setHistoryError(error.message);
+      })
+      .finally(() => {
+        if (alive && request === tutorRequest.current) setHistoryLoading(false);
       });
     return () => {
       alive = false;
     };
-  }, [session, index]);
+  }, [id, questionId, tutorMode, historyRetry]);
 
   useEffect(() => {
     const node = logRef.current;
     if (node) node.scrollTop = node.scrollHeight;
   }, [tutor, tutorBusy]);
 
-  const question = session?.questions[index];
   const finished = Boolean(session && session.answered >= session.total);
-  const score = session ? Math.round((session.correct / Math.max(session.total, 1)) * 100) : 0;
+  const score = session
+    ? Math.round((session.correct / Math.max(session.total, 1)) * 100)
+    : 0;
 
   function pick(value: string) {
     if (feedback) return;
@@ -166,7 +237,14 @@ export default function QuizPage() {
 
   function goNext() {
     if (!session) return;
-    const next = session.questions.findIndex((item, position) => position > index && !item.status);
+    if (finished) {
+      if (index + 1 < session.questions.length) jump(index + 1);
+      else setReviewing(false);
+      return;
+    }
+    const next = session.questions.findIndex(
+      (item, position) => position > index && !item.status,
+    );
     setFeedback(null);
     setDraft("");
     if (next >= 0) setIndex(next);
@@ -195,12 +273,15 @@ export default function QuizPage() {
   }
 
   async function submit() {
-    if (!session || !question || feedback) return;
+    if (!session || !question || feedback || submitBusy.current) return;
     if (!draft.trim()) {
       toast("先写点什么再交", true);
       return;
     }
+    submitBusy.current = true;
     setSubmitting(true);
+    const targetSession = id;
+    const targetQuestion = question.id;
     try {
       const result = await post<{
         status: string;
@@ -212,53 +293,77 @@ export default function QuizPage() {
         question_id: question.id,
         answer: draft,
       });
-      setFeedback({
-        status: result.status,
-        reason: result.reason,
-        answer: result.answer,
-        explanation: result.explanation,
-      });
-      setSession(result.state);
+      if (currentQuestion.current.sessionId === targetSession) {
+        setSession(result.state);
+        if (currentQuestion.current.questionId === targetQuestion) {
+          setFeedback({
+            status: result.status,
+            reason: result.reason,
+            answer: result.answer,
+            explanation: result.explanation,
+          });
+        }
+      }
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitBusy.current = false;
       setSubmitting(false);
     }
   }
 
   async function ask(message = "") {
-    if (!question) return;
+    if (!question || tutorInFlight.current || historyLoading || historyError)
+      return;
     const text = message.trim();
+    const key = contextKey;
+    const request = ++tutorRequest.current;
+    tutorInFlight.current = true;
     setTutorBusy(true);
-    if (text) setTutor((current) => [...current, { role: "user", content: text }]);
     try {
       const result = await post<{ reply: string; history: TutorMessage[] }>(
         `/learning/questions/${question.id}/explain`,
-        { message: text },
+        { message: text, mode: tutorMode },
       );
-      setTutor(result.history);
+      if (currentContext.current === key && request === tutorRequest.current) {
+        setTutor(result.history);
+        setTutorDraft("");
+      }
     } catch (error) {
-      toast((error as Error).message, true);
+      if (currentContext.current === key && request === tutorRequest.current)
+        toast((error as Error).message, true);
     } finally {
-      setTutorBusy(false);
-      setTutorDraft("");
+      if (currentContext.current === key && request === tutorRequest.current) {
+        tutorInFlight.current = false;
+        setTutorBusy(false);
+      }
     }
   }
 
   async function restart() {
-    if (!session) return;
+    if (!session || restarting.current) return;
+    restarting.current = true;
+    setRestartBusy(true);
     try {
-      const created = await post<{ session: { id: string } }>("/learning/quiz", {
-        book_id: session.questions[0] ? undefined : undefined,
-        count: 10,
-      });
+      const created = await post<{ session: { id: string } }>(
+        "/learning/quiz",
+        {
+          book_id: session.book_id || undefined,
+          chapter_id: session.chapter_id || undefined,
+          count: session.total,
+        },
+      );
       navigate(`/learning/quiz/${created.session.id}`);
     } catch (error) {
       toast((error as Error).message, true);
+    } finally {
+      restarting.current = false;
+      setRestartBusy(false);
     }
   }
 
-  if (source.error) return <ErrorState message={source.error} retry={() => source.reload()} />;
+  if (source.error)
+    return <ErrorState message={source.error} retry={() => source.reload()} />;
   if (session && session.questions.length === 0) {
     return (
       <div className="page-enter quiz-page">
@@ -270,7 +375,10 @@ export default function QuizPage() {
           title="这次练习的题目已经不在了"
           description="书本可能被删除了，回书架重新选一章开始练。"
           action={
-            <button className="button primary" onClick={() => navigate("/learning")}>
+            <button
+              className="button primary"
+              onClick={() => navigate("/learning")}
+            >
               回到书架
             </button>
           }
@@ -278,11 +386,13 @@ export default function QuizPage() {
       </div>
     );
   }
-  if (!session || !question) return <Loading />;
+  if (!session || session.id !== id || !question) return <Loading />;
 
-  const wrong = session.questions.filter((item) => item.status === "wrong" || item.status === "partial");
+  const wrong = session.questions.filter(
+    (item) => item.status === "wrong" || item.status === "partial",
+  );
 
-  if (finished && session.answered >= session.total) {
+  if (finished && !reviewing) {
     return (
       <div className="page-enter quiz-page">
         <button className="back-link" onClick={() => navigate("/learning")}>
@@ -303,23 +413,58 @@ export default function QuizPage() {
                 {wrong.map((item) => (
                   <li key={item.id}>
                     <span className={`q-kind kind-${item.kind}`}>
-                      {item.kind === "single" ? "单选" : item.kind === "fill" ? "填空" : "简答"}
+                      {item.kind === "single"
+                        ? "单选"
+                        : item.kind === "fill"
+                          ? "填空"
+                          : "简答"}
                     </span>
                     <div>
                       <MathText text={item.stem} />
-                      <p className="muted">你的作答：{item.answered || "（空）"}</p>
+                      <p className="muted">
+                        你的作答：{item.answered || "（空）"}
+                      </p>
                     </div>
+                    <button
+                      className="button secondary small"
+                      onClick={() => {
+                        setReviewing(true);
+                        jump(
+                          session.questions.findIndex(
+                            (question) => question.id === item.id,
+                          ),
+                        );
+                      }}
+                    >
+                      查看讲解
+                    </button>
                   </li>
                 ))}
               </ul>
             </>
           )}
           <div className="quiz-summary-actions">
-            <button className="button secondary" onClick={() => void restart()}>
+            <button
+              className="button secondary"
+              onClick={() => {
+                setReviewing(true);
+                jump(0);
+              }}
+            >
+              回看题目与讲解
+            </button>
+            <button
+              className="button secondary"
+              onClick={() => void restart()}
+              disabled={restartBusy}
+            >
               <RotateCcw size={15} />
               再来一组
             </button>
-            <button className="button primary" onClick={() => navigate("/learning")}>
+            <button
+              className="button primary"
+              onClick={() => navigate("/learning")}
+            >
               回到书架
             </button>
           </div>
@@ -342,11 +487,23 @@ export default function QuizPage() {
           </div>
         </div>
         <div className="quiz-progress">
+          {finished && (
+            <button
+              className="button secondary small"
+              onClick={() => setReviewing(false)}
+            >
+              查看总结
+            </button>
+          )}
           <span>
             {session.answered} / {session.total}
           </span>
           <div className="quiz-bar">
-            <i style={{ width: `${(session.answered / Math.max(session.total, 1)) * 100}%` }} />
+            <i
+              style={{
+                width: `${(session.answered / Math.max(session.total, 1)) * 100}%`,
+              }}
+            />
           </div>
           <span className="muted">对 {session.correct}</span>
         </div>
@@ -373,9 +530,15 @@ export default function QuizPage() {
           <article className="quiz-card">
             <div className="quiz-meta">
               <span className={`q-kind kind-${question.kind}`}>
-                {question.kind === "single" ? "单选" : question.kind === "fill" ? "填空" : "简答"}
+                {question.kind === "single"
+                  ? "单选"
+                  : question.kind === "fill"
+                    ? "填空"
+                    : "简答"}
               </span>
-              <span className="quiz-difficulty">{"★".repeat(question.difficulty)}</span>
+              <span className="quiz-difficulty">
+                {"★".repeat(question.difficulty)}
+              </span>
               {question.tags.map((tag) => (
                 <span key={tag} className="quiz-tag">
                   {tag}
@@ -392,7 +555,8 @@ export default function QuizPage() {
                 {question.options.map((option) => {
                   const chosen = draft === option.key;
                   const isRight = feedback && option.key === feedback.answer;
-                  const isWrong = feedback && chosen && feedback.status !== "correct";
+                  const isWrong =
+                    feedback && chosen && feedback.status !== "correct";
                   return (
                     <button
                       key={option.key}
@@ -434,13 +598,20 @@ export default function QuizPage() {
             {feedback ? (
               <div className={`quiz-feedback ${feedback.status}`}>
                 <p className="quiz-verdict">
-                  {feedback.status === "correct" ? <Check size={15} /> : <X size={15} />}
+                  {feedback.status === "correct" ? (
+                    <Check size={15} />
+                  ) : (
+                    <X size={15} />
+                  )}
                   {STATUS_TEXT[feedback.status] || "已提交"}
                   {feedback.reason && <em>{feedback.reason}</em>}
                 </p>
                 {question.kind !== "single" && (
                   <p className="quiz-reference">
-                    参考答案：{question.kind === "fill" ? formatFill(feedback.answer) : feedback.answer}
+                    参考答案：
+                    {question.kind === "fill"
+                      ? formatFill(feedback.answer)
+                      : feedback.answer}
                   </p>
                 )}
                 {feedback.explanation && (
@@ -454,18 +625,32 @@ export default function QuizPage() {
             <div className="quiz-actions">
               {feedback ? (
                 <button className="button primary" onClick={goNext}>
-                  下一题
+                  {finished && index + 1 >= session.questions.length
+                    ? "查看总结"
+                    : "下一题"}
                   <ArrowRight size={15} />
                 </button>
               ) : (
-                <button className="button primary" onClick={() => void submit()} disabled={submitting}>
+                <button
+                  className="button primary"
+                  onClick={() => void submit()}
+                  disabled={submitting}
+                >
                   {submitting ? <Loader2 className="spin" size={15} /> : null}
                   提交
                 </button>
               )}
-              <button className="button secondary" onClick={() => void ask()} disabled={tutorBusy}>
-                {tutorBusy ? <Loader2 className="spin" size={15} /> : <GraduationCap size={15} />}
-                让老师讲这道
+              <button
+                className="button secondary"
+                onClick={() => void ask()}
+                disabled={tutorBusy || historyLoading || Boolean(historyError)}
+              >
+                {tutorBusy ? (
+                  <Loader2 className="spin" size={15} />
+                ) : (
+                  <GraduationCap size={15} />
+                )}
+                让{tutorName}讲这道
               </button>
             </div>
           </article>
@@ -475,7 +660,9 @@ export default function QuizPage() {
           <section className="canvas-block">
             <div className="canvas-head">
               <span className="plate-label">画布</span>
-              <span className="muted">{plotSets.length ? "老师的图" : "函数图像"}</span>
+              <span className="muted">
+                {plotSets.length ? "老师的图" : "函数图像"}
+              </span>
             </div>
             {canvasExpr.trim() ? (
               <FunctionPlot
@@ -486,15 +673,24 @@ export default function QuizPage() {
                 height={200}
               />
             ) : plotSets.length ? (
-              plotSets.slice(-1).map((expressions, position) => (
-                <FunctionPlot key={position} expressions={expressions} height={200} />
-              ))
+              plotSets
+                .slice(-1)
+                .map((expressions, position) => (
+                  <FunctionPlot
+                    key={position}
+                    expressions={expressions}
+                    height={200}
+                  />
+                ))
             ) : (
               <p className="canvas-empty">
                 老师讲到函数、图像时，图会画在这里。也可以自己写一个表达式试试。
               </p>
             )}
-            <form className="canvas-input" onSubmit={(event) => event.preventDefault()}>
+            <form
+              className="canvas-input"
+              onSubmit={(event) => event.preventDefault()}
+            >
               <textarea
                 value={canvasExpr}
                 onChange={(event) => setCanvasExpr(event.target.value)}
@@ -519,18 +715,63 @@ export default function QuizPage() {
 
           <section className="tutor-block">
             <div className="tutor-head">
-              <span className="plate-label">老师</span>
-              <span className="muted">讲思路，不直接背答案</span>
+              <div
+                className="tutor-modes"
+                role="group"
+                aria-label="AI 辅导模式"
+              >
+                <button
+                  type="button"
+                  aria-pressed={tutorMode === "teacher"}
+                  onClick={() => setTutorMode("teacher")}
+                >
+                  普通老师
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={tutorMode === "xinxin"}
+                  onClick={() => setTutorMode("xinxin")}
+                >
+                  Xinxin 辅导
+                </button>
+              </div>
+              <span className="muted">
+                {tutorMode === "xinxin"
+                  ? "陪你想，一起把题做懂"
+                  : "讲思路，逐步引导"}
+              </span>
             </div>
-            <ul className="tutor-log" ref={logRef}>
-              {tutor.length === 0 && !tutorBusy && (
-                <li className="tutor-empty">
-                  卡住了就点左边的「让老师讲这道」，老师会在这里一步步讲。
+            <ul
+              className="tutor-log"
+              ref={logRef}
+              aria-label={`${tutorName}的讲解`}
+              aria-busy={tutorBusy || historyLoading}
+            >
+              {historyLoading && <li className="tutor-empty">正在读取讲解…</li>}
+              {historyError && (
+                <li className="tutor-empty" role="alert">
+                  讲解读取失败：{historyError}{" "}
+                  <button
+                    className="button secondary small"
+                    onClick={() => setHistoryRetry((value) => value + 1)}
+                  >
+                    重试
+                  </button>
                 </li>
               )}
+              {tutor.length === 0 &&
+                !tutorBusy &&
+                !historyLoading &&
+                !historyError && (
+                  <li className="tutor-empty">
+                    {tutorMode === "xinxin"
+                      ? "卡住了就叫我呀。我们从切入点开始，一步步把它想清楚。"
+                      : "卡住了就点左边的「让老师讲这道」，老师会在这里一步步讲。"}
+                  </li>
+                )}
               {tutor.map((message, position) => (
                 <li key={position} className={message.role}>
-                  <span>{message.role === "user" ? "你" : "老师"}</span>
+                  <span>{message.role === "user" ? "你" : tutorName}</span>
                   <div>
                     {message.role === "assistant" ? (
                       <RichAnswer text={message.content} />
@@ -542,7 +783,7 @@ export default function QuizPage() {
               ))}
               {tutorBusy && (
                 <li className="assistant">
-                  <span>老师</span>
+                  <span>{tutorName}</span>
                   <div className="muted">正在想…</div>
                 </li>
               )}
@@ -556,11 +797,21 @@ export default function QuizPage() {
             >
               <input
                 value={tutorDraft}
+                disabled={tutorBusy || historyLoading || Boolean(historyError)}
                 onChange={(event) => setTutorDraft(event.target.value)}
                 placeholder="还是不懂？问一句，比如「第二步为什么能这样代换」"
-                aria-label="向老师提问"
+                aria-label={`向${tutorName}提问`}
               />
-              <button className="button primary" disabled={tutorBusy || !tutorDraft.trim()}>
+              <button
+                className="button primary"
+                aria-label="发送追问"
+                disabled={
+                  tutorBusy ||
+                  historyLoading ||
+                  Boolean(historyError) ||
+                  !tutorDraft.trim()
+                }
+              >
                 <Send size={14} />
               </button>
             </form>

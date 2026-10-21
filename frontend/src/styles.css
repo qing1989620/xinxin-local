@@ -2095,7 +2095,9 @@ kbd {
     ),
     url("/textures/auth-ink.jpg");
   background-size: cover, cover;
-  background-position: center, center 32%;
+  background-position:
+    center,
+    center 32%;
   background-repeat: no-repeat;
 }
 /* 画廊式细框：一层几乎看不见的内边线，把"纸面"收成装裱过的展品 */
@@ -3089,7 +3091,9 @@ kbd {
         rgba(247, 245, 239, 0.78) 100%
       ),
       url("/textures/auth-ink.jpg");
-    background-position: center, center 22%;
+    background-position:
+      center,
+      center 22%;
   }
   .auth-editorial::after {
     inset: 12px;
@@ -3535,7 +3539,6 @@ kbd {
   flex-wrap: wrap;
 }
 
-
 /* ============================================================
    背景音乐：唱片内页
    左栏是一条无框检索线 + 编号曲目表，右栏是封套与氛围罗盘。
@@ -3746,15 +3749,16 @@ kbd {
   padding: 12px 6px 12px 0;
   text-align: left;
   border-top: 1px solid var(--line);
-  transition:
-    padding-left 0.24s cubic-bezier(0.2, 0.7, 0.2, 1),
-    background 0.24s ease;
+  transition: background 0.24s ease;
 }
 .track-index li:first-child .track-row {
   border-top: 0;
 }
-.track-row:hover {
-  padding-left: 8px;
+.track-item:hover .track-title,
+.track-item:hover .track-ordinal,
+.track-item:focus-within .track-title,
+.track-item:focus-within .track-ordinal {
+  transform: translateX(6px);
 }
 .track-row:hover .track-title strong {
   color: var(--ink);
@@ -3766,7 +3770,9 @@ kbd {
   letter-spacing: 0.06em;
   color: #a9ada2;
   font-variant-numeric: tabular-nums;
-  transition: color 0.2s ease;
+  transition:
+    color 0.2s ease,
+    transform 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .track-row:hover .track-ordinal,
 .track-row.active .track-ordinal {
@@ -3776,6 +3782,7 @@ kbd {
   display: grid;
   gap: 3px;
   min-width: 0;
+  transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .track-title strong {
   font-size: 13.5px;
@@ -4596,7 +4603,16 @@ kbd {
     padding: 16px;
   }
   .listening {
-    padding-bottom: 78px;
+    padding-bottom: 148px;
+  }
+  .mini-player {
+    left: 12px;
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    width: auto;
+  }
+  .keyboard-open .mini-player {
+    display: none;
   }
   .sleeve-meta h2 {
     font-size: 21px;
@@ -4609,12 +4625,20 @@ kbd {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .track-item:hover .track-title,
+  .track-item:hover .track-ordinal,
+  .track-item:focus-within .track-title,
+  .track-item:focus-within .track-ordinal {
+    transform: none;
+  }
   .equalizer i,
   .sleeve.is-playing .sleeve-vinyl,
   .listening-state.live i {
     animation: none;
   }
   .track-row,
+  .track-title,
+  .track-ordinal,
   .compass-dot,
   .meters dd i,
   .transport-play,
@@ -4791,18 +4815,21 @@ kbd {
   justify-content: center;
   gap: 8px;
   overflow: hidden;
-  background:
-    linear-gradient(
-      148deg,
-      hsl(var(--cover-hue, 150) 30% 93%),
-      hsl(var(--cover-hue, 150) 26% 80%)
-    );
+  background: linear-gradient(
+    148deg,
+    hsl(var(--cover-hue, 150) 30% 93%),
+    hsl(var(--cover-hue, 150) 26% 80%)
+  );
 }
 .shelf-cover::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 45%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.34),
+    transparent 45%
+  );
   pointer-events: none;
 }
 .shelf-spine {
@@ -6227,10 +6254,70 @@ kbd {
 }
 .tutor-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px 6px;
+}
+.tutor-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tutor-modes button {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 11px;
+}
+.tutor-modes button[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.influence-levels {
+  border: 0;
+  margin: 16px 0 8px;
+  padding: 0;
+  min-width: 0;
+}
+.influence-levels legend {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.influence-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.influence-options label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px 3px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.influence-options input {
+  margin: 0;
+  width: 12px;
+  height: 12px;
+  accent-color: var(--accent);
+}
+.influence-options label.selected {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.influence-levels:disabled {
+  opacity: 0.55;
+}
+.influence-levels:disabled label {
+  cursor: default;
 }
 .tutor-log {
   flex: 1;
@@ -6334,8 +6421,20 @@ kbd {
   white-space: nowrap;
 }
 @media (max-width: 1180px) {
+  .main:has(.quiz-shell) {
+    height: auto;
+    max-height: none;
+    min-height: calc(100dvh - 66px);
+    overflow: visible;
+  }
   .quiz-columns {
     grid-template-columns: minmax(0, 1fr);
+    flex: none;
+  }
+  .quiz-main {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
   .quiz-aside {
     position: static;
@@ -6343,6 +6442,17 @@ kbd {
     min-height: 0;
   }
   .tutor-block {
-    min-height: 320px;
+    flex: none;
+    height: clamp(360px, 55dvh, 640px);
+  }
+}
+@media (max-width: 760px) {
+  .main:has(.quiz-shell) {
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
+  }
+  .quiz-top,
+  .quiz-summary-actions,
+  .quiz-wrong li {
+    flex-wrap: wrap;
   }
 }

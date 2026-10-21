@@ -79,6 +79,8 @@ backend/docs/verification/
 **/build/
 **/out/
 **/coverage/
+**/test-results/
+**/playwright-report/
 **/.vite/
 **/.turbo/
 **/.cache/
