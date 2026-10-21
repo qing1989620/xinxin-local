@@ -405,6 +405,8 @@ class NeteaseDirect:
                 "pic_id": str(row["id"]),
                 "lyric_id": str(row["id"]),
                 "source": "netease",
+                # fee=1 会员、4 付费专辑，这类在直连里拿不到播放地址
+                "vip": int(row.get("fee") or 0) in (1, 4),
             }
             track["emotion"] = emotion_for(
                 track["name"], track["artist"], track["album"]
@@ -427,8 +429,9 @@ class NeteaseDirect:
                 f"备用通道取不到播放地址：{type(failure).__name__}"
             ) from None
         target = response.headers.get("location") or ""
-        if not target:
-            raise MusicUnavailable("这首在当前音源没有可播放地址，换一个音源试试")
+        # 会员曲目网易云会给 302 -> /404，别把这个地址塞给 audio
+        if not target or "/404" in target:
+            raise MusicUnavailable("这首需要会员，直连拿不到播放地址；换一首免费的试试")
         # 网易云给的是 http CDN；换成 https 才能在 https 页面里播放
         if target.startswith("http://"):
             target = "https://" + target[len("http://") :]

@@ -32,6 +32,7 @@ type Player = {
   progress: { current: number; duration: number };
   volume: number;
   play: (track: PlayerTrack, list?: PlayerTrack[]) => Promise<void>;
+  prefetch: (track: PlayerTrack) => void;
   playQueue: (list: PlayerTrack[], start?: number) => void;
   next: () => void;
   prev: () => void;
@@ -53,6 +54,8 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const queueRef = useRef<PlayerTrack[]>([]);
+  // 悬停就把播放地址取回来：点击时同步换 src，保留"用户手势"，避免自动播放被拦
+  const urlCache = useRef(new Map<string, string>());
   const positionRef = useRef(0);
   const [cover, setCover] = useState("");
   const [playing, setPlaying] = useState(false);
@@ -96,6 +99,20 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     } else element.pause();
   }, [toast]);
 
+  const prefetch = useCallback((track: PlayerTrack) => {
+    const key = `${track.source}:${track.id}`;
+    if (urlCache.current.has(key)) return;
+    void api<{ url: string }>(
+      `/music/url?id=${encodeURIComponent(track.id)}&source=${track.source}`,
+    )
+      .then((value) => {
+        if (value.url) urlCache.current.set(key, value.url);
+      })
+      .catch(() => {
+        // 预取失败不影响点击后的正常流程
+      });
+  }, []);
+
   const play = useCallback(
     async (next: PlayerTrack, list?: PlayerTrack[]) => {
       const key = `${next.source}:${next.id}`;
@@ -106,6 +123,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
       busy.current = true;
       setLoading(true);
+      const cachedUrl = urlCache.current.get(key);
       if (list && list.length) {
         queueRef.current = list;
         positionRef.current = Math.max(
@@ -119,9 +137,12 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         setQueue([next]);
       }
       try {
-        const result = await api<{ url: string }>(
-          `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
-        );
+        const result = cachedUrl
+          ? { url: cachedUrl }
+          : await api<{ url: string }>(
+              `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
+            );
+        if (!cachedUrl && result.url) urlCache.current.set(key, result.url);
         active.current = key;
         setTrack(next);
         setCover("");
@@ -130,8 +151,14 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           audio.current.src = result.url;
           try {
             await audio.current.play();
-          } catch {
+          } catch (error) {
             // 自动播放被拦时保持暂停状态，等用户点播放键。
+            const name = (error as DOMException)?.name;
+            if (name === "NotAllowedError") {
+              toast("浏览器要求先点一下播放键，再继续", true);
+            } else {
+              toast("这首暂时播不了，换一首试试", true);
+            }
           }
         }
         void post("/music/play", {
@@ -214,6 +241,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         progress,
         volume,
         play,
+        prefetch,
         playQueue,
         next,
         prev,

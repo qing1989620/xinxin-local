@@ -37,7 +37,7 @@ type Emotion = {
   reason?: string;
   source?: string;
 };
-type Track = PlayerTrack & { emotion?: Emotion; favorited?: boolean };
+type Track = PlayerTrack & { emotion?: Emotion; favorited?: boolean; vip?: boolean };
 type Mood = {
   label: string;
   valence: number;
@@ -467,6 +467,8 @@ export default function MusicPage() {
               <button
                 className={`track-row${isCurrent(track) ? " active" : ""}`}
                 onClick={() => void play(track, queue)}
+                onMouseEnter={() => player?.prefetch(track)}
+                onFocus={() => player?.prefetch(track)}
                 aria-current={isCurrent(track) || undefined}
               >
                 <span className="track-ordinal">
@@ -486,6 +488,7 @@ export default function MusicPage() {
                   </small>
                 </span>
                 <span className="track-tags">
+                  {track.vip && <span className="vip-tag">会员</span>}
                   {track.emotion?.moods?.slice(0, 2).map((word) => (
                     <span key={word} className="mood-word">
                       {word}
@@ -619,13 +622,15 @@ export default function MusicPage() {
 
               {fallback && (
                 <p className="source-note">
-                  GD 音乐台暂时不可用，已切到网易云直连；酷我 / QQ / JOOX 要等它恢复。
+                  GD 音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
+                  换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
                 </p>
               )}
 
               {fallback && (
                 <p className="source-note">
-                  GD 音乐台暂时不可用，已切到网易云直连；酷我 / QQ / JOOX 要等它恢复。
+                  GD 音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
+                  换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
                 </p>
               )}
 

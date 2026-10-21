@@ -81,7 +81,11 @@ function RichAnswer({ text }: { text: string }) {
       );
     }
     if (blocks[index]) {
-      nodes.push(<FunctionPlot key={`p-${index}`} expressions={blocks[index]} height={220} />);
+      nodes.push(
+        <p key={`p-${index}`} className="plot-note">
+          图已画在右侧画布
+        </p>,
+      );
     }
   });
   return <>{nodes}</>;
@@ -100,6 +104,7 @@ export default function QuizPage() {
   const [tutor, setTutor] = useState<TutorMessage[]>([]);
   const [tutorDraft, setTutorDraft] = useState("");
   const [tutorBusy, setTutorBusy] = useState(false);
+  const [canvasExpr, setCanvasExpr] = useState("");
 
   useEffect(() => {
     if (!source.data) return;
@@ -107,6 +112,24 @@ export default function QuizPage() {
     const next = source.data.session.questions.findIndex((item) => !item.status);
     setIndex(next >= 0 ? next : Math.max(0, source.data.session.questions.length - 1));
   }, [source.data]);
+
+  // 讲解、追问里出现的表达式都收集起来，统一画在右侧画布
+  const plotSets = useMemo(() => {
+    const found: string[][] = [];
+    const push = (source?: string) => {
+      if (!source) return;
+      const { blocks } = extractPlotBlocks(source);
+      for (const block of blocks) {
+        const key = block.join("|");
+        if (!found.some((item) => item.join("|") === key)) found.push(block);
+      }
+    };
+    push(feedback?.explanation);
+    for (const message of tutor) {
+      if (message.role === "assistant") push(message.content);
+    }
+    return found;
+  }, [feedback, tutor]);
 
   const question = session?.questions[index];
   const finished = Boolean(session && session.answered >= session.total);
@@ -263,7 +286,8 @@ export default function QuizPage() {
   }
 
   return (
-    <div className="page-enter quiz-page">
+    <div className="page-enter quiz-shell">
+      <div className="quiz-main">
       <button className="back-link" onClick={() => navigate("/learning")}>
         <ArrowLeft size={15} />
         书架
@@ -440,6 +464,49 @@ export default function QuizPage() {
           </form>
         </section>
       )}
+      </div>
+
+      <aside className="canvas-panel">
+        <div className="canvas-head">
+          <span className="plate-label">画布</span>
+          <span className="muted">{plotSets.length ? "老师的图" : "函数图像"}</span>
+        </div>
+        {canvasExpr.trim() ? (
+          <FunctionPlot
+            expressions={canvasExpr.split(/[\n;；]+/).map((line) => line.trim()).filter(Boolean)}
+            height={240}
+          />
+        ) : plotSets.length ? (
+          plotSets.slice(-2).map((expressions, position) => (
+            <FunctionPlot key={position} expressions={expressions} height={220} />
+          ))
+        ) : (
+          <p className="canvas-empty">
+            老师讲到函数、图像这件事时，图会画在这里；也可以自己写一个表达式看看。
+          </p>
+        )}
+        <form
+          className="canvas-input"
+          onSubmit={(event) => {
+            event.preventDefault();
+          }}
+        >
+          <textarea
+            value={canvasExpr}
+            onChange={(event) => setCanvasExpr(event.target.value)}
+            placeholder={"自己画：\ny = sin(x)"}
+            aria-label="画布表达式"
+            rows={2}
+            spellCheck={false}
+          />
+          {canvasExpr && (
+            <button type="button" className="row-icon" aria-label="清空" onClick={() => setCanvasExpr("")}>
+              <X size={12} />
+            </button>
+          )}
+        </form>
+        <p className="canvas-hint">每行一个 y = …，最多四条曲线。</p>
+      </aside>
     </div>
   );
 }
