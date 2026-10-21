@@ -58,7 +58,7 @@ $lanIp=if($NoGateway){''}else{Get-LanIp}
 $lanOrigin=if($lanIp){"http://${lanIp}:$GatewayPort"}else{''}
 
 if(Test-Path -LiteralPath $manifestPath){
-  $saved=Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+  $saved=Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
   foreach($entry in $saved.services){
     $existing=Get-Process -Id $entry.id -ErrorAction SilentlyContinue
     if($existing -and $existing.StartTime.ToUniversalTime().Ticks -eq [long]$entry.start_ticks){$script:instances+=$entry}

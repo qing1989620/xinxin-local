@@ -35,12 +35,15 @@ function Test-XinxinManagedPort([int]$ProcessId, [int]$Port) {
   foreach ($listener in $listeners) {
     $ancestor = [int]$listener.OwningProcess
     $visited = @{}
+    $childStarted = $null
     for ($depth = 0; $depth -lt 32 -and $ancestor -gt 0; $depth++) {
       if ($visited.ContainsKey($ancestor)) { break }
       $visited[$ancestor] = $true
       $process = Get-Process -Id $ancestor -ErrorAction SilentlyContinue
       if (-not $process -or $process.StartTime -lt $root.StartTime) { break }
+      if ($childStarted -and $process.StartTime -gt $childStarted) { break }
       if ($ancestor -eq $ProcessId) { return $true }
+      $childStarted = $process.StartTime
       try { $details = Get-CimInstance Win32_Process -Filter "ProcessId=$ancestor" -ErrorAction Stop }
       catch { break }
       if (-not $details) { break }

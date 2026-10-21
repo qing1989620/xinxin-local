@@ -60,7 +60,9 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
         without_port = json.loads(manifest.read_text(encoding="utf-8-sig"))
         for item in without_port["services"]:
             item.pop("port")
-        manifest.write_text(json.dumps(without_port), encoding="utf-8-sig")
+        # UTF-8 without a BOM is also valid; Chinese data paths must not be
+        # interpreted as the Windows ANSI code page by PowerShell 5.1.
+        manifest.write_text(json.dumps(without_port, ensure_ascii=False), encoding="utf-8")
         assert start().returncode == 0
         assert {k: v["id"] for k, v in entries().items()} == {k: v["id"] for k, v in before.items()}
 
