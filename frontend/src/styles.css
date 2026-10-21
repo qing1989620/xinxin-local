@@ -6070,49 +6070,171 @@ kbd {
   }
 }
 
-/* ---- 练习：左侧答题，右侧画布 ---- */
+/* ---- 练习：左边答题，右边画布 + 老师 ---- */
+/* 整页定高：题目列自己滚，右栏始终占满视口高度（和参考项目的 h-full 一个思路） */
+.main:has(.quiz-shell) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 66px);
+  max-height: calc(100dvh - 66px);
+  padding-top: 24px;
+  padding-bottom: 20px;
+  overflow: hidden;
+}
+.workspace:has(.quiz-shell) .workspace-footer {
+  display: none;
+}
 .quiz-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 100%;
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+}
+.quiz-top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.quiz-top-left {
+  min-width: 0;
+}
+.quiz-top-left h1 {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 550;
+  letter-spacing: -0.9px;
+  line-height: 1.25;
+}
+.quiz-top .back-link {
+  margin: 0 0 4px;
+}
+.quiz-columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 366px;
   gap: 30px;
-  align-items: start;
-  max-width: 1140px;
-  margin: 0 auto;
+  align-items: stretch;
+  min-height: 0;
+}
+.quiz-columns {
+  flex: 1;
+  min-height: 0;
 }
 .quiz-main {
   min-width: 0;
-  max-width: 720px;
-  width: 100%;
-  justify-self: center;
+  max-height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
 }
-.canvas-panel {
+.quiz-aside {
   position: sticky;
-  top: 18px;
-  padding: 14px 16px 16px;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.canvas-block,
+.tutor-block {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+.canvas-block {
+  padding: 13px 14px 12px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.tutor-block {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tutor-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 6px;
+}
+.tutor-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 6px 14px 10px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.tutor-log li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.85;
+}
+.tutor-log li > span:first-child {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #a9ada2;
+  padding-top: 3px;
+}
+.tutor-log li.assistant > span:first-child {
+  color: var(--accent);
+}
+.tutor-log .tutor-empty {
+  display: block;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.tutor-input {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+.tutor-input input {
+  flex: 1;
+  min-width: 0;
+}
+.tutor-input .button {
+  min-width: 42px;
+  padding: 0 10px;
 }
 .canvas-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .canvas-empty {
   margin: 0;
-  min-height: 150px;
+  min-height: 118px;
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
   font-size: 11px;
-  line-height: 1.95;
+  line-height: 1.9;
   color: var(--muted);
-  padding-top: 6px;
+  text-align: center;
 }
 .canvas-input {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 .canvas-input textarea {
   flex: 1;
@@ -6135,95 +6257,6 @@ kbd {
   letter-spacing: 0.04em;
   color: var(--accent);
 }
-@media (max-width: 1180px) {
-  .quiz-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .quiz-main {
-    max-width: none;
-  }
-  .canvas-panel {
-    position: static;
-  }
-}
-
-/* ---- 练习：左侧答题，右侧画布 ---- */
-.quiz-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 30px;
-  align-items: start;
-  max-width: 1140px;
-  margin: 0 auto;
-}
-.quiz-main {
-  min-width: 0;
-  max-width: 720px;
-  width: 100%;
-  justify-self: center;
-}
-.canvas-panel {
-  position: sticky;
-  top: 18px;
-  padding: 14px 16px 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-.canvas-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.canvas-empty {
-  margin: 0;
-  min-height: 150px;
-  font-size: 11px;
-  line-height: 1.95;
-  color: var(--muted);
-  padding-top: 6px;
-}
-.canvas-input {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 14px;
-}
-.canvas-input textarea {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 11.5px;
-  line-height: 1.7;
-  border-radius: 6px;
-  resize: none;
-}
-.canvas-hint {
-  margin: 6px 0 0;
-  font-size: 9px;
-  color: #a9ada2;
-}
-.plot-note {
-  margin: 6px 0 0;
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-}
-@media (max-width: 1180px) {
-  .quiz-shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .quiz-main {
-    max-width: none;
-  }
-  .canvas-panel {
-    position: static;
-  }
-}
-
 .vip-tag {
   font-size: 8.5px;
   letter-spacing: 0.06em;
@@ -6233,13 +6266,16 @@ kbd {
   padding: 1px 4px;
   white-space: nowrap;
 }
-
-.vip-tag {
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-  color: #a8553e;
-  border: 1px solid color-mix(in srgb, #a8553e 30%, transparent);
-  border-radius: 2px;
-  padding: 1px 4px;
-  white-space: nowrap;
+@media (max-width: 1180px) {
+  .quiz-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quiz-aside {
+    position: static;
+    height: auto;
+    min-height: 0;
+  }
+  .tutor-block {
+    min-height: 320px;
+  }
 }

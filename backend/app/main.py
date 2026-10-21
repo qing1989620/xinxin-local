@@ -1441,6 +1441,12 @@ def create_app(config=None):
         except ValueError as error:
             raise HTTPException(400, str(error))
 
+    @app.get("/api/v1/learning/questions/{question_id}/tutor", dependencies=[Depends(owner)])
+    def learning_tutor_history(question_id: str):
+        if not store.one("SELECT id FROM questions WHERE id=?", (question_id,)):
+            raise HTTPException(404, "题目不存在")
+        return {"history": learning.tutor_history(store, question_id)}
+
     @app.post("/api/v1/learning/questions/{question_id}/explain", dependencies=[Depends(owner)])
     async def learning_explain(question_id: str, body: ExplainRequest):
         try:

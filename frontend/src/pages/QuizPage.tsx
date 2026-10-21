@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,7 +10,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { post } from "../api";
+import { api, post } from "../api";
 import { ErrorState, Loading, useResource, useToast } from "../ui";
 import { MathText } from "../components/MathText";
 import { FunctionPlot, extractPlotBlocks } from "../components/FunctionPlot";
@@ -105,6 +105,7 @@ export default function QuizPage() {
   const [tutorDraft, setTutorDraft] = useState("");
   const [tutorBusy, setTutorBusy] = useState(false);
   const [canvasExpr, setCanvasExpr] = useState("");
+  const logRef = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     if (!source.data) return;
@@ -130,6 +131,29 @@ export default function QuizPage() {
     }
     return found;
   }, [feedback, tutor]);
+
+  // 换题时把这道题之前的讲解捞回来，离开页面也不丢
+  useEffect(() => {
+    const current = session?.questions[index]?.id;
+    if (!current) return;
+    let alive = true;
+    setTutor([]);
+    void api<{ history: TutorMessage[] }>(`/learning/questions/${current}/tutor`)
+      .then((value) => {
+        if (alive) setTutor(value.history || []);
+      })
+      .catch(() => {
+        // 没有历史就算了
+      });
+    return () => {
+      alive = false;
+    };
+  }, [session, index]);
+
+  useEffect(() => {
+    const node = logRef.current;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, [tutor, tutorBusy]);
 
   const question = session?.questions[index];
   const finished = Boolean(session && session.answered >= session.total);
@@ -287,16 +311,16 @@ export default function QuizPage() {
 
   return (
     <div className="page-enter quiz-shell">
-      <div className="quiz-main">
-      <button className="back-link" onClick={() => navigate("/learning")}>
-        <ArrowLeft size={15} />
-        书架
-      </button>
-
-      <header className="quiz-head">
-        <div>
-          <p className="eyebrow">PRACTICE</p>
-          <h1>{session.title}</h1>
+      <header className="quiz-top">
+        <div className="quiz-top-left">
+          <button className="back-link" onClick={() => navigate("/learning")}>
+            <ArrowLeft size={15} />
+            书架
+          </button>
+          <div>
+            <p className="eyebrow">PRACTICE</p>
+            <h1>{session.title}</h1>
+          </div>
         </div>
         <div className="quiz-progress">
           <span>
@@ -309,204 +333,221 @@ export default function QuizPage() {
         </div>
       </header>
 
-      <nav className="quiz-nav" aria-label="题号">
-        {session.questions.map((item, position) => (
-          <button
-            key={item.id}
-            className={`quiz-dot${position === index ? " current" : ""}${
-              item.status ? ` ${item.status}` : ""
-            }`}
-            onClick={() => jump(position)}
-            aria-label={`第 ${position + 1} 题${item.status ? "，" + (STATUS_TEXT[item.status] || "") : ""}`}
-            aria-current={position === index ? "true" : undefined}
-          >
-            {position + 1}
-          </button>
-        ))}
-      </nav>
+      <div className="quiz-columns">
+        <section className="quiz-main">
+          <nav className="quiz-nav" aria-label="题号">
+            {session.questions.map((item, position) => (
+              <button
+                key={item.id}
+                className={`quiz-dot${position === index ? " current" : ""}${
+                  item.status ? ` ${item.status}` : ""
+                }`}
+                onClick={() => jump(position)}
+                aria-label={`第 ${position + 1} 题${item.status ? "，" + (STATUS_TEXT[item.status] || "") : ""}`}
+                aria-current={position === index ? "true" : undefined}
+              >
+                {position + 1}
+              </button>
+            ))}
+          </nav>
 
-      <article className="quiz-card">
-        <div className="quiz-meta">
-          <span className={`q-kind kind-${question.kind}`}>
-            {question.kind === "single" ? "单选" : question.kind === "fill" ? "填空" : "简答"}
-          </span>
-          <span className="quiz-difficulty">{"★".repeat(question.difficulty)}</span>
-          {question.tags.map((tag) => (
-            <span key={tag} className="quiz-tag">
-              {tag}
-            </span>
-          ))}
-        </div>
+          <article className="quiz-card">
+            <div className="quiz-meta">
+              <span className={`q-kind kind-${question.kind}`}>
+                {question.kind === "single" ? "单选" : question.kind === "fill" ? "填空" : "简答"}
+              </span>
+              <span className="quiz-difficulty">{"★".repeat(question.difficulty)}</span>
+              {question.tags.map((tag) => (
+                <span key={tag} className="quiz-tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
 
-        <div className="quiz-stem">
-          <MathText text={question.stem} />
-        </div>
+            <div className="quiz-stem">
+              <MathText text={question.stem} />
+            </div>
 
-        {question.kind === "single" ? (
-          <div className="quiz-options">
-            {question.options.map((option) => {
-              const chosen = draft === option.key;
-              const isRight = feedback && option.key === feedback.answer;
-              const isWrong = feedback && chosen && feedback.status !== "correct";
-              return (
-                <button
-                  key={option.key}
-                  className={`quiz-option${chosen ? " chosen" : ""}${isRight ? " right" : ""}${isWrong ? " wrong" : ""}`}
-                  onClick={() => pick(option.key)}
+            {question.kind === "single" ? (
+              <div className="quiz-options">
+                {question.options.map((option) => {
+                  const chosen = draft === option.key;
+                  const isRight = feedback && option.key === feedback.answer;
+                  const isWrong = feedback && chosen && feedback.status !== "correct";
+                  return (
+                    <button
+                      key={option.key}
+                      className={`quiz-option${chosen ? " chosen" : ""}${isRight ? " right" : ""}${isWrong ? " wrong" : ""}`}
+                      onClick={() => pick(option.key)}
+                      disabled={Boolean(feedback)}
+                    >
+                      <b>{option.key}</b>
+                      <span>
+                        <MathText text={option.text} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : question.kind === "fill" ? (
+              <div className="quiz-fill">
+                <input
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="多个空用分号或逗号隔开"
                   disabled={Boolean(feedback)}
-                >
-                  <b>{option.key}</b>
-                  <span>
-                    <MathText text={option.text} />
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : question.kind === "fill" ? (
-          <div className="quiz-fill">
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="多个空用分号或逗号隔开"
-              disabled={Boolean(feedback)}
-              aria-label="填空答案"
-            />
-            <p className="hint">例如：第一空；第二空</p>
-          </div>
-        ) : (
-          <textarea
-            className="quiz-short"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="写清关键步骤，判分看的是意思，不是字面"
-            rows={4}
-            disabled={Boolean(feedback)}
-            aria-label="简答"
-          />
-        )}
+                  aria-label="填空答案"
+                />
+                <p className="hint">例如：第一空；第二空</p>
+              </div>
+            ) : (
+              <textarea
+                className="quiz-short"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder="写清关键步骤，判分看的是意思，不是字面"
+                rows={4}
+                disabled={Boolean(feedback)}
+                aria-label="简答"
+              />
+            )}
 
-        {feedback ? (
-          <div className={`quiz-feedback ${feedback.status}`}>
-            <p className="quiz-verdict">
-              {feedback.status === "correct" ? <Check size={15} /> : <X size={15} />}
-              {STATUS_TEXT[feedback.status] || "已提交"}
-              {feedback.reason && <em>{feedback.reason}</em>}
-            </p>
-            {question.kind !== "single" && (
-              <p className="quiz-reference">
-                参考答案：{question.kind === "fill" ? formatFill(feedback.answer) : feedback.answer}
+            {feedback ? (
+              <div className={`quiz-feedback ${feedback.status}`}>
+                <p className="quiz-verdict">
+                  {feedback.status === "correct" ? <Check size={15} /> : <X size={15} />}
+                  {STATUS_TEXT[feedback.status] || "已提交"}
+                  {feedback.reason && <em>{feedback.reason}</em>}
+                </p>
+                {question.kind !== "single" && (
+                  <p className="quiz-reference">
+                    参考答案：{question.kind === "fill" ? formatFill(feedback.answer) : feedback.answer}
+                  </p>
+                )}
+                {feedback.explanation && (
+                  <div className="quiz-explanation">
+                    <RichAnswer text={feedback.explanation} />
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <div className="quiz-actions">
+              {feedback ? (
+                <button className="button primary" onClick={goNext}>
+                  下一题
+                  <ArrowRight size={15} />
+                </button>
+              ) : (
+                <button className="button primary" onClick={() => void submit()} disabled={submitting}>
+                  {submitting ? <Loader2 className="spin" size={15} /> : null}
+                  提交
+                </button>
+              )}
+              <button className="button secondary" onClick={() => void ask()} disabled={tutorBusy}>
+                {tutorBusy ? <Loader2 className="spin" size={15} /> : <GraduationCap size={15} />}
+                让老师讲这道
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <aside className="quiz-aside">
+          <section className="canvas-block">
+            <div className="canvas-head">
+              <span className="plate-label">画布</span>
+              <span className="muted">{plotSets.length ? "老师的图" : "函数图像"}</span>
+            </div>
+            {canvasExpr.trim() ? (
+              <FunctionPlot
+                expressions={canvasExpr
+                  .split(/[\n;；]+/)
+                  .map((line) => line.trim())
+                  .filter(Boolean)}
+                height={200}
+              />
+            ) : plotSets.length ? (
+              plotSets.slice(-1).map((expressions, position) => (
+                <FunctionPlot key={position} expressions={expressions} height={200} />
+              ))
+            ) : (
+              <p className="canvas-empty">
+                老师讲到函数、图像时，图会画在这里。也可以自己写一个表达式试试。
               </p>
             )}
-            {feedback.explanation && (
-              <div className="quiz-explanation">
-                <RichAnswer text={feedback.explanation} />
-              </div>
-            )}
-          </div>
-        ) : null}
+            <form className="canvas-input" onSubmit={(event) => event.preventDefault()}>
+              <textarea
+                value={canvasExpr}
+                onChange={(event) => setCanvasExpr(event.target.value)}
+                placeholder={"自己画：y = sin(x)"}
+                aria-label="画布表达式"
+                rows={2}
+                spellCheck={false}
+              />
+              {canvasExpr && (
+                <button
+                  type="button"
+                  className="row-icon"
+                  aria-label="清空"
+                  onClick={() => setCanvasExpr("")}
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </form>
+            <p className="canvas-hint">每行一个 y = …，最多四条曲线。</p>
+          </section>
 
-        <div className="quiz-actions">
-          {feedback ? (
-            <button className="button primary" onClick={goNext}>
-              下一题
-              <ArrowRight size={15} />
-            </button>
-          ) : (
-            <button className="button primary" onClick={() => void submit()} disabled={submitting}>
-              {submitting ? <Loader2 className="spin" size={15} /> : null}
-              提交
-            </button>
-          )}
-          <button className="button secondary" onClick={() => void ask()} disabled={tutorBusy}>
-            {tutorBusy ? <Loader2 className="spin" size={15} /> : <GraduationCap size={15} />}
-            让老师讲这道
-          </button>
-        </div>
-      </article>
-
-      {(tutor.length > 0 || tutorBusy) && (
-        <section className="tutor">
-          <div className="section-heading">
-            <h2>老师</h2>
-            <span className="muted">讲思路，不直接背答案</span>
-          </div>
-          <ul className="tutor-log">
-            {tutor.map((message, position) => (
-              <li key={position} className={message.role}>
-                <span>{message.role === "user" ? "你" : "老师"}</span>
-                <div>{message.role === "assistant" ? <RichAnswer text={message.content} /> : message.content}</div>
-              </li>
-            ))}
-            {tutorBusy && (
-              <li className="assistant">
-                <span>老师</span>
-                <div className="muted">正在想…</div>
-              </li>
-            )}
-          </ul>
-          <form
-            className="tutor-input"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (tutorDraft.trim()) void ask(tutorDraft);
-            }}
-          >
-            <input
-              value={tutorDraft}
-              onChange={(event) => setTutorDraft(event.target.value)}
-              placeholder="还是不懂，问一句，比如「第二步为什么能这样代换」"
-              aria-label="向老师提问"
-            />
-            <button className="button primary" disabled={tutorBusy || !tutorDraft.trim()}>
-              <Send size={14} />
-            </button>
-          </form>
-        </section>
-      )}
+          <section className="tutor-block">
+            <div className="tutor-head">
+              <span className="plate-label">老师</span>
+              <span className="muted">讲思路，不直接背答案</span>
+            </div>
+            <ul className="tutor-log" ref={logRef}>
+              {tutor.length === 0 && !tutorBusy && (
+                <li className="tutor-empty">
+                  卡住了就点左边的「让老师讲这道」，老师会在这里一步步讲。
+                </li>
+              )}
+              {tutor.map((message, position) => (
+                <li key={position} className={message.role}>
+                  <span>{message.role === "user" ? "你" : "老师"}</span>
+                  <div>
+                    {message.role === "assistant" ? (
+                      <RichAnswer text={message.content} />
+                    ) : (
+                      message.content
+                    )}
+                  </div>
+                </li>
+              ))}
+              {tutorBusy && (
+                <li className="assistant">
+                  <span>老师</span>
+                  <div className="muted">正在想…</div>
+                </li>
+              )}
+            </ul>
+            <form
+              className="tutor-input"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (tutorDraft.trim()) void ask(tutorDraft);
+              }}
+            >
+              <input
+                value={tutorDraft}
+                onChange={(event) => setTutorDraft(event.target.value)}
+                placeholder="还是不懂？问一句，比如「第二步为什么能这样代换」"
+                aria-label="向老师提问"
+              />
+              <button className="button primary" disabled={tutorBusy || !tutorDraft.trim()}>
+                <Send size={14} />
+              </button>
+            </form>
+          </section>
+        </aside>
       </div>
-
-      <aside className="canvas-panel">
-        <div className="canvas-head">
-          <span className="plate-label">画布</span>
-          <span className="muted">{plotSets.length ? "老师的图" : "函数图像"}</span>
-        </div>
-        {canvasExpr.trim() ? (
-          <FunctionPlot
-            expressions={canvasExpr.split(/[\n;；]+/).map((line) => line.trim()).filter(Boolean)}
-            height={240}
-          />
-        ) : plotSets.length ? (
-          plotSets.slice(-2).map((expressions, position) => (
-            <FunctionPlot key={position} expressions={expressions} height={220} />
-          ))
-        ) : (
-          <p className="canvas-empty">
-            老师讲到函数、图像这件事时，图会画在这里；也可以自己写一个表达式看看。
-          </p>
-        )}
-        <form
-          className="canvas-input"
-          onSubmit={(event) => {
-            event.preventDefault();
-          }}
-        >
-          <textarea
-            value={canvasExpr}
-            onChange={(event) => setCanvasExpr(event.target.value)}
-            placeholder={"自己画：\ny = sin(x)"}
-            aria-label="画布表达式"
-            rows={2}
-            spellCheck={false}
-          />
-          {canvasExpr && (
-            <button type="button" className="row-icon" aria-label="清空" onClick={() => setCanvasExpr("")}>
-              <X size={12} />
-            </button>
-          )}
-        </form>
-        <p className="canvas-hint">每行一个 y = …，最多四条曲线。</p>
-      </aside>
     </div>
   );
 }

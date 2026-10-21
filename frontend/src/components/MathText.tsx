@@ -58,6 +58,24 @@ function splitMath(source: string): Part[] {
 
   while (index < source.length) {
     const char = source[index];
+    // 模型常把公式写成 \[ ... \] / \( ... \)，和 $...$ 等价处理
+    if (char === "\\" && (source[index + 1] === "[" || source[index + 1] === "(")) {
+      const display = source[index + 1] === "[";
+      const close = display ? "\\]" : "\\)";
+      const start = index + 2;
+      const end = source.indexOf(close, start);
+      if (end > start) {
+        flush();
+        parts.push({
+          kind: "tex",
+          value: source.slice(start, end),
+          display,
+          raw: source.slice(index, end + 2),
+        });
+        index = end + 2;
+        continue;
+      }
+    }
     if (char !== "$") {
       buffer += char;
       index += 1;
