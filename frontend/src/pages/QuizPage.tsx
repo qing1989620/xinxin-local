@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { api, post } from "../api";
-import { ErrorState, Loading, useResource, useToast } from "../ui";
+import { Empty, ErrorState, Loading, useResource, useToast } from "../ui";
 import { MathText } from "../components/MathText";
 import { FunctionPlot, extractPlotBlocks } from "../components/FunctionPlot";
 
@@ -259,6 +259,25 @@ export default function QuizPage() {
   }
 
   if (source.error) return <ErrorState message={source.error} retry={() => source.reload()} />;
+  if (session && session.questions.length === 0) {
+    return (
+      <div className="page-enter quiz-page">
+        <button className="back-link" onClick={() => navigate("/learning")}>
+          <ArrowLeft size={15} />
+          书架
+        </button>
+        <Empty
+          title="这次练习的题目已经不在了"
+          description="书本可能被删除了，回书架重新选一章开始练。"
+          action={
+            <button className="button primary" onClick={() => navigate("/learning")}>
+              回到书架
+            </button>
+          }
+        />
+      </div>
+    );
+  }
   if (!session || !question) return <Loading />;
 
   const wrong = session.questions.filter((item) => item.status === "wrong" || item.status === "partial");

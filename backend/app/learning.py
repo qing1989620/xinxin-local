@@ -249,6 +249,12 @@ def delete_book(store, book_id: str) -> dict:
         (book_id,),
     )
     store.execute("DELETE FROM tutor_messages WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)", (book_id,))
+    store.execute(
+        "DELETE FROM quiz_answers WHERE session_id IN"
+        " (SELECT id FROM quiz_sessions WHERE book_id=?)",
+        (book_id,),
+    )
+    store.execute("DELETE FROM quiz_sessions WHERE book_id=?", (book_id,))
     store.execute("DELETE FROM questions WHERE book_id=?", (book_id,))
     store.execute("DELETE FROM book_chapters WHERE book_id=?", (book_id,))
     store.execute("DELETE FROM books WHERE id=?", (book_id,))
@@ -312,6 +318,8 @@ async def generate_questions(
         temperature=0.4,
     )
     rows = _json_array(str(message.get("content") or ""))
+    if not rows:
+        raise ValueError("模型这次没返回可解析的题目，再点一次试试")
     created, skipped = [], 0
     for row in rows[: max(1, count) * 2]:
         kind = str(row.get("kind") or "").strip()
@@ -460,7 +468,10 @@ def start_quiz(
     now = int(time.time())
     title = "随机练习"
     if chapter_id:
-        title = chapter(store, chapter_id)["title"]
+        row = chapter(store, chapter_id)
+        title = row["title"]
+        # 按章节开始时也要记住它属于哪本书，删书时才能一起清掉
+        book_id = book_id or row["book_id"]
     elif book_id:
         title = store.one("SELECT title FROM books WHERE id=?", (book_id,))["title"]
     store.execute(
@@ -494,11 +505,13 @@ def quiz_state(store, session_id: str) -> dict:
     }
     questions = []
     for row in rows:
-        item = format_question(row)
+        record = answers.get(row["id"])
+        # 没作答的题不能把答案发出去，否则接口层面就泄题了
+        item = format_question(row, reveal=record is not None)
         item["position"] = row["position"]
-        item["answered"] = answers.get(row["id"], {}).get("answer")
-        item["status"] = answers.get(row["id"], {}).get("status")
-        item["ai_reason"] = answers.get(row["id"], {}).get("ai_reason", "")
+        item["answered"] = record.get("answer") if record else None
+        item["status"] = record.get("status") if record else None
+        item["ai_reason"] = record.get("ai_reason", "") if record else ""
         questions.append(item)
     answered = sum(1 for item in questions if item["status"])
     correct = sum(1 for item in questions if item["status"] == "correct")
@@ -507,7 +520,7 @@ def quiz_state(store, session_id: str) -> dict:
         "title": session["title"],
         "book_id": session["book_id"],
         "chapter_id": session["chapter_id"],
-        "total": session["total"],
+        "total": len(questions),
         "answered": answered,
         "correct": correct,
         "status": session["status"],

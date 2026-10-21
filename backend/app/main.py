@@ -1356,6 +1356,8 @@ def create_app(config=None):
         if not data.get("text"):
             try:
                 data["text"] = library.extract(data["name"], library.path(file_id).read_bytes())
+            except ValueError:
+                raise HTTPException(404, "这份文件已经不在资料库里了")
             except Exception:
                 data["text"] = ""
         return data

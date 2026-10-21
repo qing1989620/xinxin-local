@@ -289,3 +289,63 @@ def test_stats_and_delete_cascade(tmp_path):
     assert client.delete(f"/api/v1/learning/books/{book['id']}").status_code == 200
     assert client.get("/api/v1/learning/books").json()["books"] == []
     assert client.get("/api/v1/learning/stats").json()["questions"] == 0
+
+
+def test_quiz_state_hides_answers_until_answered(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-learning-key"})
+    app.state.manager.model_transport = mock_model(QUESTIONS)
+    book = add_book(client)
+    chapter_id = book["chapters"][1]["id"]
+    client.post(
+        f"/api/v1/learning/books/{book['id']}/questions",
+        json={"chapter_id": chapter_id, "count": 4},
+    )
+    session = client.post("/api/v1/learning/quiz", json={"chapter_id": chapter_id}).json()["session"]
+    # 没作答之前，接口不能把答案和解析发出来
+    for item in session["questions"]:
+        assert "answer" not in item and "explanation" not in item
+
+    target = session["questions"][0]
+    answered = client.post(
+        f"/api/v1/learning/quiz/{session['id']}/answer",
+        json={"question_id": target["id"], "answer": "A"},
+    ).json()
+    state = answered["state"]
+    first = next(item for item in state["questions"] if item["id"] == target["id"])
+    assert first["answer"] and "explanation" in first
+    rest = [item for item in state["questions"] if item["id"] != target["id"]]
+    assert rest and all("answer" not in item for item in rest)
+
+
+def test_delete_book_removes_its_sessions(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-learning-key"})
+    app.state.manager.model_transport = mock_model(QUESTIONS)
+    book = add_book(client)
+    chapter_id = book["chapters"][1]["id"]
+    client.post(
+        f"/api/v1/learning/books/{book['id']}/questions",
+        json={"chapter_id": chapter_id, "count": 4},
+    )
+    client.post("/api/v1/learning/quiz", json={"chapter_id": chapter_id})
+    assert client.get("/api/v1/learning/stats").json()["recent"]
+
+    client.delete(f"/api/v1/learning/books/{book['id']}")
+    stats = client.get("/api/v1/learning/stats").json()
+    assert stats["recent"] == []
+    assert stats["books"] == 0
+
+
+def test_generate_reports_unparseable_model_output(tmp_path):
+    app, client = setup(tmp_path)
+    client.put("/api/v1/settings", json={"model_api_key": "offline-learning-key"})
+    book = add_book(client)
+    chapter_id = book["chapters"][1]["id"]
+    app.state.manager.model_transport = mock_model("抱歉，我这次没有出题。")
+    response = client.post(
+        f"/api/v1/learning/books/{book['id']}/questions",
+        json={"chapter_id": chapter_id, "count": 3},
+    )
+    assert response.status_code == 409
+    assert "没返回可解析的题目" in response.json()["detail"]

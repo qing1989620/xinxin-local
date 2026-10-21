@@ -152,10 +152,25 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           try {
             await audio.current.play();
           } catch (error) {
-            // 自动播放被拦时保持暂停状态，等用户点播放键。
             const name = (error as DOMException)?.name;
             if (name === "NotAllowedError") {
+              // 自动播放被拦时保持暂停状态，等用户点播放键。
               toast("浏览器要求先点一下播放键，再继续", true);
+            } else if (cachedUrl) {
+              // 预取的地址可能过期，丢掉重取一次再试
+              urlCache.current.delete(key);
+              try {
+                const fresh = await api<{ url: string }>(
+                  `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
+                );
+                if (fresh.url && audio.current) {
+                  urlCache.current.set(key, fresh.url);
+                  audio.current.src = fresh.url;
+                  await audio.current.play();
+                }
+              } catch {
+                toast("这首暂时播不了，换一首试试", true);
+              }
             } else {
               toast("这首暂时播不了，换一首试试", true);
             }
