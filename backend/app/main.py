@@ -39,6 +39,7 @@ from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
 from .skills import SkillRouter
+from .skill_trace import with_skill_traces
 from .store import Store, encode, now, uid
 from .runtime import source_fingerprint
 from .uploads import UploadGuard, finish_upload
@@ -757,10 +758,10 @@ def create_app(config=None):
                 "ON mr.message_id=m.id WHERE m.conversation_id=? ORDER BY m.created,m.rowid",
                 (ident,),
             ),
-            "runs": store.all(
+            "runs": with_skill_traces(store, store.all(
                 "SELECT * FROM runs WHERE conversation_id=? ORDER BY created DESC",
                 (ident,),
-            ),
+            )),
         }
 
     @app.put("/api/v1/conversations/{ident}/context", dependencies=[Depends(owner)])
@@ -881,7 +882,7 @@ def create_app(config=None):
     @app.get("/api/v1/runs/{ident}", dependencies=[Depends(owner)])
     def run_detail(ident: str):
         return {
-            **require_row("runs", ident),
+            **with_skill_traces(store, [require_row("runs", ident)])[0],
             "files": [
                 library.get(row["id"])
                 for row in store.all("SELECT id FROM files WHERE run_id=?", (ident,))

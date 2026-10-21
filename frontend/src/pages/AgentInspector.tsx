@@ -71,7 +71,7 @@ export default function AgentInspector({
   } catch {
     /* Older interrupted records may omit usage. */
   }
-  const selection = events.find((event) => event.kind === "skills")?.data,
+  const selection = [...events].reverse().find((event) => event.kind === "skills")?.data,
     usage =
       [...events].reverse().find((event) => event.kind === "usage")?.data ||
       storedUsage;

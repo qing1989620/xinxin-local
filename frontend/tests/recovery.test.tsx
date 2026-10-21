@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import RunFailureNotice, {
   failureReason,
@@ -7,6 +7,7 @@ import RunFailureNotice, {
 import MemoryGrant from "../src/pages/MemoryGrant";
 import AgentActivity, { activityEvents } from "../src/pages/AgentActivity";
 import type { EventItem, Run } from "../src/api";
+vi.mock("../src/api", () => ({ api: vi.fn() }));
 
 const run = {
   status: "failed",

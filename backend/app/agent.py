@@ -24,6 +24,7 @@ from .music import atmosphere as music_atmosphere
 from .progress import ProgressNarrator
 from .store import clean_text, encode, now, uid
 from .creative import plot_csv, transform_image, gallery
+from .skill_trace import skill_evidence
 
 sys.path.insert(0, str(ROOT / "vendor"))
 from tina import Agent, Tools, AgentEvents
@@ -834,14 +835,16 @@ class TaskManager:
                         return name, arguments
 
                     def after(name, arguments, result):
-                        progress.after(name, name not in tools.tools_executor.unresolved, result)
+                        ok = name not in tools.tools_executor.unresolved
+                        progress.after(name, ok, result)
                         self.store.event(
                             ident,
                             "tool.completed",
                             {
                                 "name": name,
                                 "result": self.redact(result),
-                                "ok": name not in tools.tools_executor.unresolved,
+                                "ok": ok,
+                                "skill_evidence": skill_evidence(name, arguments, matches, ok),
                             },
                         )
                         return name, arguments, result

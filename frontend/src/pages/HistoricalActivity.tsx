@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type EventItem, type Run } from "../api";
 import AgentActivity from "./AgentActivity";
+import SkillNetTrace from "./SkillNetTrace";
 
 export default function HistoricalActivity({ run }: { run: Run }) {
   const [events, setEvents] = useState<EventItem[] | null>(null);
@@ -19,23 +20,28 @@ export default function HistoricalActivity({ run }: { run: Run }) {
     }
   }
   return (
-    <details
-      className="historical-activity"
-      onToggle={(event) => {
-        if (event.currentTarget.open) void load();
-      }}
-    >
-      <summary>查看这轮执行过程与中间进度</summary>
-      {loading && <p role="status">正在读取已保存的过程…</p>}
-      {error && (
-        <p role="alert">
-          {error}
-          <button className="text-button" onClick={() => void load()}>
-            重试
-          </button>
-        </p>
-      )}
-      {events && <AgentActivity run={run} events={events} />}
-    </details>
+    <>
+      <SkillNetTrace run={run} />
+      <details
+        className="historical-activity"
+        onToggle={(event) => {
+          if (event.currentTarget.open) void load();
+        }}
+      >
+        <summary>查看这轮执行过程与中间进度</summary>
+        {loading && <p role="status">正在读取已保存的过程…</p>}
+        {error && (
+          <p role="alert">
+            {error}
+            <button className="text-button" onClick={() => void load()}>
+              重试
+            </button>
+          </p>
+        )}
+        {events && (
+          <AgentActivity run={run} events={events} showSkills={false} />
+        )}
+      </details>
+    </>
   );
 }

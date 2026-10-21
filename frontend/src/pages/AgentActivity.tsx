@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { EventItem, Run } from "../api";
+import SkillNetTrace from "./SkillNetTrace";
 
 const names: Record<string, string> = {
   execute_command: "主机终端",
@@ -54,9 +55,11 @@ export function activityEvents(events: EventItem[]) {
 export default function AgentActivity({
   run,
   events,
+  showSkills = true,
 }: {
   run: Run;
   events: EventItem[];
+  showSkills?: boolean;
 }) {
   const visible = activityEvents(events);
   const stopping = run.status === "cancelling";
@@ -76,6 +79,7 @@ export default function AgentActivity({
                   : "本轮已结束"}
         </span>
       </header>
+      {showSkills && <SkillNetTrace run={run} events={events} />}
       {stopping && (
         <p className="activity-stopping" role="status">
           已收到停止请求，正在结束命令并确认远端状态。已创建的文件和已启动的独立服务不会自动回滚。

@@ -1,5 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
+import type { SkillTrace } from "./skillTrace";
 
 export type FileItem = {
   id: string;
@@ -30,6 +31,7 @@ export type Run = {
   context_window_tokens?: number | null;
   allow_memory?: boolean | number;
   resume_of?: string | null;
+  skillnet?: SkillTrace | null;
 };
 export type RecordItem = {
   id: string;
