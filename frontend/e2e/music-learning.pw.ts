@@ -76,11 +76,21 @@ async function mockWorkspace(page: Page) {
   await page.addInitScript(() => {
     sessionStorage.setItem("xinxin-session", "synthetic-browser-session");
     (window as any).__audioReject = false;
+    (window as any).__audioFailAfterPlay = false;
     HTMLMediaElement.prototype.play = async function () {
       if ((window as any).__audioReject)
         throw new DOMException("synthetic failure", "NotSupportedError");
       (this as any).__testPlaying = true;
       this.dispatchEvent(new Event("play"));
+      if ((window as any).__audioFailAfterPlay) {
+        (this as any).__testPlaying = false;
+        this.dispatchEvent(new Event("error"));
+        throw new DOMException(
+          "synthetic buffering failure",
+          "NotSupportedError",
+        );
+      }
+      this.dispatchEvent(new Event("playing"));
     };
     HTMLMediaElement.prototype.pause = function () {
       (this as any).__testPlaying = false;
@@ -140,7 +150,7 @@ async function mockWorkspace(page: Page) {
         tlyric: "",
       });
     if (path === "/music/play") {
-      state.plays.push(body);
+      state.plays.push({ ...body, created: Date.now() / 1000 });
       return send({ ok: true });
     }
     if (path === "/music/favorites") {
@@ -364,6 +374,74 @@ test("暂停后恢复不重复记录同一首播放", async ({ page, mock }) => 
   await page.locator(".transport-play").click();
   await page.locator(".transport-play").click();
   expect(mock.plays).toHaveLength(1);
+});
+
+test("触发 play 后缓冲失败但未 playing 时不记情绪", async ({ page, mock }) => {
+  await search(page);
+  await page.evaluate(() => {
+    (window as any).__audioFailAfterPlay = true;
+  });
+  await page.locator(".track-row").first().click();
+  await expect(page.getByRole("alert")).toContainText("暂时播不了");
+  expect(mock.plays).toHaveLength(0);
+});
+
+for (const control of ["当前曲目", "播放键"]) {
+  test(`等待取链时用${control}暂停会取消待播放曲目`, async ({ page, mock }) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/v1/music/url?*", async (route) => {
+      if (new URL(route.request().url()).searchParams.get("id") !== "2")
+        return route.fallback();
+      await gate;
+      return route.fulfill({
+        json: {
+          url: "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=",
+        },
+      });
+    });
+    await search(page);
+    await page.locator(".track-row").first().click();
+    await expect.poll(() => mock.plays.length).toBe(1);
+    await page.locator(".track-row").nth(1).click();
+    if (control === "当前曲目")
+      await page.locator(".track-row").first().click();
+    else await page.locator(".transport-play").click();
+    release();
+    await page.waitForTimeout(250);
+    await expect(page.locator(".sleeve h2")).toHaveText("合成晴天");
+    await expect(page.locator(".transport-play")).toHaveAttribute(
+      "aria-label",
+      "播放",
+    );
+    await expect(page.locator(".track-loading")).toHaveCount(0);
+    expect(mock.plays.map((track) => track.id)).toEqual(["1"]);
+  });
+}
+
+test("当前曲目在收藏开头时播放全部会更新队列并继续播放", async ({
+  page,
+  mock,
+}) => {
+  mock.favorites = [tracks[0], tracks[2]];
+  await search(page);
+  await page.locator(".track-row").first().click();
+  await expect.poll(() => mock.plays.length).toBe(1);
+  await page.getByRole("tab", { name: /收藏/ }).click();
+  await page.getByRole("button", { name: "播放全部", exact: true }).click();
+  await expect(page.locator(".transport-play")).toHaveAttribute(
+    "aria-label",
+    "暂停",
+  );
+  await page
+    .locator("audio")
+    .evaluate((audio) => audio.dispatchEvent(new Event("ended")));
+  await expect(page.locator(".sleeve h2")).toHaveText("合成远方");
+  await expect
+    .poll(() => mock.plays.map((track) => track.id))
+    .toEqual(["1", "3"]);
 });
 
 test("快速切歌时较早的取链结果不会覆盖新歌曲", async ({ page, mock }) => {

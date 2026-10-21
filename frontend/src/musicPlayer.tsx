@@ -105,13 +105,17 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toggle = useCallback(async () => {
+    // 暂停/恢复是新的播放意图，也要取消尚未返回的换歌请求。
+    const generation = ++request.current;
+    setLoading(false);
     const element = audio.current;
     if (!element) return;
     if (element.paused) {
       try {
         await element.play();
       } catch {
-        toast("浏览器阻止了播放，再点一次播放键", true);
+        if (generation === request.current)
+          toast("浏览器阻止了播放，再点一次播放键", true);
       }
     } else element.pause();
   }, [toast]);
@@ -154,20 +158,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const play = useCallback(
-    async (next: PlayerTrack, list?: PlayerTrack[]) => {
+    async (next: PlayerTrack, list?: PlayerTrack[], ensurePlaying = false) => {
       const key = `${next.source}:${next.id}`;
       const generation = ++request.current;
-      if (active.current === key && audio.current?.src) {
-        setLoading(false);
-        await toggle();
-        return;
-      }
-      setLoading(true);
-      const cached = urlCache.current.get(key);
-      const cachedUrl = cached && cached.expires > Date.now() ? cached.url : "";
-      try {
-        const result = cachedUrl ? { url: cachedUrl } : await resolveUrl(next);
-        if (generation !== request.current) return;
+      const updateQueue = () => {
         const existing = queueRef.current;
         const selected = list?.length
           ? list
@@ -184,6 +178,20 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           ),
         );
         setQueue(selected);
+      };
+      if (active.current === key && audio.current?.src) {
+        updateQueue();
+        setLoading(false);
+        if (!ensurePlaying || audio.current.paused) await toggle();
+        return;
+      }
+      setLoading(true);
+      const cached = urlCache.current.get(key);
+      const cachedUrl = cached && cached.expires > Date.now() ? cached.url : "";
+      try {
+        const result = cachedUrl ? { url: cachedUrl } : await resolveUrl(next);
+        if (generation !== request.current) return;
+        updateQueue();
         active.current = key;
         playingTrack.current = next;
         recorded.current = false;
@@ -254,7 +262,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     (list: PlayerTrack[], start = 0) => {
       if (!list.length) return;
       const index = Math.max(0, Math.min(start, list.length - 1));
-      void play(list[index], list);
+      void play(list[index], list, true);
     },
     [play],
   );
@@ -302,7 +310,7 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       <audio
         ref={audio}
         preload="none"
-        onPlay={() => {
+        onPlaying={() => {
           setPlaying(true);
           const current = playingTrack.current;
           if (!current || recorded.current) return;

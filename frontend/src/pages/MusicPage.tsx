@@ -451,13 +451,6 @@ export default function MusicPage() {
     if (!player) return;
     const generation = ++playRequest.current;
     const key = trackKey(track);
-    if (
-      player.track?.id === track.id &&
-      player.track?.source === track.source
-    ) {
-      await player.toggle();
-      return;
-    }
     setPending(key);
     try {
       await player.play(track, list);
