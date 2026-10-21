@@ -1172,12 +1172,14 @@ export function ToolsPage() {
           }}
         >
           <div className="tool-visual chart-visual" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
+            <div className="chart-bars">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
           </div>
           <div className="tool-card-body">
             <span className="eyebrow">01 / DATA & FIGURE</span>

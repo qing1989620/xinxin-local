@@ -1721,10 +1721,8 @@ kbd {
   background: #ebece3;
 }
 .chart-visual {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  padding: 60px 25px 55px;
+  display: block;
+  padding: 0;
 }
 .chart-visual:after {
   content: "";
@@ -1735,28 +1733,38 @@ kbd {
   height: 1px;
   background: #c7cec0;
 }
-.chart-visual span {
+/* 柱子用百分比高度，必须挂在高度确定的容器上：
+   .tool-visual 只有 min-height（height:auto），直接放柱子时
+   36%/60% 不解析、柱子高度为 0（卡片看起来是空白的）。 */
+.chart-bars {
+  position: absolute;
+  inset: 60px 25px 55px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.chart-bars span {
   flex: 1;
   background: var(--accent);
   opacity: 0.75;
   height: 36%;
   border-radius: 2px 2px 0 0;
 }
-.chart-visual span:nth-child(2) {
+.chart-bars span:nth-child(2) {
   height: 60%;
   opacity: 0.4;
 }
-.chart-visual span:nth-child(3) {
+.chart-bars span:nth-child(3) {
   height: 45%;
 }
-.chart-visual span:nth-child(4) {
+.chart-bars span:nth-child(4) {
   height: 82%;
   opacity: 0.4;
 }
-.chart-visual span:nth-child(5) {
+.chart-bars span:nth-child(5) {
   height: 67%;
 }
-.chart-visual span:nth-child(6) {
+.chart-bars span:nth-child(6) {
   height: 100%;
   opacity: 0.5;
 }
@@ -3594,7 +3602,7 @@ kbd {
 }
 .listening-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 296px 300px;
+  grid-template-columns: minmax(0, 1fr) 626px;
   gap: 30px;
   align-items: start;
 }
@@ -3877,8 +3885,13 @@ kbd {
 }
 
 /* ---------- 右栏 ---------- */
+/* 真实栅格（不再 display:contents）：封面在左列、氛围在右列，
+   歌词面板横跨两列放在下方，给歌词一个能看清的窗口。 */
 .listening-room {
-  display: contents;
+  display: grid;
+  grid-template-columns: 296px 300px;
+  gap: 28px 30px;
+  align-content: start;
 }
 .sleeve {
   position: relative;
@@ -3991,6 +4004,30 @@ kbd {
 }
 .sleeve-meta {
   margin-bottom: 16px;
+}
+.sleeve-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sleeve-like {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #a9ada2;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+.sleeve-like:hover {
+  background: var(--line);
+  color: var(--ink);
+}
+.sleeve-like.liked {
+  color: var(--danger);
 }
 .sleeve-kicker {
   margin: 0 0 8px;
@@ -4114,28 +4151,58 @@ kbd {
   border-radius: 50%;
   background: var(--muted);
 }
-.lyric {
-  font-size: 10.5px;
+/* 歌词面板：横跨右栏两列，字号、行距都按“能读”设计 */
+.lyric-plate {
+  grid-column: 1 / -1;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.lyric-plate-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.lyric-plate-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -0.3px;
+}
+.lyric-plate-head .plate-label {
+  flex-shrink: 0;
+}
+.lyric-roll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 14px 4px 2px;
+  scrollbar-width: thin;
+}
+.lyric-roll p {
+  margin: 0 0 11px;
+  font-size: 13.5px;
+  line-height: 1.85;
   color: var(--muted);
+  transition:
+    color 0.18s ease,
+    transform 0.18s ease;
 }
-.lyric summary {
-  cursor: pointer;
-  list-style: none;
-  color: #8b9288;
-}
-.lyric summary::-webkit-details-marker {
-  display: none;
-}
-.lyric summary:hover {
+.lyric-roll p.is-active {
   color: var(--ink);
+  font-weight: 550;
+  transform: translateX(4px);
 }
-.lyric pre {
-  margin: 10px 0 0;
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-  line-height: 1.9;
-  color: #7d857c;
+.lyric-roll p .trans {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 400;
+  color: #a9ada2;
+}
+.lyric-empty {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  color: #a9ada2;
 }
 .sleeve-empty {
   padding-top: 2px;
@@ -4466,12 +4533,12 @@ kbd {
   .sleeve-art {
     max-width: 232px;
   }
-  .sleeve-art {
-    max-width: 232px;
-  }
   .listening-room {
-    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 26px;
+  }
+  .lyric-plate {
+    grid-column: 1;
   }
   .mood-plate {
     padding-top: 16px;
@@ -4487,6 +4554,9 @@ kbd {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 30px;
     align-items: start;
+  }
+  .lyric-plate {
+    grid-column: 1 / -1;
   }
   .mood-plate {
     padding-top: 0;
@@ -4528,9 +4598,6 @@ kbd {
   .listening {
     padding-bottom: 78px;
   }
-  .listening {
-    padding-bottom: 78px;
-  }
   .sleeve-meta h2 {
     font-size: 21px;
   }
@@ -4562,7 +4629,7 @@ kbd {
 .search-clear:focus-visible,
 .transport-play:focus-visible,
 .switch:focus-visible,
-.lyric summary:focus-visible,
+.sleeve-like:focus-visible,
 .link-quiet:focus-visible,
 .mini-open:focus-visible,
 .mini-toggle:focus-visible,
