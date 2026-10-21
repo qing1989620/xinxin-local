@@ -110,3 +110,50 @@ def test_preview_rejects_non_images_so_the_client_falls_back(tmp_path, monkeypat
         assert client.get(f"/api/v1/files/{uploaded['id']}/download").status_code == 200
     finally:
         client.__exit__(None, None, None)
+
+
+def test_surrogate_text_from_pdf_extraction_is_cleaned_before_sqlite(
+    tmp_path, monkeypatch
+):
+    """真实故障：all.pdf 抽取出落单 UTF-16 代理项（数学字体常见），
+    sqlite 绑定参数按 UTF-8 编码直接抛 UnicodeEncodeError，上传报
+    "'utf-8' codec can't encode character '\\ud835' ... surrogates not allowed"。
+    """
+    from app.files import FileLibrary
+
+    client = owner_client(tmp_path, monkeypatch)
+    try:
+        # 模拟 pypdf 输出：一对合法代理项（应合成正式码点）+ 一个落单代理项。
+        broken = "角\ud835\udc1a色\ud835标"
+        monkeypatch.setattr(
+            FileLibrary, "extract", staticmethod(lambda name, content: broken)
+        )
+        response = client.post(
+            "/api/v1/files",
+            files={"file": ("数学分析.pdf", b"%PDF-1.4 fake", "application/pdf")},
+        )
+        assert response.status_code == 200
+        saved = response.json()
+        assert saved["name"] == "数学分析.pdf"
+        text = client.get(f"/api/v1/files/{saved['id']}/text").json()["text"]
+        # 合法代理对合成 U+1D41A；落单代理项被替换，全串可按 UTF-8 编码。
+        assert "\U0001d41a" in text
+        assert all(not (0xD800 <= ord(ch) <= 0xDFFF) for ch in text)
+        text.encode("utf-8")
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_store_binding_and_filename_survive_lone_surrogates(tmp_path):
+    from app.store import Store, clean_text
+
+    assert clean_text("好\ud835的") == "好\ufffd的"
+    assert clean_text("好\ud835\udc1a的") == "好\U0001d41a的"
+    assert clean_text("干净文本") == "干净文本"
+
+    store = Store(tmp_path / "data")
+    store.set_setting("probe", "值\ud835存")
+    assert "\ud835" not in store.setting("probe")
+    store.execute("INSERT INTO memories VALUES(?,?,?,?)", ("m1", "忆\ud835记", "misc", 1))
+    row = store.one("SELECT content FROM memories WHERE id=?", ("m1",))
+    assert "\ud835" not in row["content"]

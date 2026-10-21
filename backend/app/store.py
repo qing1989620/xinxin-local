@@ -17,7 +17,30 @@ def now():
 
 
 def encode(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return clean_text(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    )
+
+
+def clean_text(value):
+    """把文本修成可安全入库/输出的 UTF-8 字符串。
+
+    PDF 字体抽取、模型 JSON 里的 \\udxxx 转义都可能带出落单的 UTF-16
+    代理项；sqlite 按 UTF-8 绑定参数时会直接抛 UnicodeEncodeError。
+    策略：成对代理项合成正式码点，落单的替换为 U+FFFD；干净字符串原样返回。
+    """
+    if isinstance(value, str) and value:
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError:
+            return value.encode("utf-16", "surrogatepass").decode(
+                "utf-16", "replace"
+            )
+    return value
+
+
+def _bind(args):
+    return [clean_text(arg) if isinstance(arg, str) else arg for arg in args]
 
 
 class Store:
@@ -165,7 +188,9 @@ class Store:
 
     def all(self, sql, args=()):
         with self.connect() as db:
-            return [dict(row) for row in db.execute(sql, args).fetchall()]
+            return [
+                dict(row) for row in db.execute(sql, _bind(args)).fetchall()
+            ]
 
     def one(self, sql, args=()):
         rows = self.all(sql, args)
@@ -178,7 +203,7 @@ class Store:
         for attempt in range(5):
             try:
                 with self.connect(write=True) as db:
-                    return db.execute(sql, args).rowcount
+                    return db.execute(sql, _bind(args)).rowcount
             except sqlite3.OperationalError as exc:
                 message = str(exc).lower()
                 if attempt == 4 or (

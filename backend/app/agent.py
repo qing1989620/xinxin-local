@@ -22,7 +22,7 @@ from .context import context_manager_type, prior_messages, save_context
 from .persona import build_system_prompt
 from .music import atmosphere as music_atmosphere
 from .progress import ProgressNarrator
-from .store import encode, now, uid
+from .store import clean_text, encode, now, uid
 from .creative import plot_csv, transform_image, gallery
 
 sys.path.insert(0, str(ROOT / "vendor"))
@@ -535,6 +535,7 @@ class TaskManager:
         def write_file(path: str, content: str):
             """Write a UTF-8 file inside the task workspace; requires workspace permission."""
             policy.require("workspace")
+            content = clean_text(content)
             if len(content.encode()) > 500000:
                 raise ValueError("写入内容过大")
             target = policy.path(path)
