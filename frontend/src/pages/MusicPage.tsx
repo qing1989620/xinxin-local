@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -26,6 +27,7 @@ import {
 import { api, post, put, remove } from "../api";
 import { Dialog, Loading, useToast } from "../ui";
 import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
+import { activeLrcIndex, mergeLrc } from "../lib/lrc";
 
 type Emotion = {
   valence: number;
@@ -120,6 +122,7 @@ export default function MusicPage() {
     [mood, setMood] = useState<Mood | null>(null),
     [plays, setPlays] = useState<Play[]>([]),
     [lyric, setLyric] = useState(""),
+    [tlyric, setTlyric] = useState(""),
     [view, setView] = useState<"search" | "favorites" | "playlists">("search"),
     [favorites, setFavorites] = useState<Track[]>([]),
     [playlists, setPlaylists] = useState<Playlist[]>([]),
@@ -270,6 +273,7 @@ export default function MusicPage() {
   useEffect(() => {
     if (!lyricId) {
       setLyric("");
+      setTlyric("");
       return;
     }
     let alive = true;
@@ -277,10 +281,14 @@ export default function MusicPage() {
       `/music/lyric?id=${encodeURIComponent(lyricId)}&source=${trackSource}`,
     )
       .then((value) => {
-        if (alive) setLyric(value.tlyric || value.lyric || "");
+        if (!alive) return;
+        setLyric(value.lyric || "");
+        setTlyric(value.tlyric || "");
       })
       .catch(() => {
-        if (alive) setLyric("");
+        if (!alive) return;
+        setLyric("");
+        setTlyric("");
       });
     return () => {
       alive = false;
@@ -302,7 +310,14 @@ export default function MusicPage() {
     }
   }
 
-  async function toggleFavorite(track: Track) {
+  async function toggleFavorite(track: {
+    id: string;
+    source: string;
+    name: string;
+    artist: string;
+    album: string;
+    cover?: string;
+  }) {
     const key = trackKey(track);
     const favorited = favorites.some((item) => trackKey(item) === key);
     try {
@@ -318,7 +333,7 @@ export default function MusicPage() {
           album: track.album,
           cover: "",
         });
-        setFavorites((current) => [{ ...track, favorited: true }, ...current]);
+        setFavorites((current) => [{ ...track, favorited: true }, ...current] as Track[]);
       }
       setTracks((current) =>
         current
@@ -446,6 +461,24 @@ export default function MusicPage() {
     : 0;
   const active = Boolean(mood && mood.intensity > 0);
   const favoriteKeys = new Set(favorites.map((track) => trackKey(track)));
+  const currentLiked = current ? favoriteKeys.has(trackKey(current)) : false;
+
+  // 歌词：LRC 时间戳解析 + 翻译并入，随播放进度高亮当前句。
+  const lyricLines = useMemo(() => mergeLrc(lyric, tlyric), [lyric, tlyric]);
+  const activeLine = activeLrcIndex(lyricLines, progress.current);
+  const lyricRoll = useRef<HTMLDivElement | null>(null);
+
+  // 当前句滚进可视区中部；只有换行时才滚，避免每秒抖动。
+  useEffect(() => {
+    const roll = lyricRoll.current;
+    if (!roll || activeLine < 0) return;
+    const node = roll.children[activeLine] as HTMLElement | undefined;
+    if (!node) return;
+    roll.scrollTo({
+      top: node.offsetTop - roll.clientHeight / 2 + node.clientHeight / 2,
+      behavior: "smooth",
+    });
+  }, [activeLine]);
 
   function TrackList({
     list,
@@ -619,13 +652,6 @@ export default function MusicPage() {
                   </span>
                 )}
               </form>
-
-              {fallback && (
-                <p className="source-note">
-                  GD 音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
-                  换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
-                </p>
-              )}
 
               {fallback && (
                 <p className="source-note">
@@ -810,9 +836,22 @@ export default function MusicPage() {
             {current ? (
               <>
                 <div className="sleeve-meta">
-                  <p className="sleeve-kicker">
-                    {player?.playing ? "NOW PLAYING" : "PAUSED"}
-                  </p>
+                  <div className="sleeve-kicker-row">
+                    <p className="sleeve-kicker">
+                      {player?.playing ? "NOW PLAYING" : "PAUSED"}
+                    </p>
+                    <button
+                      className={`sleeve-like${currentLiked ? " liked" : ""}`}
+                      onClick={() => void toggleFavorite(current)}
+                      aria-label={currentLiked ? "取消收藏" : "收藏这首歌"}
+                      title={currentLiked ? "取消收藏" : "收藏"}
+                    >
+                      <Heart
+                        size={15}
+                        fill={currentLiked ? "currentColor" : "none"}
+                      />
+                    </button>
+                  </div>
                   <h2>{current.name}</h2>
                   <p className="sleeve-artist">
                     {current.artist}
@@ -873,12 +912,6 @@ export default function MusicPage() {
                       }
                     />
                   </label>
-                  {current.lyric_id && lyric && (
-                    <details className="lyric">
-                      <summary>歌词</summary>
-                      <pre>{lyric}</pre>
-                    </details>
-                  )}
                 </div>
               </>
             ) : (
@@ -983,6 +1016,33 @@ export default function MusicPage() {
               </a>
             </p>
           </section>
+
+          {current && (lyricLines.length > 0 || current.lyric_id) && (
+            <section className="lyric-plate" aria-label="歌词">
+              <div className="lyric-plate-head">
+                <span className="plate-label">歌词</span>
+                <h3>
+                  {current.name}
+                  {current.artist ? ` — ${current.artist}` : ""}
+                </h3>
+              </div>
+              {lyricLines.length > 0 ? (
+                <div className="lyric-roll" ref={lyricRoll}>
+                  {lyricLines.map((line, index) => (
+                    <p
+                      key={`${line.time}-${index}`}
+                      className={index === activeLine ? "is-active" : ""}
+                    >
+                      {line.text}
+                      {line.trans && <span className="trans">{line.trans}</span>}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="lyric-empty">正在取歌词，或者这首歌没有歌词。</p>
+              )}
+            </section>
+          )}
         </aside>
       </div>
 
