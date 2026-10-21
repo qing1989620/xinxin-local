@@ -20,6 +20,7 @@ import {
   FolderOpen,
   Server,
   Sparkles,
+  GraduationCap,
   BookOpen,
   WandSparkles,
   Bookmark,
@@ -76,6 +77,9 @@ import { configureConversationLocation } from "./conversationLocation";
 import TasksPage from "./pages/TasksPage";
 import FilesPage from "./pages/FilesPage";
 import MusicPage from "./pages/MusicPage";
+import LearningPage from "./pages/LearningPage";
+import BookPage from "./pages/BookPage";
+import QuizPage from "./pages/QuizPage";
 import { MiniPlayer, useMusicPlayer } from "./musicPlayer";
 import ErrorBoundary from "./ErrorBoundary";
 import {
@@ -95,6 +99,7 @@ const navigation = [
   { to: "/files", label: "私人资料", icon: FolderOpen },
   { to: "/servers", label: "服务器", icon: Server },
   { to: "/skills", label: "技能", icon: Sparkles },
+  { to: "/learning", label: "学习", icon: GraduationCap },
   { to: "/content", label: "个人内容", icon: BookOpen },
   { to: "/tools", label: "工具", icon: WandSparkles },
   { to: "/music", label: "音乐", icon: Music2 },
@@ -828,6 +833,9 @@ export default function App() {
                 <Route path="/content/*" element={<ContentPage />} />
                 <Route path="/tools" element={<ToolsPage />} />
                 <Route path="/music" element={<MusicPage />} />
+                <Route path="/learning" element={<LearningPage />} />
+                <Route path="/learning/books/:id" element={<BookPage />} />
+                <Route path="/learning/quiz/:id" element={<QuizPage />} />
                 <Route path="/memories" element={<MemoriesPage />} />
                 <Route path="/schedules" element={<SchedulesPage />} />
                 <Route

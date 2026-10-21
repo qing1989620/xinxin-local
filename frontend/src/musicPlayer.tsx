@@ -25,12 +25,18 @@ export type PlayerTrack = {
 
 type Player = {
   track: PlayerTrack | null;
+  queue: PlayerTrack[];
   cover: string;
   playing: boolean;
   loading: boolean;
   progress: { current: number; duration: number };
   volume: number;
-  play: (track: PlayerTrack) => Promise<void>;
+  play: (track: PlayerTrack, list?: PlayerTrack[]) => Promise<void>;
+  prefetch: (track: PlayerTrack) => void;
+  playQueue: (list: PlayerTrack[], start?: number) => void;
+  next: () => void;
+  prev: () => void;
+  hasNext: boolean;
   toggle: () => Promise<void>;
   seek: (seconds: number) => void;
   setVolume: (value: number) => void;
@@ -46,6 +52,11 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
   const active = useRef("");
   const busy = useRef(false);
   const [track, setTrack] = useState<PlayerTrack | null>(null);
+  const [queue, setQueue] = useState<PlayerTrack[]>([]);
+  const queueRef = useRef<PlayerTrack[]>([]);
+  // 悬停就把播放地址取回来：点击时同步换 src，保留"用户手势"，避免自动播放被拦
+  const urlCache = useRef(new Map<string, string>());
+  const positionRef = useRef(0);
   const [cover, setCover] = useState("");
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -88,8 +99,22 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     } else element.pause();
   }, [toast]);
 
+  const prefetch = useCallback((track: PlayerTrack) => {
+    const key = `${track.source}:${track.id}`;
+    if (urlCache.current.has(key)) return;
+    void api<{ url: string }>(
+      `/music/url?id=${encodeURIComponent(track.id)}&source=${track.source}`,
+    )
+      .then((value) => {
+        if (value.url) urlCache.current.set(key, value.url);
+      })
+      .catch(() => {
+        // 预取失败不影响点击后的正常流程
+      });
+  }, []);
+
   const play = useCallback(
-    async (next: PlayerTrack) => {
+    async (next: PlayerTrack, list?: PlayerTrack[]) => {
       const key = `${next.source}:${next.id}`;
       if (busy.current) return;
       if (active.current === key && audio.current?.src) {
@@ -98,10 +123,26 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
       }
       busy.current = true;
       setLoading(true);
-      try {
-        const result = await api<{ url: string }>(
-          `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
+      const cachedUrl = urlCache.current.get(key);
+      if (list && list.length) {
+        queueRef.current = list;
+        positionRef.current = Math.max(
+          0,
+          list.findIndex((item) => item.id === next.id && item.source === next.source),
         );
+        setQueue(list);
+      } else if (!queueRef.current.length) {
+        queueRef.current = [next];
+        positionRef.current = 0;
+        setQueue([next]);
+      }
+      try {
+        const result = cachedUrl
+          ? { url: cachedUrl }
+          : await api<{ url: string }>(
+              `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
+            );
+        if (!cachedUrl && result.url) urlCache.current.set(key, result.url);
         active.current = key;
         setTrack(next);
         setCover("");
@@ -110,8 +151,29 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
           audio.current.src = result.url;
           try {
             await audio.current.play();
-          } catch {
-            // 自动播放被拦时保持暂停状态，等用户点播放键。
+          } catch (error) {
+            const name = (error as DOMException)?.name;
+            if (name === "NotAllowedError") {
+              // 自动播放被拦时保持暂停状态，等用户点播放键。
+              toast("浏览器要求先点一下播放键，再继续", true);
+            } else if (cachedUrl) {
+              // 预取的地址可能过期，丢掉重取一次再试
+              urlCache.current.delete(key);
+              try {
+                const fresh = await api<{ url: string }>(
+                  `/music/url?id=${encodeURIComponent(next.id)}&source=${next.source}`,
+                );
+                if (fresh.url && audio.current) {
+                  urlCache.current.set(key, fresh.url);
+                  audio.current.src = fresh.url;
+                  await audio.current.play();
+                }
+              } catch {
+                toast("这首暂时播不了，换一首试试", true);
+              }
+            } else {
+              toast("这首暂时播不了，换一首试试", true);
+            }
           }
         }
         void post("/music/play", {
@@ -144,11 +206,40 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     [toggle, toast],
   );
 
+  const next = useCallback(() => {
+    const list = queueRef.current;
+    if (positionRef.current + 1 >= list.length) return;
+    positionRef.current += 1;
+    void play(list[positionRef.current], list);
+  }, [play]);
+
+  const prev = useCallback(() => {
+    const list = queueRef.current;
+    if (positionRef.current <= 0) return;
+    positionRef.current -= 1;
+    void play(list[positionRef.current], list);
+  }, [play]);
+
+  const playQueue = useCallback(
+    (list: PlayerTrack[], start = 0) => {
+      if (!list.length) return;
+      const index = Math.max(0, Math.min(start, list.length - 1));
+      queueRef.current = list;
+      positionRef.current = index;
+      setQueue(list);
+      void play(list[index], list);
+    },
+    [play],
+  );
+
   const stop = useCallback(() => {
     audio.current?.pause();
     if (audio.current) audio.current.removeAttribute("src");
     active.current = "";
     setTrack(null);
+    queueRef.current = [];
+    positionRef.current = 0;
+    setQueue([]);
     setCover("");
     setPlaying(false);
     setProgress({ current: 0, duration: 0 });
@@ -158,12 +249,18 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
     <Context.Provider
       value={{
         track,
+        queue,
         cover,
         playing,
         loading,
         progress,
         volume,
         play,
+        prefetch,
+        playQueue,
+        next,
+        prev,
+        hasNext: queue.length > 0 && positionRef.current + 1 < queue.length,
         toggle,
         seek,
         setVolume,
@@ -176,7 +273,10 @@ export function MusicPlayerProvider({ children }: { children: ReactNode }) {
         preload="none"
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          next();
+        }}
         onTimeUpdate={(event) =>
           setProgress({
             current: event.currentTarget.currentTime,

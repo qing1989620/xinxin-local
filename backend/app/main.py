@@ -34,7 +34,7 @@ from .creative import gallery, plot_csv, transform_image
 from .conversations import deletion_preview, purge_conversation, batch_deletion_preview, purge_conversations
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
-from . import music
+from . import learning, music
 from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
@@ -111,6 +111,50 @@ class MusicPlay(Input):
     name: str = Field(min_length=1, max_length=200)
     artist: str = Field(default="", max_length=200)
     album: str = Field(default="", max_length=200)
+
+
+class BookCreate(Input):
+    file_id: str = Field(min_length=1, max_length=64)
+    title: str = Field(default="", max_length=120)
+    subject: str = Field(default="", max_length=40)
+
+
+class QuestionGen(Input):
+    chapter_id: str = Field(min_length=1, max_length=64)
+    count: int = Field(default=5, ge=1, le=12)
+
+
+class QuizStart(Input):
+    book_id: str = Field(default="", max_length=64)
+    chapter_id: str = Field(default="", max_length=64)
+    count: int = Field(default=8, ge=1, le=30)
+    difficulty: int = Field(default=0, ge=0, le=3)
+
+
+class QuizAnswer(Input):
+    question_id: str = Field(min_length=1, max_length=64)
+    answer: str = Field(default="", max_length=4000)
+
+
+class ExplainRequest(Input):
+    message: str = Field(default="", max_length=2000)
+
+
+class TrackRef(Input):
+    id: str = Field(min_length=1, max_length=120)
+    source: str = Field(default="netease", max_length=20)
+    name: str = Field(min_length=1, max_length=200)
+    artist: str = Field(default="", max_length=200)
+    album: str = Field(default="", max_length=200)
+    cover: str = Field(default="", max_length=500)
+
+
+class PlaylistCreate(Input):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class PlaylistName(Input):
+    name: str = Field(min_length=1, max_length=60)
 
 
 class MusicScoreItem(Input):
@@ -256,6 +300,22 @@ def create_app(config=None):
     library = FileLibrary(store)
     router = SkillRouter(store)
     manager = TaskManager(store, auth, config, library, router)
+
+    def model_gateway(max_tokens: int = 4096):
+        """单次调用的模型网关；没配密钥时返回 None，调用方自行降级。"""
+        url, model, key = manager.model_config()
+        if not key:
+            return None
+        return ModelGateway(
+            url,
+            model,
+            key,
+            record_usage=lambda value: None,
+            cancelled=asyncio.Event(),
+            max_calls=1,
+            max_tokens=max_tokens,
+            transport=manager.model_transport,
+        )
 
     async def scheduled_jobs():
         while True:
@@ -477,7 +537,12 @@ def create_app(config=None):
         source: str = "netease",
         page: int = Query(default=1, ge=1, le=20),
     ):
-        return music.client.search(q.strip(), source, page)
+        result = music.client.search(q.strip(), source, page)
+        keys = music.favorite_keys(store)
+        for track in result.get("tracks", []):
+            key = f"{track.get('source') or source}:{track.get('id')}"
+            track["favorited"] = key in keys
+        return result
 
     @app.get("/api/v1/music/url", dependencies=[Depends(owner)])
     def music_url(
@@ -502,24 +567,66 @@ def create_app(config=None):
             "plays": music.recent_plays(store),
         }
 
+    @app.get("/api/v1/music/favorites", dependencies=[Depends(owner)])
+    def music_favorites():
+        return {"favorites": music.favorites(store), "keys": sorted(music.favorite_keys(store))}
+
+    @app.post("/api/v1/music/favorites", dependencies=[Depends(owner)])
+    def music_favorite(body: TrackRef):
+        try:
+            return music.add_favorite(store, body.model_dump())
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+
+    @app.delete("/api/v1/music/favorites", dependencies=[Depends(owner)])
+    def music_unfavorite(key: str = Query(min_length=1, max_length=160)):
+        return music.remove_favorite(store, key)
+
+    @app.get("/api/v1/music/playlists", dependencies=[Depends(owner)])
+    def music_playlists():
+        return {"playlists": music.playlists(store)}
+
+    @app.post("/api/v1/music/playlists", dependencies=[Depends(owner)])
+    def music_playlist_create(body: PlaylistCreate):
+        try:
+            return {"playlist": music.create_playlist(store, body.name)}
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+
+    @app.put("/api/v1/music/playlists/{playlist_id}", dependencies=[Depends(owner)])
+    def music_playlist_rename(playlist_id: str, body: PlaylistName):
+        try:
+            return {"playlist": music.rename_playlist(store, playlist_id, body.name)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.delete("/api/v1/music/playlists/{playlist_id}", dependencies=[Depends(owner)])
+    def music_playlist_delete(playlist_id: str):
+        return music.delete_playlist(store, playlist_id)
+
+    @app.get("/api/v1/music/playlists/{playlist_id}", dependencies=[Depends(owner)])
+    def music_playlist_items(playlist_id: str):
+        try:
+            return music.playlist_items(store, playlist_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.post("/api/v1/music/playlists/{playlist_id}/tracks", dependencies=[Depends(owner)])
+    def music_playlist_add(playlist_id: str, body: TrackRef):
+        try:
+            return music.add_to_playlist(store, playlist_id, body.model_dump())
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.delete("/api/v1/music/playlists/{playlist_id}/tracks", dependencies=[Depends(owner)])
+    def music_playlist_remove(playlist_id: str, key: str = Query(min_length=1, max_length=160)):
+        return music.remove_from_playlist(store, playlist_id, key)
+
     @app.post("/api/v1/music/score", dependencies=[Depends(owner)])
     async def music_score(body: MusicScore):
         """按歌曲校准情绪：缓存优先，未命中的一次批量问模型。"""
-        url, model, key = manager.model_config()
-        gateway = None
-        if key:
-            gateway = ModelGateway(
-                url,
-                model,
-                key,
-                record_usage=lambda value: None,
-                cancelled=asyncio.Event(),
-                max_calls=1,
-                max_tokens=4096,
-                transport=manager.model_transport,
-            )
         return await music.score_tracks(
-            store, gateway, [item.model_dump() for item in body.tracks]
+            store, model_gateway(), [item.model_dump() for item in body.tracks]
         )
 
     @app.post("/api/v1/music/play", dependencies=[Depends(owner)])
@@ -1240,6 +1347,118 @@ def create_app(config=None):
     def delete_memory(ident: str):
         store.execute("DELETE FROM memories WHERE id=?", (ident,))
         return {"ok": True}
+
+    def _file_text(file_id: str) -> dict:
+        row = store.one("SELECT * FROM files WHERE id=?", (file_id,))
+        if not row:
+            raise HTTPException(404, "先在「私人资料」里上传这份文件")
+        data = dict(row)
+        if not data.get("text"):
+            try:
+                data["text"] = library.extract(data["name"], library.path(file_id).read_bytes())
+            except ValueError:
+                raise HTTPException(404, "这份文件已经不在资料库里了")
+            except Exception:
+                data["text"] = ""
+        return data
+
+    @app.get("/api/v1/learning/books", dependencies=[Depends(owner)])
+    def learning_books():
+        return {"books": learning.list_books(store)}
+
+    @app.post("/api/v1/learning/books", dependencies=[Depends(owner)])
+    def learning_add_book(body: BookCreate):
+        try:
+            book = learning.create_book(
+                store, library, _file_text(body.file_id), body.title, body.subject
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+        return {"book": book}
+
+    @app.get("/api/v1/learning/books/{book_id}", dependencies=[Depends(owner)])
+    def learning_book(book_id: str):
+        try:
+            return {"book": learning.get_book(store, book_id)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.delete("/api/v1/learning/books/{book_id}", dependencies=[Depends(owner)])
+    def learning_remove_book(book_id: str):
+        try:
+            return learning.delete_book(store, book_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.get("/api/v1/learning/chapters/{chapter_id}", dependencies=[Depends(owner)])
+    def learning_chapter(chapter_id: str):
+        try:
+            return {"chapter": learning.chapter(store, chapter_id)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.post("/api/v1/learning/books/{book_id}/questions", dependencies=[Depends(owner)])
+    async def learning_generate(book_id: str, body: QuestionGen):
+        try:
+            book = learning.get_book(store, book_id)
+            chapter = learning.chapter(store, body.chapter_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+        if chapter["book_id"] != book_id:
+            raise HTTPException(400, "这一章不属于这本书")
+        try:
+            return await learning.generate_questions(
+                store, model_gateway(), book, chapter, body.count
+            )
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get("/api/v1/learning/questions", dependencies=[Depends(owner)])
+    def learning_questions(
+        book_id: str = Query(default="", max_length=64),
+        chapter_id: str = Query(default="", max_length=64),
+    ):
+        return {"questions": learning.list_questions(store, book_id, chapter_id)}
+
+    @app.post("/api/v1/learning/quiz", dependencies=[Depends(owner)])
+    def learning_quiz(body: QuizStart):
+        try:
+            return {"session": learning.start_quiz(store, body.book_id, body.chapter_id, body.count, body.difficulty)}
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get("/api/v1/learning/quiz/{session_id}", dependencies=[Depends(owner)])
+    def learning_quiz_state(session_id: str):
+        try:
+            return {"session": learning.quiz_state(store, session_id)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.post("/api/v1/learning/quiz/{session_id}/answer", dependencies=[Depends(owner)])
+    async def learning_answer(session_id: str, body: QuizAnswer):
+        try:
+            return await learning.submit_answer(
+                store, model_gateway(), session_id, body.question_id, body.answer
+            )
+        except ValueError as error:
+            raise HTTPException(400, str(error))
+
+    @app.get("/api/v1/learning/questions/{question_id}/tutor", dependencies=[Depends(owner)])
+    def learning_tutor_history(question_id: str):
+        if not store.one("SELECT id FROM questions WHERE id=?", (question_id,)):
+            raise HTTPException(404, "题目不存在")
+        return {"history": learning.tutor_history(store, question_id)}
+
+    @app.post("/api/v1/learning/questions/{question_id}/explain", dependencies=[Depends(owner)])
+    async def learning_explain(question_id: str, body: ExplainRequest):
+        try:
+            return await learning.explain(store, model_gateway(), question_id, body.message)
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get("/api/v1/learning/stats", dependencies=[Depends(owner)])
+    def learning_stats():
+        return learning.stats(store)
 
     @app.get("/api/v1/settings", dependencies=[Depends(owner)])
     def settings():
