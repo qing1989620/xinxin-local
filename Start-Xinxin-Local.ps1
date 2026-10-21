@@ -81,8 +81,7 @@ function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Argume
   if($managedAlive){
     if($owned.port -and [int]$owned.port -ne $Port){throw "Managed $Role port differs from this request; the running service was preserved."}
     if(-not $owned.port){
-      $listeners=@(Get-NetTCPConnection -OwningProcess $instance.Id -State Listen -ErrorAction SilentlyContinue)
-      if($listeners.LocalPort -notcontains $Port){throw "Cannot verify the managed $Role port; the running service was preserved."}
+      if(-not(Test-XinxinManagedPort $instance.Id $Port)){throw "Cannot verify the managed $Role port; the running service was preserved."}
     }
     if($Role -eq 'backend'){
       $ownedData=[string]$owned.data_directory

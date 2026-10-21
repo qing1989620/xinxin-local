@@ -27,6 +27,29 @@ function Test-XinxinManagedBuild($Entry, [string]$Fingerprint) {
   return ($Entry -and $Entry.fingerprint -and $Entry.fingerprint -eq $Fingerprint)
 }
 
+function Test-XinxinManagedPort([int]$ProcessId, [int]$Port) {
+  # Windows venv python.exe may be a launcher whose child owns the socket.
+  $root = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+  if (-not $root) { return $false }
+  $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+  foreach ($listener in $listeners) {
+    $ancestor = [int]$listener.OwningProcess
+    $visited = @{}
+    for ($depth = 0; $depth -lt 32 -and $ancestor -gt 0; $depth++) {
+      if ($visited.ContainsKey($ancestor)) { break }
+      $visited[$ancestor] = $true
+      $process = Get-Process -Id $ancestor -ErrorAction SilentlyContinue
+      if (-not $process -or $process.StartTime -lt $root.StartTime) { break }
+      if ($ancestor -eq $ProcessId) { return $true }
+      try { $details = Get-CimInstance Win32_Process -Filter "ProcessId=$ancestor" -ErrorAction Stop }
+      catch { break }
+      if (-not $details) { break }
+      $ancestor = [int]$details.ParentProcessId
+    }
+  }
+  return $false
+}
+
 function Test-XinxinDesktopBuild([string]$Project, [string]$Profile) {
   $indexPath = Join-Path $Project 'frontend/dist/index.html'
   $stampPath = Join-Path $Profile 'build-stamp.txt'

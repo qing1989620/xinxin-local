@@ -55,6 +55,12 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
         assert first.returncode == 0, first.stdout + first.stderr
         before = entries()
         assert before["backend"]["fingerprint"] and before["frontend"]["fingerprint"]
+        # Legacy manifests do not have a port; the listener may be the
+        # Windows venv launcher's child rather than the recorded parent PID.
+        without_port = json.loads(manifest.read_text(encoding="utf-8-sig"))
+        for item in without_port["services"]:
+            item.pop("port")
+        manifest.write_text(json.dumps(without_port), encoding="utf-8-sig")
         assert start().returncode == 0
         assert {k: v["id"] for k, v in entries().items()} == {k: v["id"] for k, v in before.items()}
 
