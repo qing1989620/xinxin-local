@@ -30,6 +30,7 @@ import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
 import { activeLrcIndex, mergeLrc } from "../lib/lrc";
 
 type Emotion = {
+  intensity?: number;
   valence: number;
   energy: number;
   label: string;
@@ -53,6 +54,17 @@ type Mood = {
   moods: Array<{ mood: string; share: number }>;
   influence: boolean;
   influence_level: number;
+  sensitivity_level?: number;
+  music_intensity?: number;
+  freshness?: number;
+  feeling?: {
+    label: string;
+    intensity: number;
+    valence: number;
+    energy: number;
+    sensitivity: string;
+    multiplier: number;
+  };
 };
 type Play = {
   track_id: string;
@@ -75,19 +87,27 @@ const SOURCES = [
 const INFLUENCE_LEVELS = [
   {
     level: 1,
-    name: "轻微",
-    description: "偶尔在措辞里带一点氛围，保持平常的节奏。",
+    name: "克制",
+    multiplier: 0.4,
+    description: "Xinxin 不容易被音乐带动，轻轻感受，保持平常的节奏。",
   },
   {
     level: 2,
     name: "自然",
-    description: "自然调整语气和互动，适合平时边听边聊。",
+    multiplier: 1.0,
+    description: "Xinxin 按音乐本身的情绪自然回应，适合平时边听边聊。",
   },
-  { level: 3, name: "明显", description: "更明显地改变回应、鼓励和互动方式。" },
+  {
+    level: 3,
+    name: "敏感",
+    multiplier: 1.5,
+    description: "Xinxin 对情绪更敏锐，同一首歌会带来更明显的感受。",
+  },
   {
     level: 4,
-    name: "沉浸",
-    description: "让音乐持续带动 Xinxin 的表达与性格，氛围更鲜明。",
+    name: "共鸣",
+    multiplier: 2.2,
+    description: "Xinxin 容易与音乐共鸣；歌曲越有情绪，回应越鲜明。",
   },
 ];
 
@@ -210,6 +230,11 @@ function TrackList({
                     }
                   >
                     {track.emotion.label}
+                    {typeof track.emotion.intensity === "number" && (
+                      <small className="emotion-intensity">
+                        {Math.round(track.emotion.intensity * 100)}%
+                      </small>
+                    )}
                   </span>
                 )}
               </span>
@@ -599,7 +624,7 @@ export default function MusicPage() {
 
   async function updateInfluence(settings: {
     influence?: boolean;
-    influence_level?: number;
+    sensitivity_level?: number;
   }) {
     if (!mood || settingBusy.current) return;
     const previous = mood;
@@ -626,6 +651,10 @@ export default function MusicPage() {
     ? Math.min(100, (progress.current / progress.duration) * 100)
     : 0;
   const active = Boolean(mood && mood.intensity > 0);
+  const sensitivityReady =
+    typeof mood?.sensitivity_level === "number" && Boolean(mood.feeling);
+  const selectedSensitivity =
+    mood?.sensitivity_level ?? mood?.influence_level ?? 2;
   const favoriteKeys = new Set(favorites.map((track) => trackKey(track)));
   const currentLiked = current ? favoriteKeys.has(trackKey(current)) : false;
 
@@ -1038,7 +1067,7 @@ export default function MusicPage() {
 
           <section className="mood-plate">
             <div className="mood-plate-head">
-              <span className="plate-label">此刻的氛围</span>
+              <span className="plate-label">音乐与 Xinxin 的感受</span>
               {plays.length > 0 && (
                 <button className="link-quiet" onClick={() => void clearMood()}>
                   <Trash2 size={12} />
@@ -1055,9 +1084,44 @@ export default function MusicPage() {
                   </strong>
                   <span>
                     {active
-                      ? `${MOOD_PHRASE[mood.label] ?? "没什么起伏"} · 强度 ${mood.intensity.toFixed(2)}`
+                      ? `${MOOD_PHRASE[mood.label] ?? "没什么起伏"} · 近期音乐氛围`
                       : "还没有播放记录"}
                   </span>
+                </div>
+
+                <div
+                  className="music-feeling-flow"
+                  aria-label="音乐与 Xinxin 感受的关系"
+                >
+                  <div>
+                    <span>音乐情绪强度</span>
+                    <strong>
+                      {Math.round(
+                        (mood.music_intensity ?? mood.intensity) * 100,
+                      )}
+                      %
+                    </strong>
+                    <meter
+                      min={0}
+                      max={1}
+                      value={mood.music_intensity ?? mood.intensity}
+                      aria-label="音乐情绪强度"
+                    />
+                  </div>
+                  <div>
+                    <span>Xinxin 实际感受</span>
+                    <strong>
+                      {mood.feeling
+                        ? `${mood.feeling.label} · ${Math.round(mood.feeling.intensity * 100)}%`
+                        : "待更新"}
+                    </strong>
+                    <meter
+                      min={0}
+                      max={1}
+                      value={mood.feeling?.intensity ?? 0}
+                      aria-label="Xinxin 实际感受"
+                    />
+                  </div>
                 </div>
 
                 {mood.moods.length > 0 && (
@@ -1102,43 +1166,63 @@ export default function MusicPage() {
                   <span className="switch-track" aria-hidden="true">
                     <i />
                   </span>
-                  <span>让音乐影响 Xinxin 的语气</span>
+                  <span>让 Xinxin 感受音乐</span>
                 </button>
 
                 <fieldset
                   className="influence-levels"
-                  disabled={!mood.influence || savingInfluence}
+                  disabled={
+                    !mood.influence || savingInfluence || !sensitivityReady
+                  }
                 >
-                  <legend>音乐影响程度</legend>
+                  <legend>Xinxin 感受指数</legend>
                   <div className="influence-options">
-                    {INFLUENCE_LEVELS.map(({ level, name }) => (
+                    {INFLUENCE_LEVELS.map(({ level, name, multiplier }) => (
                       <label
                         key={level}
                         className={
-                          mood.influence_level === level ? "selected" : ""
+                          selectedSensitivity === level ? "selected" : ""
                         }
                       >
                         <input
                           type="radio"
                           name="music-influence"
                           value={level}
-                          checked={mood.influence_level === level}
+                          checked={selectedSensitivity === level}
                           onChange={() =>
-                            void updateInfluence({ influence_level: level })
+                            void updateInfluence({ sensitivity_level: level })
                           }
                         />
                         <span>{name}</span>
+                        <small aria-hidden="true">{multiplier}×</small>
                       </label>
                     ))}
                   </div>
                   <p className="hint" aria-live="polite">
                     {mood.influence
                       ? INFLUENCE_LEVELS.find(
-                          (item) => item.level === mood.influence_level,
+                          (item) => item.level === selectedSensitivity,
                         )?.description
                       : "已关闭音乐影响，重新开启后恢复所选档位。"}
                   </p>
                 </fieldset>
+
+                {!sensitivityReady ? (
+                  <p className="music-update-notice" role="status">
+                    感受设置需要完成本次更新。请用桌面图标重新打开 Xinxin。
+                    <button
+                      className="link-quiet"
+                      onClick={() => void loadMood()}
+                    >
+                      重新检测
+                    </button>
+                  </p>
+                ) : (
+                  <p className="hint feeling-explanation">
+                    歌曲强度不随档位改变。Xinxin
+                    的实际感受由音乐情绪、近期听歌的余温和她的感受指数共同决定。
+                  </p>
+                )}
 
                 {plays.length > 0 && (
                   <ul className="history">

@@ -22,7 +22,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent import TaskManager
 from .auth import Auth, password_hash, password_matches
@@ -40,6 +40,7 @@ from .network import local_addresses
 from .mail import MailCodes
 from .skills import SkillRouter
 from .store import Store, encode, now, uid
+from .runtime import source_fingerprint
 from .uploads import UploadGuard, finish_upload
 
 
@@ -173,6 +174,13 @@ class MusicScore(Input):
 class MusicSetting(Input):
     influence: bool | None = None
     influence_level: int | None = Field(default=None, ge=1, le=4, strict=True)
+    sensitivity_level: int | None = Field(default=None, ge=1, le=4, strict=True)
+
+    @model_validator(mode="after")
+    def matching_levels(self):
+        if self.influence_level is not None and self.sensitivity_level is not None and self.influence_level != self.sensitivity_level:
+            raise ValueError("感受指数不能同时设置为两个不同档位")
+        return self
 
 
 class ExecutionInput(Input):
@@ -295,6 +303,7 @@ def _selected_skill_ids(events: list) -> list[str]:
 
 
 def create_app(config=None):
+    backend_build = source_fingerprint(ROOT)
     config = config or Config.from_env()
     store = Store(config.data_dir)
     auth = Auth(store)
@@ -413,7 +422,7 @@ def create_app(config=None):
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "product": "Xinxin", "version": "0.1.0"}
+        return {"status": "ok", "product": "Xinxin", "version": "0.1.0", "build": backend_build, "capabilities": {"music_sensitivity": 2}}
 
     @app.get("/api/v1/network", dependencies=[Depends(owner)])
     def network():
@@ -646,6 +655,8 @@ def create_app(config=None):
             music.set_influence(store, body.influence)
         if body.influence_level is not None:
             music.set_influence_level(store, body.influence_level)
+        elif body.sensitivity_level is not None:
+            music.set_influence_level(store, body.sensitivity_level)
         return {"ok": True, "mood": music.current_mood(store)}
 
     @app.get("/api/v1/auth/me", dependencies=[Depends(owner)])

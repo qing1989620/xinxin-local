@@ -13,13 +13,19 @@ param(
   [switch]$NoGateway,
   [int]$GatewayPort = 8080,  # 局域网入口端口（手机用 http://<局域网IP>:<此端口>）
   [int]$BackendPort = 0,     # 0 = 读取 backend/.env 的 XINXIN_PORT
-  [int]$FrontendPort = 0     # 0 = 读取 backend/.env 的 XINXIN_FRONTEND_PORT
+  [int]$FrontendPort = 0,    # 0 = 读取 backend/.env 的 XINXIN_FRONTEND_PORT
+  [string]$DataDirectory = '',
+  [string]$RuntimeDirectory = ''
 )
 $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
 $backendPath=Join-Path $projectPath 'backend'
 $frontendPath=Join-Path $projectPath 'frontend'
 $runtimePath=Join-Path $projectPath '.runtime'
+if($RuntimeDirectory){$runtimePath=[System.IO.Path]::GetFullPath($RuntimeDirectory)}
+if(-not $DataDirectory){$DataDirectory=Join-Path $backendPath 'data'}
+$DataDirectory=[System.IO.Path]::GetFullPath($DataDirectory)
+. (Join-Path $projectPath 'desktop/Local-ServiceState.ps1')
 $manifestPath=Join-Path $runtimePath 'processes.json'
 $caddyfilePath=Join-Path $projectPath 'Caddyfile.local'
 # 优先用 PATH 里的 caddy（winget install Caddy.Caddy 或官方下载），其次用 tools/caddy.exe
@@ -48,7 +54,7 @@ function Get-LanIp{
   }catch{}
   return ''
 }
-$lanIp=Get-LanIp
+$lanIp=if($NoGateway){''}else{Get-LanIp}
 $lanOrigin=if($lanIp){"http://${lanIp}:$GatewayPort"}else{''}
 
 if(Test-Path -LiteralPath $manifestPath){
@@ -61,18 +67,36 @@ if(Test-Path -LiteralPath $manifestPath){
 function Save-Instances {
   @{services=@($script:instances)} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 }
-function Test-XinxinHealth([int]$Port){
-  try{return (Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 3).status -eq 'ok'}catch{return $false}
-}
 # 各角色就绪判定：backend/frontend 看 /health；gateway 看端口是否已监听
-$backendReady={Test-XinxinHealth $BackendPort}
-$frontendReady={Test-XinxinHealth $FrontendPort}
+$backendReady={Test-XinxinHealth $BackendPort $backendBuild}
+$frontendReady={Test-XinxinHealth $FrontendPort $backendBuild}
 $gatewayReady={
   $listener=Get-NetTCPConnection -LocalPort $GatewayPort -State Listen -ErrorAction SilentlyContinue
   return [bool]$listener
 }
-function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Arguments,[string]$Directory,[int]$Port,[scriptblock]$Ready){
-  if(& $Ready){Write-Host "$Role already running on port $Port";return}
+function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Arguments,[string]$Directory,[int]$Port,[scriptblock]$Ready,[string]$Fingerprint=''){
+  $owned=@($script:instances | Where-Object {$_.role -eq $Role}) | Select-Object -First 1
+  $serviceHealthy=& $Ready
+  if($serviceHealthy -and (-not $Fingerprint -or (Test-XinxinManagedBuild $owned $Fingerprint))){Write-Host "$Role already running on port $Port (current build)";return}
+  if($owned){
+    if($Role -eq 'backend'){
+      $active=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') active-tasks $DataDirectory
+      if($LASTEXITCODE -ne 0){throw 'Cannot verify active tasks; the running backend was preserved.'}
+      if([int]$active -gt 0){throw 'Xinxin has active tasks. Finish or stop them before updating; the running service was preserved.'}
+    }
+    $instance=Get-Process -Id $owned.id -ErrorAction SilentlyContinue
+    if($instance -and $instance.StartTime.ToUniversalTime().Ticks -eq [long]$owned.start_ticks){
+      & (Join-Path $env:SystemRoot 'System32/taskkill.exe') /PID $instance.Id /T /F | Out-Null
+      if($LASTEXITCODE -ne 0){throw "Could not stop the managed $Role process tree"}
+      Write-Host "Updating managed $Role to the current build..."
+    }
+    $script:instances=@($script:instances | Where-Object {$_.id -ne $owned.id})
+    Save-Instances
+    for($i=0;$i -lt 40;$i++){
+      if(-not(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)){break}
+      Start-Sleep -Milliseconds 100
+    }
+  }
   $occupied=Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
   if($occupied){throw "Port $Port is occupied by another application."}
   # Windows PowerShell 的 Start-Process 无法处理环境变量的大小写变体重复（如 HTTPS_PROXY 与 https_proxy 并存）；
@@ -85,7 +109,7 @@ function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Argume
     }
   }
   $service=Start-Process -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory $Directory -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath "$Role.out.log") -RedirectStandardError (Join-Path $runtimePath "$Role.err.log")
-  $script:instances+=@{role=$Role;id=$service.Id;start_ticks=$service.StartTime.ToUniversalTime().Ticks}
+  $script:instances+=@{role=$Role;id=$service.Id;start_ticks=$service.StartTime.ToUniversalTime().Ticks;fingerprint=$Fingerprint}
   Save-Instances
   for($attempt=0;$attempt -lt 240;$attempt++){
     if(& $Ready){Write-Host "$Role ready on port $Port";return}
@@ -101,6 +125,8 @@ if(-not(Test-Path -LiteralPath $pythonPath)){
   Push-Location -LiteralPath $backendPath
   try{python -m venv .venv;if($LASTEXITCODE -ne 0){throw 'Python 3.12+ is required'};& $pythonPath -m pip install -r requirements.lock;if($LASTEXITCODE -ne 0){throw 'Backend dependency installation failed'}}finally{Pop-Location}
 }
+$backendBuild=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') fingerprint
+if($LASTEXITCODE -ne 0 -or -not $backendBuild){throw 'Cannot identify the backend build.'}
 
 # 2. 前端依赖与生产构建（缺资产或源码比构建产物新时自动重建）
 function Test-FrontendBuild{
@@ -132,17 +158,18 @@ try{
 $oldData=$env:XINXIN_DATA_DIR
 $oldCors=$env:XINXIN_CORS_ORIGINS
 try{
-  $env:XINXIN_DATA_DIR=Join-Path $backendPath 'data'
+  $env:XINXIN_DATA_DIR=$DataDirectory
   $origins=Get-EnvValue 'XINXIN_CORS_ORIGINS' 'http://localhost:5180,http://127.0.0.1:5180,http://localhost:8080,http://127.0.0.1:8080,capacitor://localhost'
   if($lanOrigin -and ($origins -split ',').Trim() -notcontains $lanOrigin){$origins="$origins,$lanOrigin"}
   $env:XINXIN_CORS_ORIGINS=$origins
-  Start-XinxinService 'backend' $pythonPath @('-X','utf8','-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$BackendPort",'--workers','1','--no-access-log') $backendPath $BackendPort $backendReady
+  Start-XinxinService 'backend' $pythonPath @('-X','utf8','-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$BackendPort",'--workers','1','--no-access-log') $backendPath $BackendPort $backendReady $backendBuild
 }finally{$env:XINXIN_DATA_DIR=$oldData;$env:XINXIN_CORS_ORIGINS=$oldCors}
 
 # 4. 启动前端（只绑回环；preview 代理 /api、/health 到后端）
 $env:XINXIN_BACKEND_PORT="$BackendPort"
 $nodePath=(Get-Command node.exe).Source
-Start-XinxinService 'frontend' $nodePath @('node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port',"$FrontendPort",'--strictPort') $frontendPath $FrontendPort $frontendReady
+$frontendBuild=(Get-XinxinFileHash (Join-Path $frontendPath 'dist/index.html')) + ":$BackendPort"
+Start-XinxinService 'frontend' $nodePath @('node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port',"$FrontendPort",'--strictPort') $frontendPath $FrontendPort $frontendReady $frontendBuild
 
 # 5. 局域网网关（Caddy 纯 HTTP 单入口）：未安装 caddy 则跳过并提示
 $gatewayStarted=$false

@@ -66,13 +66,13 @@ test("真实后端：档位保存与辅导历史跨页面恢复", async ({ page,
   const session = (await quiz.json()).session;
   const qid = session.questions[0].id;
   await page.goto("/music");
-  await page.getByRole("radio", { name: "明显", exact: true }).check();
+  await page.getByRole("radio", { name: "敏感", exact: true }).check();
   await expect(
-    page.getByRole("radio", { name: "明显", exact: true }),
+    page.getByRole("radio", { name: "敏感", exact: true }),
   ).toBeEnabled();
   await page.reload();
   await expect(
-    page.getByRole("radio", { name: "明显", exact: true }),
+    page.getByRole("radio", { name: "敏感", exact: true }),
   ).toBeChecked();
   await page.goto(`/learning/quiz/${session.id}`);
   await page.getByRole("button", { name: "Xinxin 辅导", exact: true }).click();

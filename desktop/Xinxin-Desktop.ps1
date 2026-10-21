@@ -39,6 +39,7 @@ $appProfile = Join-Path $runtimePath 'desktop-profile'
 $splashProfile = Join-Path $runtimePath 'desktop-splash-profile'
 $appTitle = 'Xinxin本地版'
 $splashTitle = 'Xinxin 正在启动'
+. (Join-Path $desktopPath 'Local-ServiceState.ps1')
 
 function Write-Log([string]$Message) {
   $line = '[' + (Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + '] ' + $Message
@@ -206,7 +207,7 @@ function Reset-StaleWebCache([string]$Profile) {
   if (-not (Test-Path -LiteralPath $indexPath)) { return }
   $stamp = ''
   try {
-    $stamp = (Get-FileHash -LiteralPath $indexPath -Algorithm SHA256).Hash
+    $stamp = Get-XinxinFileHash $indexPath
   } catch {
     return
   }
@@ -219,6 +220,9 @@ function Reset-StaleWebCache([string]$Profile) {
   if ($previous -eq $stamp) { return }
   foreach ($name in @('Service Worker', 'Cache', 'Code Cache')) {
     $target = Join-Path $Profile ('Default\' + $name)
+    $profileRoot = [System.IO.Path]::GetFullPath($Profile).TrimEnd('\') + '\'
+    $target = [System.IO.Path]::GetFullPath($target)
+    if (-not $target.StartsWith($profileRoot, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid desktop cache path' }
     if (Test-Path -LiteralPath $target) {
       Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
       Write-Log ('cleared stale ' + $name + ' (new frontend build)')
@@ -359,22 +363,7 @@ if (Test-ServiceHealthy $gatewayPort) {
   $entryUrl = "http://127.0.0.1:$frontendPort"
 }
 
-if ($entryUrl) {
-  $open = @(Get-EdgeAppWindows $appProfile)
-  if ($open.Count -gt 0) {
-    if (Show-WindowByTitle $appTitle) {
-      Write-Log 'activated the running app window'
-    } else {
-      Write-Log 'app window is open but could not be activated'
-    }
-    exit 0
-  }
-  Reset-StaleWebCache $appProfile
-  Open-AppWindow (Add-DesktopFlag $entryUrl) $appProfile $Width $Height | Out-Null
-  exit 0
-}
-
-# 服务没起：进入「启动中」流程（持锁 → 启动页 → 拉起本地栈 → 开应用窗口）
+# 每次先核对本地栈版本：健康但过期的后端也必须更新。
 if (-not (Take-LauncherLock)) {
   if (-not (Show-WindowByTitle $appTitle)) { Show-WindowByTitle $splashTitle | Out-Null }
   Write-Log 'another launcher is already starting the stack; nothing to do'
@@ -384,7 +373,7 @@ if (-not (Take-LauncherLock)) {
 $splash = $null
 try {
   $splashFile = Join-Path $assetsPath 'starting.html'
-  if ((Test-Path -LiteralPath $splashFile) -and (Get-EdgePath)) {
+  if (-not $entryUrl -and (Test-Path -LiteralPath $splashFile) -and (Get-EdgePath)) {
     $splash = Open-AppWindow ('file:///' + $splashFile.Replace('\', '/')) $splashProfile 520 600
   }
 
@@ -397,6 +386,14 @@ try {
     Start-Sleep -Milliseconds 500
   }
   if (-not $entryUrl) { throw '本地服务未在预期时间内就绪，详见 .runtime/desktop.log' }
+
+  $open = @(Get-EdgeAppWindows $appProfile)
+  if ($open.Count -gt 0 -and (Test-XinxinDesktopBuild $projectPath $appProfile)) {
+    Show-WindowByTitle $appTitle | Out-Null
+    Write-Log 'verified current services and activated the running app window'
+    if ($splash -and -not $splash.HasExited) { try { Stop-WindowTree $splash.Id } catch {} }
+    exit 0
+  }
 
   # 启动前若留着上次的窗口，它已经是一张死页面：关掉重开
   foreach ($stale in @(Get-EdgeAppWindows $appProfile)) {

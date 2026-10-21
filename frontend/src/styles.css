@@ -6301,6 +6301,51 @@ kbd {
   border-radius: 5px;
   font-size: 11px;
   cursor: pointer;
+  flex-wrap: wrap;
+}
+.influence-options label small {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 9px;
+  opacity: 0.7;
+}
+.music-feeling-flow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0;
+}
+.music-feeling-flow > div {
+  display: grid;
+  gap: 5px;
+}
+.music-feeling-flow span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.music-feeling-flow strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.music-feeling-flow meter {
+  width: 100%;
+  height: 7px;
+  accent-color: var(--accent);
+}
+.feeling-explanation,
+.music-update-notice {
+  line-height: 1.8;
+  font-size: 10px;
+}
+.music-update-notice {
+  color: var(--muted);
+  border-left: 2px solid var(--accent);
+  padding-left: 9px;
+}
+.emotion-intensity {
+  margin-left: 4px;
+  font-size: 8px;
+  opacity: 0.7;
 }
 .influence-options input {
   margin: 0;

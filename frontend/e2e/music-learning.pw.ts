@@ -52,6 +52,17 @@ async function mockWorkspace(page: Page) {
       moods: [{ mood: "热血", share: 1 }],
       influence: true,
       influence_level: 2,
+      sensitivity_level: 2,
+      music_intensity: 0.6,
+      freshness: 1,
+      feeling: {
+        label: "乐",
+        intensity: 0.6,
+        valence: 0.6,
+        energy: 0.8,
+        sensitivity: "自然",
+        multiplier: 1,
+      },
     },
     favorites: [] as typeof tracks,
     plays: [] as any[],
@@ -129,6 +140,16 @@ async function mockWorkspace(page: Page) {
     }
     if (path === "/music/settings") {
       Object.assign(state.mood, body);
+      state.mood.influence_level = state.mood.sensitivity_level;
+      state.mood.feeling.multiplier = [0.4, 1, 1.5, 2.2][
+        state.mood.sensitivity_level - 1
+      ];
+      state.mood.feeling.intensity = state.mood.influence
+        ? Math.min(
+            1,
+            state.mood.music_intensity * state.mood.feeling.multiplier,
+          )
+        : 0;
       return send({ mood: state.mood });
     }
     if (path === "/music/search") {
@@ -320,29 +341,76 @@ test("减少动态效果时没有悬停位移", async ({ page, mock }) => {
   );
 });
 
+test("旧服务明确提示更新并阻止提交不支持的四档", async ({ page, mock }) => {
+  await page.route("**/api/v1/music/mood", (route) => {
+    const {
+      sensitivity_level,
+      feeling,
+      music_intensity,
+      freshness,
+      influence_level,
+      ...legacy
+    } = mock.mood;
+    return route.fulfill({ json: { mood: legacy, plays: [] } });
+  });
+  await page.goto("/music");
+  await expect(
+    page.getByText("感受设置需要完成本次更新。", { exact: false }),
+  ).toBeVisible();
+  for (const name of ["克制", "自然", "敏感", "共鸣"])
+    await expect(page.getByRole("radio", { name, exact: true })).toBeDisabled();
+  expect(
+    mock.calls.filter((call) => call.path === "/music/settings"),
+  ).toHaveLength(0);
+  await page.unroute("**/api/v1/music/mood");
+  // 重新挂回合成新服务；保留其余接口处理。
+  await page.route("**/api/v1/music/mood", (route) =>
+    route.fulfill({ json: { mood: mock.mood, plays: [] } }),
+  );
+  await page.getByRole("button", { name: "重新检测", exact: true }).click();
+  await expect(
+    page.getByRole("radio", { name: "自然", exact: true }),
+  ).toBeEnabled();
+});
+
+test("四档只改变 Xinxin 感受，不改变音乐自身强度", async ({ page, mock }) => {
+  await page.goto("/music");
+  const music = page.getByRole("meter", { name: "音乐情绪强度", exact: true });
+  const feeling = page.getByRole("meter", {
+    name: "Xinxin 实际感受",
+    exact: true,
+  });
+  await expect(music).toHaveAttribute("value", "0.6");
+  await page.getByRole("radio", { name: "克制", exact: true }).check();
+  await expect(feeling).toHaveAttribute("value", "0.24");
+  await page.getByRole("radio", { name: "共鸣", exact: true }).check();
+  await expect(feeling).toHaveAttribute("value", "1");
+  await expect(music).toHaveAttribute("value", "0.6");
+});
+
 test("四档可切换、刷新保留、关闭再开启恢复档位", async ({ page, mock }) => {
   await page.goto("/music");
-  for (const [index, name] of ["轻微", "自然", "明显", "沉浸"].entries()) {
+  for (const [index, name] of ["克制", "自然", "敏感", "共鸣"].entries()) {
     await page.getByRole("radio", { name, exact: true }).check();
     await expect.poll(() => mock.mood.influence_level).toBe(index + 1);
   }
   await page.reload();
   await expect(
-    page.getByRole("radio", { name: "沉浸", exact: true }),
+    page.getByRole("radio", { name: "共鸣", exact: true }),
   ).toBeChecked();
   const influence = page.getByRole("switch", {
-    name: "让音乐影响 Xinxin 的语气",
+    name: "让 Xinxin 感受音乐",
   });
   await influence.click();
   await expect(
-    page.getByRole("radio", { name: "沉浸", exact: true }),
+    page.getByRole("radio", { name: "共鸣", exact: true }),
   ).toBeDisabled();
   await influence.click();
   await expect(
-    page.getByRole("radio", { name: "沉浸", exact: true }),
+    page.getByRole("radio", { name: "共鸣", exact: true }),
   ).toBeEnabled();
   await expect(
-    page.getByRole("radio", { name: "沉浸", exact: true }),
+    page.getByRole("radio", { name: "共鸣", exact: true }),
   ).toBeChecked();
 });
 
@@ -503,13 +571,13 @@ test("档位保存失败恢复原选择并允许重试", async ({ page, mock }) 
     route.fulfill({ status: 409, json: { detail: "合成保存失败" } }),
   );
   await page.goto("/music");
-  await page.getByRole("radio", { name: "沉浸", exact: true }).click();
+  await page.getByRole("radio", { name: "共鸣", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("合成保存失败");
   await expect(
     page.getByRole("radio", { name: "自然", exact: true }),
   ).toBeChecked();
   await expect(
-    page.getByRole("radio", { name: "沉浸", exact: true }),
+    page.getByRole("radio", { name: "共鸣", exact: true }),
   ).toBeEnabled();
 });
 

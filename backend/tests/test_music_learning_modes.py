@@ -66,6 +66,17 @@ def test_influence_defaults_and_preserves_level_when_toggled(workspace):
     assert cleared["influence_level"] == 4 and cleared["intensity"] == 0
 
 
+def test_new_sensitivity_contract_and_conflicting_aliases(workspace):
+    app, client = workspace
+    response = client.put("/api/v1/music/settings", json={"sensitivity_level": 3})
+    assert response.status_code == 200
+    mood = response.json()["mood"]
+    assert mood["sensitivity_level"] == mood["influence_level"] == 3
+    assert mood["feeling"]["multiplier"] == 1.5
+    assert client.put("/api/v1/music/settings", json={"sensitivity_level": 4, "influence_level": 1}).status_code == 422
+    assert client.get("/api/v1/music/mood").json()["mood"]["sensitivity_level"] == 3
+
+
 @pytest.mark.parametrize("level", [0, 5, -1, "4", True, 1.5])
 def test_invalid_influence_levels_do_not_mutate_settings(workspace, level):
     app, client = workspace
@@ -77,7 +88,7 @@ def test_each_level_changes_prompt_and_includes_calibrated_moods(workspace):
     app, _ = workspace
     calibrated_play(app.state.store, moods=["温柔", "治愈"])
     notes = []
-    for level, name in enumerate(["轻微", "自然", "明显", "沉浸"], 1):
+    for level, name in enumerate(["克制", "自然", "敏感", "共鸣"], 1):
         set_influence_level(app.state.store, level)
         note, ambient = atmosphere(app.state.store)
         assert name in note and f"{level}/4" in note
@@ -122,7 +133,7 @@ def test_tutor_modes_have_separate_prompts_and_persistent_histories(workspace):
     special = client.post(path + "/explain", json={"mode": "xinxin", "message": "一起想想"}).json()
     assert special["mode"] == "xinxin" and len(special["history"]) == 2
     prompt = calls[1]["messages"][0]["content"]
-    assert "你叫 Xinxin" in prompt and "沉浸" in prompt
+    assert "你叫 Xinxin" in prompt and "共鸣" in prompt
     assert "普通老师追问" not in json.dumps(calls[1], ensure_ascii=False)
     materials = json.loads(calls[1]["messages"][1]["content"].split("\n", 1)[1])
     assert materials["question"]["options"][0] == {"key": "A", "text": "2"}
