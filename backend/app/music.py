@@ -36,6 +36,14 @@ class MusicUnavailable(ValueError):
     """上游不可用或没有可播放地址（继承 ValueError，按 400 返回可读提示）。"""
 
 
+class MusicBusy(MusicUnavailable):
+    """本地配额用完了。这是我们自己限的流，不能靠降级绕过去。"""
+
+
+class MusicBusy(MusicUnavailable):
+    """本地配额用完了。这是我们自己限的流，不能靠降级绕过去。"""
+
+
 # 情绪词表：词 -> (valence, energy, weight)
 # valence: -1 悲伤 ← 0 → +1 愉快；energy: 0 安静 → 1 激昂。
 EMOTION_WORDS: dict[str, tuple[float, float, float]] = {
@@ -195,7 +203,7 @@ class GDClient:
                 self.calls.popleft()
             if len(self.calls) >= CALL_LIMIT:
                 wait = int(CALL_WINDOW - (now - self.calls[0])) + 1
-                raise MusicUnavailable(
+                raise MusicBusy(
                     f"音乐接口调用太频繁，请 {max(1, wait)} 秒后再试"
                 )
             self.calls.append(now)
@@ -209,7 +217,7 @@ class GDClient:
                 return cached[1]
         self._budget()
         try:
-            response = httpx.get(BASE, params=params, timeout=12)
+            response = httpx.get(BASE, params=params, timeout=12, trust_env=False)
         except httpx.HTTPError as failure:
             raise MusicUnavailable(
                 f"连接音乐接口失败：{type(failure).__name__}"
@@ -233,13 +241,18 @@ class GDClient:
     # ------------------------------------------------------------------
     def search(self, query: str, source: str = "netease", page: int = 1, limit: int = 20):
         source = _source(source)
-        data = self.get(
-            types="search",
-            source=source,
-            name=query,
-            count=max(1, min(limit, 30)),
-            pages=max(1, min(page, 20)),
-        )
+        try:
+            data = self.get(
+                types="search",
+                source=source,
+                name=query,
+                count=max(1, min(limit, 30)),
+                pages=max(1, min(page, 20)),
+            )
+        except MusicUnavailable as failure:
+            if isinstance(failure, MusicBusy) or source != "netease":
+                raise
+            return netease_direct.search(query, page, limit)
         rows = data if isinstance(data, list) else (data or {}).get("data") or []
         tracks = []
         for row in rows:
@@ -266,7 +279,12 @@ class GDClient:
     def url(self, track_id: str, source: str = "netease", br: int = 320):
         source = _source(source)
         br = br if br in BITRATES else 320
-        payload = _first(self.get(types="url", source=source, id=track_id, br=br))
+        try:
+            payload = _first(self.get(types="url", source=source, id=track_id, br=br))
+        except MusicUnavailable as failure:
+            if isinstance(failure, MusicBusy) or source != "netease":
+                raise
+            return netease_direct.url(track_id, br)
         if not isinstance(payload, dict) or not payload.get("url"):
             raise MusicUnavailable("这首在当前音源没有可播放地址，换一个音源试试")
         return {
@@ -277,7 +295,12 @@ class GDClient:
 
     def lyric(self, lyric_id: str, source: str = "netease"):
         source = _source(source)
-        payload = _first(self.get(types="lyric", source=source, id=lyric_id))
+        try:
+            payload = _first(self.get(types="lyric", source=source, id=lyric_id))
+        except MusicUnavailable as failure:
+            if isinstance(failure, MusicBusy) or source != "netease":
+                raise
+            return netease_direct.lyric(lyric_id)
         if not isinstance(payload, dict):
             return {"lyric": "", "tlyric": ""}
         return {
@@ -288,11 +311,147 @@ class GDClient:
     def pic(self, pic_id: str, source: str = "netease", size: int = 500):
         source = _source(source)
         size = 500 if size not in (300, 500) else size
-        payload = _first(self.get(types="pic", source=source, id=pic_id, size=size))
+        try:
+            payload = _first(self.get(types="pic", source=source, id=pic_id, size=size))
+        except MusicUnavailable as failure:
+            if isinstance(failure, MusicBusy) or source != "netease":
+                raise
+            return netease_direct.pic(pic_id)
         if not isinstance(payload, dict):
             return {"url": ""}
         return {"url": str(payload.get("url") or "")}
 
+
+NETEASE_BASE = "https://music.163.com"
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://music.163.com/",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-CN,zh;q=0.9",
+}
+
+
+class NeteaseDirect:
+    """GD 不可用时的备用通道：直接调网易云公开接口。
+
+    范围刻意只做网易云：只有它的搜索 / 试听 / 歌词能匿名拿到；
+    酷我、JOOX、QQ 需要各自的签名，没有可靠的公开实现，宁可明确报错。
+    """
+
+    def __init__(self):
+        self.cache: dict[tuple, tuple[float, object]] = {}
+        self.lock = threading.Lock()
+
+    def _json(self, path: str, params: dict):
+        key = (path, tuple(sorted(params.items())))
+        now = time.time()
+        with self.lock:
+            cached = self.cache.get(key)
+            if cached and cached[0] > now:
+                return cached[1]
+        try:
+            response = httpx.get(
+                NETEASE_BASE + path,
+                params=params,
+                headers=BROWSER_HEADERS,
+                timeout=12,
+                trust_env=False,
+            )
+        except httpx.HTTPError as failure:
+            raise MusicUnavailable(
+                f"备用通道也连不上网易云：{type(failure).__name__}"
+            ) from None
+        if response.status_code >= 400:
+            raise MusicUnavailable(f"网易云接口返回 {response.status_code}")
+        try:
+            data = response.json()
+        except ValueError:
+            raise MusicUnavailable("网易云接口返回了非 JSON 内容") from None
+        with self.lock:
+            if len(self.cache) > 200:
+                self.cache.clear()
+            self.cache[key] = (now + CACHE_TTL, data)
+        return data
+
+    def search(self, query: str, page: int = 1, limit: int = 20):
+        data = self._json(
+            "/api/search/get",
+            {
+                "s": query,
+                "type": 1,
+                "limit": max(1, min(limit, 30)),
+                "offset": (max(1, page) - 1) * max(1, min(limit, 30)),
+            },
+        )
+        songs = ((data.get("result") or {}).get("songs")) or []
+        tracks = []
+        for row in songs:
+            if not isinstance(row, dict) or not row.get("id"):
+                continue
+            artists = row.get("artists") or []
+            album = row.get("album") or {}
+            track = {
+                "id": str(row["id"]),
+                "name": str(row.get("name") or "未命名"),
+                "artist": " / ".join(
+                    str(item.get("name") or "") for item in artists if item.get("name")
+                )
+                or "未知歌手",
+                "album": str(album.get("name") or ""),
+                # 备用通道里 pic_id 存的是歌曲 id，取封面时用 song/detail 查
+                "pic_id": str(row["id"]),
+                "lyric_id": str(row["id"]),
+                "source": "netease",
+            }
+            track["emotion"] = emotion_for(
+                track["name"], track["artist"], track["album"]
+            )
+            tracks.append(track)
+        return {"source": "netease", "fallback": True, "tracks": tracks}
+
+    def url(self, track_id: str, br: int = 320):
+        try:
+            response = httpx.get(
+                NETEASE_BASE + "/song/media/outer/url",
+                params={"id": f"{track_id}.mp3"},
+                headers=BROWSER_HEADERS,
+                timeout=12,
+                follow_redirects=False,
+                trust_env=False,
+            )
+        except httpx.HTTPError as failure:
+            raise MusicUnavailable(
+                f"备用通道取不到播放地址：{type(failure).__name__}"
+            ) from None
+        target = response.headers.get("location") or ""
+        if not target:
+            raise MusicUnavailable("这首在当前音源没有可播放地址，换一个音源试试")
+        # 网易云给的是 http CDN；换成 https 才能在 https 页面里播放
+        if target.startswith("http://"):
+            target = "https://" + target[len("http://") :]
+        return {"url": target, "br": br, "size": None, "fallback": True}
+
+    def lyric(self, lyric_id: str):
+        data = self._json("/api/song/lyric", {"id": lyric_id, "lv": -1, "kv": -1})
+        return {
+            "lyric": str(((data.get("lrc") or {}).get("lyric")) or ""),
+            "tlyric": str(((data.get("tlyric") or {}).get("lyric")) or ""),
+            "fallback": True,
+        }
+
+    def pic(self, song_id: str):
+        data = self._json("/api/song/detail", {"ids": f"[{song_id}]"})
+        songs = data.get("songs") or []
+        if not songs:
+            return {"url": "", "fallback": True}
+        album = songs[0].get("album") or songs[0].get("al") or {}
+        return {"url": str(album.get("picUrl") or ""), "fallback": True}
+
+
+netease_direct = NeteaseDirect()
 
 client = GDClient()
 

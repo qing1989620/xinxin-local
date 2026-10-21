@@ -7,6 +7,7 @@ import json
 import time
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 import app.music as music_module
@@ -496,3 +497,111 @@ def test_mood_words_follow_calibrated_scores(tmp_path):
     record_play(store, {"id": "x1", "source": "netease", "name": "演员", "artist": "薛之谦"})
     mood = music_module.current_mood(store)
     assert {item["mood"] for item in mood["moods"]} == {"怀旧", "孤独"}
+
+
+def test_search_falls_back_when_gd_is_down(monkeypatch):
+    def boom(**kwargs):
+        raise music_module.MusicUnavailable("音乐台暂时拒绝了请求（400）")
+
+    monkeypatch.setattr(music_module.client, "get", boom)
+    monkeypatch.setattr(
+        music_module.netease_direct,
+        "search",
+        lambda query, page, limit: {"source": "netease", "fallback": True, "tracks": [{"id": "1"}]},
+    )
+    result = music_module.client.search("起风了", "netease")
+    assert result["fallback"] is True and result["tracks"][0]["id"] == "1"
+
+    with pytest.raises(music_module.MusicUnavailable):
+        music_module.client.search("起风了", "kuwo")
+
+
+def test_netease_direct_parses_search_payload(monkeypatch):
+    direct = music_module.NeteaseDirect()
+    monkeypatch.setattr(
+        direct,
+        "_json",
+        lambda path, params: {
+            "result": {
+                "songs": [
+                    {
+                        "id": 1330348068,
+                        "name": "起风了",
+                        "artists": [{"name": "买辣椒也用券"}],
+                        "album": {"name": "起风了", "picUrl": "https://p1.music.126.net/x.jpg"},
+                    }
+                ]
+            }
+        },
+    )
+    result = direct.search("起风了")
+    track = result["tracks"][0]
+    assert result["fallback"] is True
+    assert track["id"] == "1330348068"
+    assert track["artist"] == "买辣椒也用券"
+    assert track["pic_id"] == "1330348068"
+    assert track["emotion"]["label"] in {"喜", "怒", "哀", "乐", "平静"}
+
+
+def test_netease_direct_url_rewrites_to_https(monkeypatch):
+    direct = music_module.NeteaseDirect()
+
+    class Response:
+        headers = {"location": "http://m801.music.126.net/a.mp3?x=1"}
+
+    monkeypatch.setattr(music_module.httpx, "get", lambda *a, **k: Response())
+    assert direct.url("1")["url"].startswith("https://m801.music.126.net/")
+
+
+def test_search_falls_back_when_gd_is_down(monkeypatch):
+    def boom(**kwargs):
+        raise music_module.MusicUnavailable("音乐台暂时拒绝了请求（400）")
+
+    monkeypatch.setattr(music_module.client, "get", boom)
+    monkeypatch.setattr(
+        music_module.netease_direct,
+        "search",
+        lambda query, page, limit: {"source": "netease", "fallback": True, "tracks": [{"id": "1"}]},
+    )
+    result = music_module.client.search("起风了", "netease")
+    assert result["fallback"] is True and result["tracks"][0]["id"] == "1"
+
+    with pytest.raises(music_module.MusicUnavailable):
+        music_module.client.search("起风了", "kuwo")
+
+
+def test_netease_direct_parses_search_payload(monkeypatch):
+    direct = music_module.NeteaseDirect()
+    monkeypatch.setattr(
+        direct,
+        "_json",
+        lambda path, params: {
+            "result": {
+                "songs": [
+                    {
+                        "id": 1330348068,
+                        "name": "起风了",
+                        "artists": [{"name": "买辣椒也用券"}],
+                        "album": {"name": "起风了", "picUrl": "https://p1.music.126.net/x.jpg"},
+                    }
+                ]
+            }
+        },
+    )
+    result = direct.search("起风了")
+    track = result["tracks"][0]
+    assert result["fallback"] is True
+    assert track["id"] == "1330348068"
+    assert track["artist"] == "买辣椒也用券"
+    assert track["pic_id"] == "1330348068"
+    assert track["emotion"]["label"] in {"喜", "怒", "哀", "乐", "平静"}
+
+
+def test_netease_direct_url_rewrites_to_https(monkeypatch):
+    direct = music_module.NeteaseDirect()
+
+    class Response:
+        headers = {"location": "http://m801.music.126.net/a.mp3?x=1"}
+
+    monkeypatch.setattr(music_module.httpx, "get", lambda *a, **k: Response())
+    assert direct.url("1")["url"].startswith("https://m801.music.126.net/")

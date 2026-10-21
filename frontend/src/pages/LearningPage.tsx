@@ -41,6 +41,17 @@ function words(count: number) {
   return count >= 1000 ? `${(count / 1000).toFixed(1)}k 字` : `${count} 字`;
 }
 
+/** 按书名挑一个封面色：只在青绿到靛青之间，保证和纸感底色不打架。 */
+const COVER_HUES = [150, 168, 186, 202, 132];
+
+function coverHue(title: string) {
+  let hash = 0;
+  for (let index = 0; index < title.length; index += 1) {
+    hash = (hash * 31 + title.charCodeAt(index)) % 997;
+  }
+  return COVER_HUES[hash % COVER_HUES.length];
+}
+
 export default function LearningPage() {
   const toast = useToast();
   const navigate = useNavigate();
@@ -167,7 +178,7 @@ export default function LearningPage() {
               return (
                 <article
                   key={book.id}
-                  className="book-card"
+                  className="shelf-card"
                   onClick={() => navigate(`/learning/books/${book.id}`)}
                   role="button"
                   tabIndex={0}
@@ -175,40 +186,48 @@ export default function LearningPage() {
                     if (event.key === "Enter") navigate(`/learning/books/${book.id}`);
                   }}
                 >
-                  <div className="book-spine" aria-hidden="true">
-                    {book.title.slice(0, 1)}
+                  <div
+                    className="shelf-cover"
+                    style={{ "--cover-hue": coverHue(book.title) } as React.CSSProperties}
+                  >
+                    <span className="shelf-spine" aria-hidden="true" />
+                    <span className="shelf-cover-title">{book.title}</span>
+                    <span className="shelf-cover-subject">
+                      {book.subject || "未分学科"}
+                    </span>
+                    <span
+                      className={`shelf-badge${book.question_count > 0 ? " ready" : ""}`}
+                    >
+                      {book.question_count > 0 ? "可刷题" : "待出题"}
+                    </span>
+                    <button
+                      className="shelf-remove"
+                      aria-label="从书架移除"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void dropBook(book);
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                  <div className="book-body">
-                    <p className="book-subject">{book.subject || "未分学科"}</p>
+                  <div className="shelf-meta">
                     <h3>{book.title}</h3>
-                    <p className="muted">
-                      {book.chapter_count} 章 · {words(book.char_count)} ·{" "}
-                      {book.question_count} 题
+                    <p className="shelf-line">
+                      {book.chapter_count} 章 · {words(book.char_count)} · {book.question_count} 题
                     </p>
-                    <div className="book-progress" aria-hidden="true">
+                    <div className="shelf-progress" aria-hidden="true">
                       <i style={{ width: `${progress}%` }} />
                     </div>
-                    <p className="book-foot">
+                    <p className="shelf-foot">
                       <span>
                         {book.answered > 0
-                          ? `练过 ${book.answered} 题 · 对 ${book.correct}`
+                          ? `已练 ${book.answered} 题 · 对 ${book.correct}`
                           : "还没开始练"}
                       </span>
-                      <span className="book-open">
-                        打开 <ArrowUpRight size={12} />
-                      </span>
+                      <span className="shelf-percent">{progress}%</span>
                     </p>
                   </div>
-                  <button
-                    className="icon-button book-remove"
-                    aria-label="从书架移除"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void dropBook(book);
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
                 </article>
               );
             })}

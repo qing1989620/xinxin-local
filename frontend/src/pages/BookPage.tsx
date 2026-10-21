@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Dumbbell, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { post, remove } from "../api";
-import { Empty, ErrorState, Loading, PageHeader, useResource, useToast } from "../ui";
+import { Empty, ErrorState, Loading, useResource, useToast } from "../ui";
 import { MathText } from "../components/MathText";
 
 type Chapter = {
@@ -118,27 +118,40 @@ export default function BookPage() {
         <ArrowLeft size={15} />
         书架
       </button>
-      <PageHeader
-        overline={data.subject ? data.subject.toUpperCase() : "BOOK"}
-        title={data.title}
-        description={`${data.chapter_count} 章 · ${words(data.char_count)} · ${data.question_count} 道题`}
-        action={
-          <div className="header-actions">
-            <button className="button ghost" onClick={() => void drop()}>
-              <Trash2 size={15} />
-              移除
-            </button>
-            <button
-              className="button primary"
-              disabled={!data.question_count || busyChapter === "all"}
-              onClick={() => void startQuiz("")}
-            >
-              {busyChapter === "all" ? <Loader2 className="spin" size={15} /> : <Dumbbell size={15} />}
-              全书练习
-            </button>
-          </div>
-        }
-      />
+      <header className="book-head">
+        <div
+          className="book-head-cover"
+          style={{ "--cover-hue": 168 } as React.CSSProperties}
+        >
+          <span>{data.title.slice(0, 1)}</span>
+          <i>{data.subject || "BOOK"}</i>
+        </div>
+        <div className="book-head-main">
+          <p className="eyebrow">{data.subject ? data.subject.toUpperCase() : "BOOK"}</p>
+          <h1>{data.title}</h1>
+          <p className="lead">
+            {data.chapter_count} 章 · {words(data.char_count)} · {data.question_count} 道题
+          </p>
+        </div>
+        <div className="header-actions">
+          <button className="button ghost" onClick={() => void drop()}>
+            <Trash2 size={15} />
+            移除
+          </button>
+          <button
+            className="button primary"
+            disabled={!data.question_count || busyChapter === "all"}
+            onClick={() => void startQuiz("")}
+          >
+            {busyChapter === "all" ? (
+              <Loader2 className="spin" size={15} />
+            ) : (
+              <Dumbbell size={15} />
+            )}
+            全书练习
+          </button>
+        </div>
+      </header>
 
       <ol className="chapter-list">
         {data.chapters.map((chapter) => {

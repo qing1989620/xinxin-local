@@ -128,6 +128,7 @@ export default function MusicPage() {
     [addingTrack, setAddingTrack] = useState<Track | null>(null),
     [creating, setCreating] = useState(false),
     [newName, setNewName] = useState(""),
+    [fallback, setFallback] = useState(false),
     [params, setParams] = useSearchParams();
 
   const loadMood = useCallback(async () => {
@@ -200,10 +201,11 @@ export default function MusicPage() {
     async (text: string, src: string) => {
       setSearching(true);
       try {
-        const result = await api<{ tracks: Track[] }>(
+        const result = await api<{ tracks: Track[]; fallback?: boolean }>(
           `/music/search?q=${encodeURIComponent(text)}&source=${src}`,
         );
         setTracks(result.tracks);
+        setFallback(Boolean(result.fallback));
         if (!result.tracks.length) toast("没有搜到，换个关键词或音源试试");
         else void calibrate(result.tracks);
         sessionStorage.setItem(
@@ -614,6 +616,18 @@ export default function MusicPage() {
                   </span>
                 )}
               </form>
+
+              {fallback && (
+                <p className="source-note">
+                  GD 音乐台暂时不可用，已切到网易云直连；酷我 / QQ / JOOX 要等它恢复。
+                </p>
+              )}
+
+              {fallback && (
+                <p className="source-note">
+                  GD 音乐台暂时不可用，已切到网易云直连；酷我 / QQ / JOOX 要等它恢复。
+                </p>
+              )}
 
               <div className="source-tabs" role="tablist" aria-label="音乐源">
                 {SOURCES.map(([value, label]) => (

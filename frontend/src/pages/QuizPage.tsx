@@ -129,6 +129,24 @@ export default function QuizPage() {
     }
   }
 
+  function jump(position: number) {
+    if (!session) return;
+    const item = session.questions[position];
+    if (!item) return;
+    setIndex(position);
+    setDraft(item.answered || "");
+    setFeedback(
+      item.status
+        ? {
+            status: item.status,
+            reason: item.ai_reason,
+            answer: item.answer || "",
+            explanation: item.explanation,
+          }
+        : null,
+    );
+  }
+
   async function submit() {
     if (!session || !question || feedback) return;
     if (!draft.trim()) {
@@ -266,6 +284,22 @@ export default function QuizPage() {
           <span className="muted">对 {session.correct}</span>
         </div>
       </header>
+
+      <nav className="quiz-nav" aria-label="题号">
+        {session.questions.map((item, position) => (
+          <button
+            key={item.id}
+            className={`quiz-dot${position === index ? " current" : ""}${
+              item.status ? ` ${item.status}` : ""
+            }`}
+            onClick={() => jump(position)}
+            aria-label={`第 ${position + 1} 题${item.status ? "，" + (STATUS_TEXT[item.status] || "") : ""}`}
+            aria-current={position === index ? "true" : undefined}
+          >
+            {position + 1}
+          </button>
+        ))}
+      </nav>
 
       <article className="quiz-card">
         <div className="quiz-meta">
