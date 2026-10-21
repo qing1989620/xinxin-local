@@ -29,8 +29,18 @@ npm run test:e2e
 
 桌面集成使用随机回环端口、隔离数据与进程清单，验证重复启动复用、旧版本更新、执行中任务阻止重启，以及前端更新。清理仅处理隔离测试清单中 PID 和启动时间一致的进程。
 
+执行结果：后端全量 **256 passed**（349.91 秒），前端单元 **62 passed**，Playwright 桌面与手机 **56 passed**（2.8 分钟）；TypeScript / Vite / PWA 生产构建通过。构建保留既有单块大于 500 KB 的提示，没有构建错误。
+
+桌面审查修复后另跑 `tests/test_desktop_updates.py tests/test_script_encoding.py`：保护同清单当前/旧版本的不同数据目录请求、未知数据目录保留进程、崩溃任务恢复，以及 PowerShell 5.1 的 BOM 编码。全量其他模块通过后没有再修改业务代码。
+
 ## 审查与边界
 
-按仓库要求执行 BadGoods 前端 quick review 与 mattpocock code-review 的 Standards / Spec 独立审查，最终记录在测试与审查完成后补充。
+前端按 [BadGoods quick review](https://github.com/BadbotAI/BadGoods/blob/76d20b19c8b2a6513d1516d42fdcc42a2b8c394f/skills/review-frontend-production/SKILL.md) 检查新路线的折叠、原生键盘语义、方法对话框关闭、历史恢复、错误展示与手机布局。真实浏览器验证两个视口的实时路线、方法读取、工作区写入与交付、只读失败和历史恢复；相关流程没有未捕获页面异常，未出现横向溢出。截图为隔离合成数据，不代表真实模型效果。
+
+后端按 [mattpocock code-review](https://github.com/mattpocock/skills/blob/49dd158d1076134a641b33efb035946536778336/skills/engineering/code-review/SKILL.md) 进行 Standards / Spec 独立审查，固定比较 `243524e..caf58e6`。
+
+- Standards 发现 P1：受管理服务清单未绑定真实数据目录，切换参数可能检查错误数据库后停止旧进程。修复为保存目录与端口，复用/更新前核对；未知配置保留进程，发布过的无指纹旧启动器仅按其固定默认目录契约迁移。
+- Spec 发现 P2：读取清单后服务崩溃时，先查活动任务会误阻止当次恢复。修复为健康探测后重新验证进程身份，再检查活着的旧服务任务；补充崩溃残留任务恢复为 interrupted 的回归。
+- SkillNet、四档独立性、旧接口兼容、权限与隐私边界未发现其他明确可行动缺陷。两项桌面修复的独立复核结果在最终合并前记录。
 
 真实模型主观表现、全部外部音乐源实时可用性、实体手机软键盘和新打包 Android APK 没有纳入本次验收。所有测试通过表示已执行的回归通过，不表示任意输入与外部服务均无缺陷。

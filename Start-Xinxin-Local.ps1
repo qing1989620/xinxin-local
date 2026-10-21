@@ -76,16 +76,39 @@ $gatewayReady={
 }
 function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Arguments,[string]$Directory,[int]$Port,[scriptblock]$Ready,[string]$Fingerprint=''){
   $owned=@($script:instances | Where-Object {$_.role -eq $Role}) | Select-Object -First 1
-  $serviceHealthy=& $Ready
-  if($serviceHealthy -and (-not $Fingerprint -or (Test-XinxinManagedBuild $owned $Fingerprint))){Write-Host "$Role already running on port $Port (current build)";return}
-  if($owned){
-    if($Role -eq 'backend'){
-      $active=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') active-tasks $DataDirectory
-      if($LASTEXITCODE -ne 0){throw 'Cannot verify active tasks; the running backend was preserved.'}
-      if([int]$active -gt 0){throw 'Xinxin has active tasks. Finish or stop them before updating; the running service was preserved.'}
+  $instance=if($owned){Get-Process -Id $owned.id -ErrorAction SilentlyContinue}else{$null}
+  $managedAlive=$instance -and $instance.StartTime.ToUniversalTime().Ticks -eq [long]$owned.start_ticks
+  if($managedAlive){
+    if($owned.port -and [int]$owned.port -ne $Port){throw "Managed $Role port differs from this request; the running service was preserved."}
+    if(-not $owned.port){
+      $listeners=@(Get-NetTCPConnection -OwningProcess $instance.Id -State Listen -ErrorAction SilentlyContinue)
+      if($listeners.LocalPort -notcontains $Port){throw "Cannot verify the managed $Role port; the running service was preserved."}
     }
-    $instance=Get-Process -Id $owned.id -ErrorAction SilentlyContinue
-    if($instance -and $instance.StartTime.ToUniversalTime().Ticks -eq [long]$owned.start_ticks){
+    if($Role -eq 'backend'){
+      $ownedData=[string]$owned.data_directory
+      if(-not $ownedData){
+        # Released legacy launchers had no custom directories and always set
+        # XINXIN_DATA_DIR to backend/data. Only migrate that exact old contract.
+        $legacyDefault=-not $owned.fingerprint -and $runtimePath -eq (Join-Path $projectPath '.runtime') -and $DataDirectory -eq (Join-Path $backendPath 'data')
+        if(-not $legacyDefault){throw 'Cannot verify the managed backend data directory; the running service was preserved.'}
+        $ownedData=Join-Path $backendPath 'data'
+      }
+      if([System.IO.Path]::GetFullPath($ownedData) -ne $DataDirectory){throw 'Managed backend data directory differs from this request; the running service was preserved.'}
+    }
+  }
+  $serviceHealthy=& $Ready
+  if($serviceHealthy -and $managedAlive -and (-not $Fingerprint -or (Test-XinxinManagedBuild $owned $Fingerprint))){Write-Host "$Role already running on port $Port (current build)";return}
+  # The health request can outlive a crashing process. Recheck before consulting
+  # stale database task rows or attempting to stop the managed process.
+  $instance=if($owned){Get-Process -Id $owned.id -ErrorAction SilentlyContinue}else{$null}
+  $managedAlive=$instance -and $instance.StartTime.ToUniversalTime().Ticks -eq [long]$owned.start_ticks
+  if($owned){
+    if($managedAlive){
+      if($Role -eq 'backend'){
+        $active=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') active-tasks $ownedData
+        if($LASTEXITCODE -ne 0){throw 'Cannot verify active tasks; the running backend was preserved.'}
+        if([int]$active -gt 0){throw 'Xinxin has active tasks. Finish or stop them before updating; the running service was preserved.'}
+      }
       & (Join-Path $env:SystemRoot 'System32/taskkill.exe') /PID $instance.Id /T /F | Out-Null
       if($LASTEXITCODE -ne 0){throw "Could not stop the managed $Role process tree"}
       Write-Host "Updating managed $Role to the current build..."
@@ -109,7 +132,7 @@ function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Argume
     }
   }
   $service=Start-Process -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory $Directory -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath "$Role.out.log") -RedirectStandardError (Join-Path $runtimePath "$Role.err.log")
-  $script:instances+=@{role=$Role;id=$service.Id;start_ticks=$service.StartTime.ToUniversalTime().Ticks;fingerprint=$Fingerprint}
+  $script:instances+=@{role=$Role;id=$service.Id;start_ticks=$service.StartTime.ToUniversalTime().Ticks;fingerprint=$Fingerprint;port=$Port;data_directory=$(if($Role -eq 'backend'){$DataDirectory}else{''})}
   Save-Instances
   for($attempt=0;$attempt -lt 240;$attempt++){
     if(& $Ready){Write-Host "$Role ready on port $Port";return}

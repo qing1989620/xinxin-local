@@ -31,12 +31,13 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
                "-NoBrowser", "-NoGateway", "-BackendPort", str(backend_port), "-FrontendPort", str(frontend_port),
                "-RuntimeDirectory", str(runtime), "-DataDirectory", str(data)]
 
-    def start():
+    def start(selected_data=None):
         # Detached Windows children can inherit capture pipes. Use files so
         # communicate() does not wait for a long-running service to close them.
         out, err = tmp_path / "launcher.out.txt", tmp_path / "launcher.err.txt"
         with out.open("wb") as stdout, err.open("wb") as stderr:
-            result = subprocess.run(command, cwd=ROOT, stdout=stdout, stderr=stderr, timeout=150)
+            requested = command if selected_data is None else command[:-1] + [str(selected_data)]
+            result = subprocess.run(requested, cwd=ROOT, stdout=stdout, stderr=stderr, timeout=150)
         return subprocess.CompletedProcess(command, result.returncode, out.read_text(encoding="utf-8", errors="replace"), err.read_text(encoding="utf-8", errors="replace"))
 
     def entries():
@@ -57,9 +58,27 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
         assert start().returncode == 0
         assert {k: v["id"] for k, v in entries().items()} == {k: v["id"] for k, v in before.items()}
 
+        # Configuration identity matters even when the code build is current.
+        mismatch = start(tmp_path / "other-data")
+        assert mismatch.returncode != 0 and "data directory differs" in mismatch.stderr
+        assert entries()["backend"]["id"] == before["backend"]["id"]
+        known_manifest = manifest.read_bytes()
+        unknown = json.loads(known_manifest.decode("utf-8-sig"))
+        for item in unknown["services"]:
+            if item["role"] == "backend":
+                item.pop("data_directory")
+        manifest.write_text(json.dumps(unknown), encoding="utf-8-sig")
+        uncertain = start()
+        assert uncertain.returncode != 0 and "Cannot verify the managed backend data directory" in uncertain.stderr
+        assert entries()["backend"]["id"] == before["backend"]["id"]
+        manifest.write_bytes(known_manifest)
+
         mark_stale("backend")
         with sqlite3.connect(data / "xinxin.sqlite3") as db:
             db.execute("INSERT INTO runs(id,conversation_id,task,status,permission,max_calls,max_seconds,created,updated) VALUES('synthetic-running','synthetic','synthetic','running','read',1,60,1,1)")
+        changed_data = start(tmp_path / "other-data")
+        assert changed_data.returncode != 0 and "data directory differs" in changed_data.stderr
+        assert entries()["backend"]["id"] == before["backend"]["id"]
         blocked = start()
         assert blocked.returncode != 0 and "active tasks" in blocked.stderr
         assert entries()["backend"]["id"] == before["backend"]["id"]
@@ -76,6 +95,15 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
         assert refreshed.returncode == 0, refreshed.stdout + refreshed.stderr
         assert entries()["frontend"]["id"] != after["frontend"]["id"]
         assert entries()["backend"]["id"] == after["backend"]["id"]
+        # A crashed process with a stale running row must recover at startup.
+        with sqlite3.connect(data / "xinxin.sqlite3") as db:
+            db.execute("INSERT INTO runs(id,conversation_id,task,status,permission,max_calls,max_seconds,created,updated) VALUES('crashed-task','synthetic','synthetic','running','read',1,60,1,1)")
+        stopped_backend = subprocess.run(["taskkill.exe", "/PID", str(entries()["backend"]["id"]), "/T", "/F"], capture_output=True, timeout=15)
+        assert stopped_backend.returncode == 0
+        recovered = start()
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        with sqlite3.connect(data / "xinxin.sqlite3") as db:
+            assert db.execute("SELECT status FROM runs WHERE id='crashed-task'").fetchone()[0] == "interrupted"
     finally:
         # Stop only process identities recorded by this test's dedicated manifest.
         if manifest.exists():
