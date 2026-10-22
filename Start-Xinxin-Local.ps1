@@ -147,6 +147,32 @@ if(-not(Test-Path -LiteralPath $pythonPath)){
   Push-Location -LiteralPath $backendPath
   try{Invoke-XinxinNative 'python' @('-m','venv','.venv') 'Python 3.12+ is required';Invoke-XinxinNative $pythonPath @('-m','pip','install','-r','requirements.lock') 'Backend dependency installation failed'}finally{Pop-Location}
 }
+# Existing installations also need new OCR/PDF dependencies. First check exact
+# lock pins offline. Never mutate a venv while an unknown or busy backend uses it.
+& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') check-dependencies
+if($LASTEXITCODE -ne 0){
+  $ownedBackend=@($script:instances | Where-Object {$_.role -eq 'backend'}) | Select-Object -First 1
+  $runningBackend=if($ownedBackend){Get-Process -Id $ownedBackend.id -ErrorAction SilentlyContinue}else{$null}
+  $managedBackend=$runningBackend -and $runningBackend.StartTime.ToUniversalTime().Ticks -eq [long]$ownedBackend.start_ticks
+  if($managedBackend){
+    $ownedData=[string]$ownedBackend.data_directory
+    if(-not $ownedData -and -not $ownedBackend.fingerprint -and $runtimePath -eq (Join-Path $projectPath '.runtime') -and $DataDirectory -eq (Join-Path $backendPath 'data')){$ownedData=$DataDirectory}
+    if(-not $ownedData -or [System.IO.Path]::GetFullPath($ownedData) -ne $DataDirectory){throw 'Cannot verify the backend data directory for dependency synchronization; service preserved.'}
+    if(($ownedBackend.port -and [int]$ownedBackend.port -ne $BackendPort) -or -not(Test-XinxinManagedPort $runningBackend.Id $BackendPort)){throw 'Cannot verify the backend port for dependency synchronization; service preserved.'}
+    $active=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') active-tasks $ownedData
+    if($LASTEXITCODE -ne 0 -or [int]$active -gt 0){throw 'Finish active tasks before dependency synchronization; service preserved.'}
+    & (Join-Path $env:SystemRoot 'System32/taskkill.exe') /PID $runningBackend.Id /T /F | Out-Null
+    if($LASTEXITCODE -ne 0){throw 'Could not stop the managed backend for dependency synchronization.'}
+    $script:instances=@($script:instances | Where-Object {$_.id -ne $ownedBackend.id})
+    Save-Instances
+  }
+  if(Get-NetTCPConnection -LocalPort $BackendPort -State Listen -ErrorAction SilentlyContinue){throw 'Backend port is occupied; dependency synchronization was not attempted.'}
+  Push-Location -LiteralPath $backendPath
+  try{
+    Invoke-XinxinNative $pythonPath @('-m','pip','install','-r','requirements.lock') 'Backend dependency synchronization failed'
+    Invoke-XinxinNative $pythonPath @('scripts/local_runtime.py','check-dependencies') 'Backend dependency verification failed'
+  }finally{Pop-Location}
+}
 $backendBuild=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') fingerprint
 if($LASTEXITCODE -ne 0 -or -not $backendBuild){throw 'Cannot identify the backend build.'}
 

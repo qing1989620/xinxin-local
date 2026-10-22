@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import unicodedata
 
 from .store import clean_text
 from .document_text import MATH_UNCERTAIN
@@ -24,7 +23,7 @@ METADATA_QUESTION = re.compile(
     r"|(?:\b(?:which|what)\s+page\s+(?:number|does|do|contains|has|is\s+(?:the\s+)?(?:chapter|section|topic))\b)"
     r"|(?:\b(?:which|what)\s+chapter\s+(?:does|is|contains|covers)\b)"
     r"|(?:\b(?:which|what).{0,20}\b(?:publisher|isbn)\b)", re.I)
-MISSING_FIGURE = re.compile(r"如[下右左]?图|下图|见图|图\s*\d+[—.-]\d+|根据.{0,8}图示|as shown in (?:the )?(?:figure|diagram)", re.I)
+MISSING_FIGURE = re.compile(r"如[下右左]?图(?=所示|中|[\d一二三四五六七八九十，,。:：、\s])|下图|见图(?=所示|中|[\d一二三四五六七八九十，,。:：、\s])|图\s*\d+[—.-]\d+|根据.{0,8}图示|as shown in (?:the )?(?:figure|diagram)", re.I)
 
 
 def compact(value):
@@ -152,13 +151,10 @@ def parse_reviews(value, count):
 
 def duplicate_stem(stem, previous):
     def normalize(value):
-        # Retain symbols, grouping, sub/superscripts and case-sensitive variable
-        # names. Punctuation-only differences are duplicates; a high edit ratio
-        # alone cannot distinguish + from -, 增大 from 减小, or ≤ from ≥.
-        value = value.translate(str.maketrans("（）：，。？", "():,.?"))
-        return "".join(char for char in value if not char.isspace() and (
-            unicodedata.category(char)[0] not in {"P", "Z"} or char in "+-*/=<>^%|&~!_()[]{}.,:;'\\"
-        )).rstrip(".,")
+        # Preserve every interior character: quotes, spaces inside literals,
+        # signs and case may change the answer. Semantic similarity belongs in
+        # the critic, not in a lossy string/edit-distance heuristic.
+        return clean_text(value).strip().rstrip("？?").rstrip()
     normalized = normalize(stem)
     return any(normalized == normalize(old) for old in previous)
 

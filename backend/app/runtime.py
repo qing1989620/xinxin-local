@@ -3,6 +3,32 @@
 import hashlib
 import sqlite3
 from pathlib import Path
+from importlib import metadata
+
+
+def missing_dependencies(root: Path) -> list[str]:
+    """Compare the installed venv with exact lock pins without network access."""
+    try:
+        from packaging.requirements import Requirement
+    except ImportError:
+        return ["packaging"]
+    missing = []
+    for line in (root / "requirements.lock").read_text(encoding="utf-8").splitlines():
+        line = line.partition("#")[0].strip()
+        if not line:
+            continue
+        requirement = Requirement(line)
+        if requirement.marker and not requirement.marker.evaluate():
+            continue
+        pins = list(requirement.specifier)
+        if len(pins) != 1 or pins[0].operator != "==" or "*" in pins[0].version:
+            raise ValueError("Runtime lock must contain exact package pins")
+        try:
+            if not requirement.specifier.contains(metadata.version(requirement.name), prereleases=True):
+                missing.append(requirement.name)
+        except metadata.PackageNotFoundError:
+            missing.append(requirement.name)
+    return missing
 
 
 def source_fingerprint(root: Path) -> str:

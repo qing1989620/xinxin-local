@@ -64,6 +64,8 @@ def test_multilevel_exercise_instructions_remain_in_source_body():
     ("求 x*2 的值。", "求 x/2 的值。"),
     ("说明压力增大后的变化。", "说明压力减小后的变化。"),
     ("求 X 在此处的值。", "求 x 在此处的值。"),
+    ('求表达式 "1" + "2" 的结果。', '求表达式 1 + 2 的结果。'),
+    ('字符串 "1 2" 的长度是多少？', '字符串 "12" 的长度是多少？'),
 ])
 def test_dedup_preserves_mathematical_and_logical_meaning(first, second):
     assert not quality.duplicate_stem(second, [first])
@@ -78,6 +80,8 @@ def test_metadata_or_missing_figure_questions_are_rejected(stem):
 def test_real_mathematics_and_reading_are_not_metadata_questions():
     for stem in ["求 f(x)=x^2 在 x=3 处的导数。", "比较两种算法的空间复杂度。", "请解释段落中作者的论证方法。",
                  "什么是字节？", "一个字节多少位？", "What is a page fault?", "Which page replacement algorithm minimizes faults?", "解释节拍与节奏的区别。"]:
+        assert not quality.question_issue(stem)
+    for stem in ["如图像分类任务中，为什么需要划分训练集和验证集？", "例如图书管理系统中如何建立索引？"]:
         assert not quality.question_issue(stem)
 
 
