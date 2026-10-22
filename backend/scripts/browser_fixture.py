@@ -1,6 +1,7 @@
 """Playwright 专用本地服务：每次新建合成数据库，不读取主人账户或调用外部模型。"""
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -35,6 +36,25 @@ def create_fixture():
     async def respond(_request):
         body = json.loads(_request.content)
         messages = body.get("messages", [])
+        if messages and "学习工作室协议 v1" in str(messages[0].get("content")):
+            payload = json.loads(messages[1]["content"])
+            await asyncio.sleep(2 if "合成延迟" in payload["focus"] else .15)
+            rows = []
+            signature = hashlib.sha256(payload["text"].encode()).hexdigest()[:8]
+            for index in range(payload["count"]):
+                kind = payload["kinds"][index % len(payload["kinds"])]
+                row = {"kind": kind, "stem": f"合成练习 {signature}-{index + 1}：导数的几何意义是什么？",
+                       "answer": "A", "options": [{"key": key, "text": text} for key, text in zip("ABCD", ["切线斜率", "面积", "弧长", "周长"])],
+                       "explanation": "导数刻画瞬时变化率，在几何上表示切线斜率。", "tags": ["导数"],
+                       "difficulty": payload["difficulty"] or 2, "source_quote": payload["text"].strip()[:60]}
+                if kind == "fill":
+                    row.update(stem=f"合成练习 {signature}-{index + 1}：导数的几何意义为 ___ 。", answer=["切线斜率"])
+                elif kind == "short":
+                    row["answer"] = "导数的几何意义为切线斜率。"
+                if "合成无效" in payload["focus"]:
+                    row["source_quote"] = "这段话没有出现在原文，不能作为来源依据。"
+                rows.append(row)
+            return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(rows, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
         latest_user = next((index for index in range(len(messages) - 1, -1, -1) if messages[index].get("role") == "user"), -1)
         if latest_user >= 0 and "合成 SkillNet 路线" in str(messages[latest_user].get("content")):
             await asyncio.sleep(1.2)  # Keep the real SSE route observable before tool completion.

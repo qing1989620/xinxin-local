@@ -25,6 +25,7 @@ class UploadConflict(ValueError):
 TEXT_EXT = {
     ".txt",
     ".md",
+    ".markdown",
     ".csv",
     ".json",
     ".py",

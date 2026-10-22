@@ -58,7 +58,9 @@ test("真实后端：档位保存与辅导历史跨页面恢复", async ({ page,
   );
   const headers = { Authorization: `Bearer ${token}` };
   const books = await request.get("/api/v1/learning/books", { headers });
-  const book = (await books.json()).books[0];
+  const book = (await books.json()).books.find(
+    (item: { title: string }) => item.title === "合成浏览器讲义",
+  );
   const quiz = await request.post("/api/v1/learning/quiz", {
     headers,
     data: { book_id: book.id, count: 1 },

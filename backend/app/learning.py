@@ -137,20 +137,17 @@ def split_chapters(text: str) -> list[dict]:
             continue
         merged.append(chapter)
 
-    if len(merged) == 1 and len(merged[0]["content"]) > MAX_CHAPTER_CHARS * 2:
-        content = merged[0]["content"]
-        size = max(MAX_CHAPTER_CHARS, len(content) // 8)
-        merged = [
-            {
-                "title": f"第 {index + 1} 部分",
-                "content": content[index * size : (index + 1) * size],
-            }
-            for index in range(0, min(MAX_CHAPTERS, (len(content) + size - 1) // size))
-        ]
-
+    complete = []
     for chapter in merged:
-        chapter["content"] = chapter["content"][:MAX_CHAPTER_CHARS]
-    return merged[:MAX_CHAPTERS]
+        content = chapter["content"]
+        for offset in range(0, len(content), MAX_CHAPTER_CHARS):
+            title = chapter["title"]
+            if len(content) > MAX_CHAPTER_CHARS:
+                title += f" · {offset // MAX_CHAPTER_CHARS + 1}"
+            complete.append({"title": title, "content": content[offset:offset + MAX_CHAPTER_CHARS]})
+    if len(complete) > MAX_CHAPTERS:
+        raise ValueError("资料超过 60 个章节 / 分段，请拆成数份上传，避免正文丢失")
+    return complete
 
 
 def create_book(store, library, file_row: dict, title: str = "", subject: str = "") -> dict:
@@ -163,28 +160,29 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
     ident = uid()
     now = int(time.time())
     book_title = (title or Path(file_row["name"]).stem or "未命名书本")[:120]
-    store.execute(
-        "INSERT INTO books(id,file_id,title,author,subject,pages,char_count,status,created,updated)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?)",
-        (
-            ident,
-            file_row.get("id"),
-            book_title,
-            "",
-            subject[:40],
-            int(file_row.get("pages") or 0),
-            len(content),
-            "ready",
-            now,
-            now,
-        ),
-    )
-    for index, chapter in enumerate(chapters):
-        store.execute(
-            "INSERT INTO book_chapters(id,book_id,idx,title,page_from,page_to,content,created)"
-            " VALUES(?,?,?,?,?,?,?,?)",
-            (uid(), ident, index, chapter["title"], None, None, chapter["content"], now),
+    with store.connect(write=True) as db:
+        db.execute(
+            "INSERT INTO books(id,file_id,title,author,subject,pages,char_count,status,created,updated)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (
+                ident,
+                file_row.get("id"),
+                book_title,
+                "",
+                subject[:40],
+                int(file_row.get("pages") or 0),
+                len(content),
+                "ready",
+                now,
+                now,
+            ),
         )
+        for index, chapter in enumerate(chapters):
+            db.execute(
+                "INSERT INTO book_chapters(id,book_id,idx,title,page_from,page_to,content,created)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (uid(), ident, index, chapter["title"], None, None, chapter["content"], now),
+            )
     return get_book(store, ident)
 
 
@@ -201,7 +199,7 @@ def get_book(store, book_id: str) -> dict:
         "SELECT count(*) AS total FROM questions WHERE book_id=?", (book_id,)
     )
     answered = store.one(
-        "SELECT count(*) AS total, sum(CASE WHEN status='correct' THEN 1 ELSE 0 END) AS ok"
+        "SELECT count(*) AS total, count(DISTINCT question_id) AS unique_total, sum(CASE WHEN status='correct' THEN 1 ELSE 0 END) AS ok"
         " FROM quiz_answers WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)",
         (book_id,),
     )
@@ -220,6 +218,7 @@ def get_book(store, book_id: str) -> dict:
         "chapter_count": len(chapters),
         "question_count": int(questions["total"] or 0),
         "answered": int(answered["total"] or 0),
+        "unique_answered": int(answered["unique_total"] or 0),
         "correct": int(answered["ok"] or 0),
     }
 
@@ -237,29 +236,18 @@ def chapter(store, chapter_id: str) -> dict:
 
 
 def delete_book(store, book_id: str) -> dict:
-    book = store.one("SELECT id FROM books WHERE id=?", (book_id,))
-    if not book:
-        raise ValueError("这本书不在书架里")
-    store.execute(
-        "DELETE FROM quiz_session_questions WHERE question_id IN"
-        " (SELECT id FROM questions WHERE book_id=?)",
-        (book_id,),
-    )
-    store.execute(
-        "DELETE FROM quiz_answers WHERE question_id IN"
-        " (SELECT id FROM questions WHERE book_id=?)",
-        (book_id,),
-    )
-    store.execute("DELETE FROM tutor_messages WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)", (book_id,))
-    store.execute(
-        "DELETE FROM quiz_answers WHERE session_id IN"
-        " (SELECT id FROM quiz_sessions WHERE book_id=?)",
-        (book_id,),
-    )
-    store.execute("DELETE FROM quiz_sessions WHERE book_id=?", (book_id,))
-    store.execute("DELETE FROM questions WHERE book_id=?", (book_id,))
-    store.execute("DELETE FROM book_chapters WHERE book_id=?", (book_id,))
-    store.execute("DELETE FROM books WHERE id=?", (book_id,))
+    with store.connect(write=True) as db:
+        if not db.execute("SELECT id FROM books WHERE id=?", (book_id,)).fetchone():
+            raise ValueError("这本书不在书架里")
+        if db.execute("SELECT g.id FROM learning_generations g JOIN runs r ON r.id=g.run_id WHERE g.book_id=? AND r.status IN ('queued','running','cancelling')", (book_id,)).fetchone():
+            raise ValueError("这本书正在出题，请先取消任务再移除")
+        for table in ("quiz_session_questions", "quiz_answers", "tutor_messages"):
+            db.execute(f"DELETE FROM {table} WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)", (book_id,))
+        db.execute("DELETE FROM quiz_answers WHERE session_id IN (SELECT id FROM quiz_sessions WHERE book_id=?)", (book_id,))
+        db.execute("DELETE FROM learning_generation_items WHERE job_id IN (SELECT id FROM learning_generations WHERE book_id=?)", (book_id,))
+        for table in ("quiz_sessions", "questions", "learning_generations", "learning_sources", "book_chapters"):
+            db.execute(f"DELETE FROM {table} WHERE book_id=?", (book_id,))
+        db.execute("DELETE FROM books WHERE id=?", (book_id,))
     return {"ok": True, "book_id": book_id}
 
 
@@ -278,7 +266,7 @@ def _json_array(text: str) -> list[dict]:
 
 
 def _clean_stem(text: str) -> str:
-    return re.sub(r"\s+", " ", str(text or "")).strip()
+    return re.sub(r"\s+", " ", clean_text(str(text or ""))).strip()
 
 
 def _hash(stem: str, kind: str) -> str:
@@ -332,7 +320,7 @@ async def generate_questions(
         answer = row.get("answer")
         if kind == "single":
             options = row.get("options") or []
-            if not isinstance(options, list) or len(options) != 4:
+            if not isinstance(options, list) or len(options) != 4 or not all(isinstance(item, dict) for item in options):
                 skipped += 1
                 continue
             options = [
@@ -373,25 +361,33 @@ async def generate_questions(
         tags = [str(tag)[:24] for tag in tags[:3] if str(tag).strip()]
         difficulty = row.get("difficulty")
         difficulty = 2 if difficulty not in (1, 2, 3) else int(difficulty)
-        store.execute(
-            "INSERT INTO questions(id,book_id,chapter_id,hash,kind,stem,options,answer,"
-            "explanation,tags,difficulty,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                ident,
-                book["id"],
-                chapter_row["id"],
-                digest,
-                kind,
-                stem[:4000],
-                json.dumps(options, ensure_ascii=False),
-                stored_answer,
-                str(row.get("explanation") or "")[:6000],
-                json.dumps(tags, ensure_ascii=False),
-                difficulty,
-                int(time.time()),
-            ),
-        )
+        with store.connect(write=True) as db:
+            if not db.execute("SELECT id FROM books WHERE id=?", (book["id"],)).fetchone():
+                raise ValueError("书本已被删除，停止出题")
+            inserted = db.execute(
+                "INSERT OR IGNORE INTO questions(id,book_id,chapter_id,hash,kind,stem,options,answer,"
+                "explanation,tags,difficulty,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    ident,
+                    book["id"],
+                    chapter_row["id"],
+                    digest,
+                    kind,
+                    stem[:4000],
+                    json.dumps(options, ensure_ascii=False),
+                    stored_answer,
+                    str(row.get("explanation") or "")[:6000],
+                    json.dumps(tags, ensure_ascii=False),
+                    difficulty,
+                    int(time.time()),
+                ),
+            )
+            if not inserted.rowcount:
+                skipped += 1
+                continue
         created.append(question_row(store, ident))
+        if len(created) >= count:
+            break
     store.execute(
         "UPDATE books SET updated=? WHERE id=?", (int(time.time()), book["id"])
     )
@@ -415,6 +411,8 @@ def format_question(row: dict, reveal: bool = True) -> dict:
         "options": json.loads(row["options"] or "[]"),
         "tags": json.loads(row["tags"] or "[]"),
         "difficulty": row["difficulty"],
+        "source_id": row.get("source_id"),
+        "source_quote": row.get("source_quote", "") if reveal else "",
         "created": row["created"],
     }
     if reveal:
@@ -442,8 +440,10 @@ def list_questions(store, book_id: str = "", chapter_id: str = "") -> list[dict]
 # 练习
 # ----------------------------------------------------------------------
 def start_quiz(
-    store, book_id: str = "", chapter_id: str = "", count: int = 8, difficulty: int = 0
+    store, book_id: str = "", chapter_id: str = "", count: int = 8, difficulty: int = 0, mode: str = "all"
 ) -> dict:
+    if chapter_id and book_id and chapter(store, chapter_id)["book_id"] != book_id:
+        raise ValueError("这一章不属于这本书")
     if chapter_id:
         rows = store.all(
             "SELECT * FROM questions WHERE chapter_id=? ORDER BY created DESC", (chapter_id,)
@@ -456,6 +456,11 @@ def start_quiz(
         rows = store.all("SELECT * FROM questions ORDER BY created DESC LIMIT 100")
     if difficulty in (1, 2, 3):
         rows = [row for row in rows if row["difficulty"] == difficulty]
+    if mode == "mistakes":
+        latest = {row["question_id"]: row["status"] for row in store.all("SELECT question_id,status FROM quiz_answers ORDER BY attempt_seq,created,rowid")}
+        rows = [row for row in rows if latest.get(row["id"]) in {"wrong", "partial", "unknown"}]
+        if not rows:
+            raise ValueError("这个范围没有待复习的错题，继续练习吧")
     if not rows:
         raise ValueError("这个范围还没有题目，先出一批")
     # 优先没做过的题
@@ -464,7 +469,7 @@ def start_quiz(
         for row in store.all("SELECT DISTINCT question_id FROM quiz_answers")
     }
     fresh = [row for row in rows if row["id"] not in done]
-    pool = fresh or rows
+    pool = fresh + [row for row in rows if row["id"] in done]
     selected = pool[: max(1, min(count, len(pool)))]
     ident = uid()
     now = int(time.time())
@@ -481,6 +486,7 @@ def start_quiz(
         " VALUES(?,?,?,?,?,?,?)",
         (ident, book_id or None, chapter_id or None, title[:120], len(selected), "active", now),
     )
+    store.execute("UPDATE quiz_sessions SET mode=? WHERE id=?", (mode, ident))
     for index, row in enumerate(selected):
         store.execute(
             "INSERT INTO quiz_session_questions(session_id,question_id,idx) VALUES(?,?,?)",
@@ -502,7 +508,7 @@ def quiz_state(store, session_id: str) -> dict:
     answers = {
         row["question_id"]: dict(row)
         for row in store.all(
-            "SELECT * FROM quiz_answers WHERE session_id=? ORDER BY created", (session_id,)
+            "SELECT * FROM quiz_answers WHERE session_id=? ORDER BY attempt_seq,created,rowid", (session_id,)
         )
     }
     questions = []
@@ -522,6 +528,7 @@ def quiz_state(store, session_id: str) -> dict:
         "title": session["title"],
         "book_id": session["book_id"],
         "chapter_id": session["chapter_id"],
+        "mode": session.get("mode", "all"),
         "total": len(questions),
         "answered": answered,
         "correct": correct,
@@ -621,30 +628,26 @@ async def submit_answer(
         graded = await grade_short(gateway, question, answer)
         status, method, reason = graded["status"], "ai", graded["reason"]
 
-    existing = store.one(
-        "SELECT id FROM quiz_answers WHERE session_id=? AND question_id=?",
-        (session_id, question_id),
-    )
+    # Revalidate after subjective grading, then commit one answer and its ordering
+    # atomically. A second-resolution timestamp cannot order edits to older rows.
     now = int(time.time())
-    if existing:
-        store.execute(
-            "UPDATE quiz_answers SET answer=?,status=?,grade_method=?,ai_reason=?,created=?"
-            " WHERE id=?",
-            (str(answer or ""), status, method, reason, now, existing["id"]),
-        )
-    else:
-        store.execute(
-            "INSERT INTO quiz_answers(id,session_id,question_id,answer,status,grade_method,"
-            "ai_reason,created) VALUES(?,?,?,?,?,?,?,?)",
-            (uid(), session_id, question_id, str(answer or ""), status, method, reason, now),
-        )
+    with store.connect(write=True) as db:
+        current = db.execute("SELECT status FROM quiz_sessions WHERE id=?", (session_id,)).fetchone()
+        if not current or current["status"] != "active":
+            raise ValueError("练习已结束或被删除，请重新打开")
+        if not db.execute("SELECT q.id FROM questions q JOIN quiz_session_questions sq ON sq.question_id=q.id WHERE q.id=? AND sq.session_id=?", (question_id, session_id)).fetchone():
+            raise ValueError("题目已不在本次练习中")
+        existing = db.execute("SELECT id FROM quiz_answers WHERE session_id=? AND question_id=? ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1", (session_id, question_id)).fetchone()
+        sequence = db.execute("SELECT coalesce(max(attempt_seq),0)+1 AS value FROM quiz_answers").fetchone()["value"]
+        if existing:
+            db.execute("UPDATE quiz_answers SET answer=?,status=?,grade_method=?,ai_reason=?,created=?,attempt_seq=? WHERE id=?", (str(answer or ""), status, method, reason, now, sequence, existing["id"]))
+        else:
+            db.execute("INSERT INTO quiz_answers(id,session_id,question_id,answer,status,grade_method,ai_reason,created,attempt_seq) VALUES(?,?,?,?,?,?,?,?,?)", (uid(), session_id, question_id, str(answer or ""), status, method, reason, now, sequence))
+        total = db.execute("SELECT count(*) AS total FROM quiz_session_questions sq JOIN questions q ON q.id=sq.question_id WHERE sq.session_id=?", (session_id,)).fetchone()["total"]
+        answered = db.execute("SELECT count(DISTINCT a.question_id) AS total FROM quiz_answers a JOIN quiz_session_questions sq ON sq.question_id=a.question_id AND sq.session_id=a.session_id WHERE a.session_id=?", (session_id,)).fetchone()["total"]
+        if total and answered >= total:
+            db.execute("UPDATE quiz_sessions SET status='completed',finished=? WHERE id=?", (now, session_id))
     state = quiz_state(store, session_id)
-    if state["answered"] >= state["total"]:
-        store.execute(
-            "UPDATE quiz_sessions SET status='completed', finished=? WHERE id=?",
-            (now, session_id),
-        )
-        state["status"] = "completed"
     return {
         "status": status,
         "reason": reason,
@@ -679,7 +682,7 @@ async def explain(store, gateway, question_id: str, message: str = "", mode: str
     question = format_question(row)
     history = tutor_history(store, question_id, mode)[-TUTOR_HISTORY:]
     attempt = store.one(
-        "SELECT answer,status,ai_reason FROM quiz_answers WHERE question_id=? ORDER BY created DESC,rowid DESC LIMIT 1",
+        "SELECT answer,status,ai_reason FROM quiz_answers WHERE question_id=? ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1",
         (question_id,),
     )
     greeting = "这道题怎么想？"

@@ -706,7 +706,7 @@ test("练完可讲错题，再来一组保留书本与章节", async ({ page, mo
           (item) => item.path === "/learning/quiz" && item.method === "POST",
         )?.body,
     )
-    .toEqual({ book_id: "book1", chapter_id: "chapter1", count: 2 });
+    .toEqual({ book_id: "book1", chapter_id: "chapter1", count: 2, mode: "all" });
 });
 
 test("音乐和学习在当前视口没有横向溢出", async ({ page, mock }) => {

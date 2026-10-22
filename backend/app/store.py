@@ -79,6 +79,10 @@ class Store:
                 CREATE INDEX IF NOT EXISTS book_chapters_book ON book_chapters(book_id,idx);
                 CREATE TABLE IF NOT EXISTS questions(id TEXT PRIMARY KEY,book_id TEXT,chapter_id TEXT,hash TEXT NOT NULL UNIQUE,kind TEXT NOT NULL,stem TEXT NOT NULL,options TEXT NOT NULL DEFAULT '[]',answer TEXT NOT NULL DEFAULT '',explanation TEXT NOT NULL DEFAULT '',tags TEXT NOT NULL DEFAULT '[]',difficulty INTEGER NOT NULL DEFAULT 2,created INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS questions_chapter ON questions(chapter_id);
+                CREATE TABLE IF NOT EXISTS learning_sources(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,chapter_id TEXT NOT NULL,idx INTEGER NOT NULL,label TEXT NOT NULL,content TEXT NOT NULL,page_from INTEGER,page_to INTEGER,UNIQUE(chapter_id,idx));
+                CREATE INDEX IF NOT EXISTS learning_sources_book ON learning_sources(book_id);
+                CREATE TABLE IF NOT EXISTS learning_generations(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,run_id TEXT,request_key TEXT NOT NULL UNIQUE,signature TEXT NOT NULL,options TEXT NOT NULL,created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS learning_generation_items(job_id TEXT NOT NULL,source_id TEXT NOT NULL,target INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_count INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '',PRIMARY KEY(job_id,source_id));
                 CREATE TABLE IF NOT EXISTS quiz_sessions(id TEXT PRIMARY KEY,book_id TEXT,chapter_id TEXT,title TEXT NOT NULL DEFAULT '',total INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL,finished INTEGER);
                 CREATE TABLE IF NOT EXISTS quiz_session_questions(session_id TEXT NOT NULL,question_id TEXT NOT NULL,idx INTEGER NOT NULL,PRIMARY KEY(session_id,question_id));
                 CREATE TABLE IF NOT EXISTS quiz_answers(id TEXT PRIMARY KEY,session_id TEXT NOT NULL,question_id TEXT NOT NULL,answer TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,grade_method TEXT NOT NULL DEFAULT 'exact',ai_reason TEXT NOT NULL DEFAULT '',created INTEGER NOT NULL);
@@ -112,6 +116,17 @@ class Store:
                 db.execute(
                     "ALTER TABLE tutor_messages ADD COLUMN mode TEXT NOT NULL DEFAULT 'teacher'"
                 )
+            for column, declaration in {
+                "source_id": "TEXT",
+                "source_quote": "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                if column not in {row["name"] for row in db.execute("PRAGMA table_info(questions)")}:
+                    db.execute(f"ALTER TABLE questions ADD COLUMN {column} {declaration}")
+            if "mode" not in {row["name"] for row in db.execute("PRAGMA table_info(quiz_sessions)")}:
+                db.execute("ALTER TABLE quiz_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'all'")
+            db.execute("CREATE INDEX IF NOT EXISTS questions_source ON questions(source_id)")
+            if "attempt_seq" not in {row["name"] for row in db.execute("PRAGMA table_info(quiz_answers)")}:
+                db.execute("ALTER TABLE quiz_answers ADD COLUMN attempt_seq INTEGER NOT NULL DEFAULT 0")
             if "request_signature" not in {
                 row["name"] for row in db.execute("PRAGMA table_info(runs)")
             }:

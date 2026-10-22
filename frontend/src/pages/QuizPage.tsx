@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Check,
   GraduationCap,
+  FileText,
   Loader2,
   RotateCcw,
   Send,
@@ -14,6 +15,7 @@ import { api, post } from "../api";
 import { Empty, ErrorState, Loading, useResource, useToast } from "../ui";
 import { MathText } from "../components/MathText";
 import { FunctionPlot, extractPlotBlocks } from "../components/FunctionPlot";
+import { StudySource } from "../components/StudySource";
 
 type Question = {
   id: string;
@@ -28,12 +30,15 @@ type Question = {
   status: string | null;
   ai_reason: string;
   position: number;
+  source_id?: string;
+  source_quote?: string;
 };
 
 type Session = {
   id: string;
   book_id: string | null;
   chapter_id: string | null;
+  mode?: "all" | "mistakes";
   title: string;
   total: number;
   answered: number;
@@ -126,6 +131,7 @@ export default function QuizPage() {
   const tutorRequest = useRef(0);
   const tutorInFlight = useRef(false);
   const [canvasExpr, setCanvasExpr] = useState("");
+  const [readingSource, setReadingSource] = useState(false);
   const logRef = useRef<HTMLUListElement | null>(null);
   const question = session?.questions[index];
   const questionId = question?.id || "";
@@ -170,6 +176,7 @@ export default function QuizPage() {
 
   useEffect(() => {
     setCanvasExpr("");
+    setReadingSource(false);
   }, [questionId]);
 
   // 讲解、追问里出现的表达式都收集起来，统一画在右侧画布
@@ -351,6 +358,7 @@ export default function QuizPage() {
           book_id: session.book_id || undefined,
           chapter_id: session.chapter_id || undefined,
           count: session.total,
+          mode: session.mode ?? "all",
         },
       );
       navigate(`/learning/quiz/${created.session.id}`);
@@ -549,6 +557,15 @@ export default function QuizPage() {
             <div className="quiz-stem">
               <MathText text={question.stem} />
             </div>
+            {question.source_id && (
+              <button
+                className="text-button quiz-source-link"
+                onClick={() => setReadingSource(true)}
+              >
+                <FileText size={13} />
+                回到原文，寻找线索
+              </button>
+            )}
 
             {question.kind === "single" ? (
               <div className="quiz-options">
@@ -818,6 +835,14 @@ export default function QuizPage() {
           </section>
         </aside>
       </div>
+      {readingSource && question.source_id && (
+        <StudySource
+          key={question.source_id}
+          id={question.source_id}
+          quote={question.source_quote}
+          onClose={() => setReadingSource(false)}
+        />
+      )}
     </div>
   );
 }

@@ -34,7 +34,7 @@ from .creative import gallery, plot_csv, transform_image
 from .conversations import deletion_preview, purge_conversation, batch_deletion_preview, purge_conversations
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
-from . import learning, music
+from . import learning, learning_studio, music
 from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
@@ -126,11 +126,22 @@ class QuestionGen(Input):
     count: int = Field(default=5, ge=1, le=12)
 
 
+class LearningGeneration(Input):
+    source_ids: list[str] = Field(default_factory=list, max_length=10)
+    count: int = Field(default=3, ge=1, le=6)
+    kinds: list[Literal["single", "fill", "short"]] = Field(default=["single", "fill", "short"], min_length=1, max_length=3)
+    difficulty: int = Field(default=0, ge=0, le=3)
+    focus: str = Field(default="", max_length=240)
+    request_key: str = Field(min_length=8, max_length=80)
+    resume_job_id: str = Field(default="", max_length=64)
+
+
 class QuizStart(Input):
     book_id: str = Field(default="", max_length=64)
     chapter_id: str = Field(default="", max_length=64)
     count: int = Field(default=8, ge=1, le=30)
     difficulty: int = Field(default=0, ge=0, le=3)
+    mode: Literal["all", "mistakes"] = "all"
 
 
 class QuizAnswer(Input):
@@ -312,6 +323,7 @@ def create_app(config=None):
     library = FileLibrary(store)
     router = SkillRouter(store)
     manager = TaskManager(store, auth, config, library, router)
+    learning_lock = asyncio.Lock()
 
     def model_gateway(max_tokens: int = 4096):
         """单次调用的模型网关；没配密钥时返回 None，调用方自行降级。"""
@@ -1401,9 +1413,10 @@ def create_app(config=None):
             raise HTTPException(404, str(error))
 
     @app.delete("/api/v1/learning/books/{book_id}", dependencies=[Depends(owner)])
-    def learning_remove_book(book_id: str):
+    async def learning_remove_book(book_id: str):
         try:
-            return learning.delete_book(store, book_id)
+            async with learning_lock:
+                return learning.delete_book(store, book_id)
         except ValueError as error:
             raise HTTPException(404, str(error))
 
@@ -1437,10 +1450,43 @@ def create_app(config=None):
     ):
         return {"questions": learning.list_questions(store, book_id, chapter_id)}
 
+    @app.get("/api/v1/learning/books/{book_id}/sources", dependencies=[Depends(owner)])
+    def learning_sources(book_id: str):
+        try:
+            return learning_studio.sources(store, library, book_id)
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.get("/api/v1/learning/sources/{source_id}", dependencies=[Depends(owner)])
+    def learning_source(source_id: str, offset: int = Query(default=0, ge=-1, le=1)):
+        try:
+            return {"source": learning_studio.source(store, source_id, offset)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.get("/api/v1/learning/books/{book_id}/generation", dependencies=[Depends(owner)])
+    def learning_generation_latest(book_id: str):
+        return {"job": learning_studio.latest(store, book_id)}
+
+    @app.get("/api/v1/learning/generations/{job_id}", dependencies=[Depends(owner)])
+    def learning_generation(job_id: str):
+        try:
+            return {"job": learning_studio.snapshot(store, job_id)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @app.post("/api/v1/learning/books/{book_id}/generations", dependencies=[Depends(owner)])
+    async def learning_generation_start(book_id: str, body: LearningGeneration):
+        try:
+            async with learning_lock:
+                return {"job": await learning_studio.start(store, library, manager, book_id, body.model_dump())}
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
     @app.post("/api/v1/learning/quiz", dependencies=[Depends(owner)])
     def learning_quiz(body: QuizStart):
         try:
-            return {"session": learning.start_quiz(store, body.book_id, body.chapter_id, body.count, body.difficulty)}
+            return {"session": learning.start_quiz(store, body.book_id, body.chapter_id, body.count, body.difficulty, body.mode)}
         except ValueError as error:
             raise HTTPException(409, str(error))
 
