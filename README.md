@@ -164,6 +164,8 @@ SkillNet 把技能库接到实际任务中：目标 → 必要性选择 → 按�
 
 出题设计参考了 [zhixu-backend 的来源页码与进度需求](https://github.com/pfx43/zhixu-backend/issues/17)，以及 [章到页目录需求](https://github.com/pfx43/zhixu-backend/issues/16)；本项目独立实现，沿用自己的鉴权、任务和本地数据架构。截图与自动化验收使用合成资料及模型桩，不代表真实模型的教学质量；引文校验也不能保证推理绝对正确。扫描版 PDF 请先做 OCR。旧版曾被截断的章节需重新加入原资料才能恢复已丢失正文。
 
+想学习出题链路：[数据模型、接口与设计取舍](docs/learning-studio.md) · [本轮审查与验证](docs/learning-studio-review.md)。
+
 ### 创作工具
 
 数据图、图像处理、拾景，都是可以直接交给 Agent 的工具，也可以单独使用。

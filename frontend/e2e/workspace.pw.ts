@@ -49,6 +49,9 @@ test("真实后端：登录及全部一级页面冒烟", async ({ page }) => {
 });
 
 test("真实后端：档位保存与辅导历史跨页面恢复", async ({ page, request }) => {
+  // Several full navigations, reloads and a real tutor round share this budget.
+  // Keep assertion timeouts strict; allow the whole journey under CI/CPU load.
+  test.setTimeout(60_000);
   const login = await request.post("/api/v1/auth/login", { data: credentials });
   expect(login.ok()).toBe(true);
   const token = (await login.json()).token;
