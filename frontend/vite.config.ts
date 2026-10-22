@@ -68,9 +68,30 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          editor: ["@tiptap/react", "@tiptap/starter-kit"],
-          markdown: ["react-markdown", "remark-gfm"],
+        // Keep shared React runtime out of optional editor/Markdown chunks.
+        // Otherwise importing React at startup can preload both heavy features.
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          const modulePath = id.replace(/\\/g, "/");
+          // Match package directories, including CJS/JSX internals, rather
+          // than entry modules whose shared internals may drift into features.
+          if (
+            /\/node_modules\/(?:react|react-dom|scheduler|react-router|react-router-dom)\//.test(
+              modulePath,
+            )
+          )
+            return "react-runtime";
+          if (
+            modulePath.includes("/node_modules/@tiptap/") ||
+            /\/node_modules\/(?:prosemirror-[^/]+|orderedmap|rope-sequence|w3c-keyname|crelt)\//.test(
+              modulePath,
+            )
+          )
+            return "editor";
+          if (
+            /\/node_modules\/(?:react-markdown|remark-gfm)\//.test(modulePath)
+          )
+            return "markdown";
         },
       },
     },

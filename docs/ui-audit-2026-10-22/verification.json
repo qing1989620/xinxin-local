@@ -1,0 +1,134 @@
+{
+  "observed_at": "2026-10-22T23:56:42.917751+00:00",
+  "backend_source_commit": "bbfc9c9b9049853dbae2dca95e96ca9c5dea98fa",
+  "frontend_config_sha256": "f639fcf42ef675f0bc9c88499404ef8395c6ed333f4a0f86e3b970f1bd5dcbd4",
+  "frontend_dist_index_sha256": "7599bbd634744bd9fa9d03ea268287341377447ec8859be2ac0008d150d3d8e7",
+  "backend_pytest": {
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "332",
+    "time": "375.768"
+  },
+  "frontend_unit": {
+    "files": 9,
+    "passed": 62
+  },
+  "browser": {
+    "startTime": "2026-10-22T23:49:16.248Z",
+    "duration": 222674.21200000003,
+    "expected": 119,
+    "skipped": 3,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "production_browser": {
+    "startTime": "2026-10-22T23:48:31.717Z",
+    "duration": 8825.334,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "production_measurement": {
+    "environment": "Windows Edge, production preview, synthetic local backend, fresh context x3, service workers blocked; laboratory results, not field p75 or INP",
+    "samples": [
+      {
+        "sample": 1,
+        "lcp": 364,
+        "cls": 0.01700059154369213,
+        "longTasks": 1,
+        "readyMs": 552.1000000238419,
+        "scripts": [
+          {
+            "name": "index-e-kJPD9n.js",
+            "bytes": 75129
+          },
+          {
+            "name": "_commonjsHelpers-CqkleIqs.js",
+            "bytes": 116
+          },
+          {
+            "name": "react-runtime-VNTzXjXh.js",
+            "bytes": 231283
+          },
+          {
+            "name": "workbox-window.prod.es5-BBnX5xw4.js",
+            "bytes": 5748
+          }
+        ],
+        "agentReadyMs": 205
+      },
+      {
+        "sample": 2,
+        "lcp": 200,
+        "cls": 0.01700059154369213,
+        "longTasks": 1,
+        "readyMs": 331.10000002384186,
+        "scripts": [
+          {
+            "name": "index-e-kJPD9n.js",
+            "bytes": 75129
+          },
+          {
+            "name": "_commonjsHelpers-CqkleIqs.js",
+            "bytes": 116
+          },
+          {
+            "name": "react-runtime-VNTzXjXh.js",
+            "bytes": 231283
+          },
+          {
+            "name": "workbox-window.prod.es5-BBnX5xw4.js",
+            "bytes": 5748
+          }
+        ],
+        "agentReadyMs": 182
+      },
+      {
+        "sample": 3,
+        "lcp": 156,
+        "cls": 0.01700059154369213,
+        "longTasks": 0,
+        "readyMs": 260.2000000178814,
+        "scripts": [
+          {
+            "name": "index-e-kJPD9n.js",
+            "bytes": 75129
+          },
+          {
+            "name": "_commonjsHelpers-CqkleIqs.js",
+            "bytes": 116
+          },
+          {
+            "name": "react-runtime-VNTzXjXh.js",
+            "bytes": 231283
+          },
+          {
+            "name": "workbox-window.prod.es5-BBnX5xw4.js",
+            "bytes": 5748
+          }
+        ],
+        "agentReadyMs": 144
+      }
+    ]
+  },
+  "desktop": {
+    "backup_before_update": true,
+    "active_tasks_before_update": 0,
+    "health_ports": [
+      8010,
+      5180,
+      8080
+    ],
+    "all_builds_current": true,
+    "desktop_stamp_current": true,
+    "app_window_processes": 1
+  },
+  "limitations": [
+    "scripted model not teaching-quality acceptance",
+    "device emulation not physical IME/screen reader",
+    "component/production audit gaps retained in audit.json",
+    "no GitHub push or main merge"
+  ]
+}

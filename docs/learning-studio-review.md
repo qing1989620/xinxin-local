@@ -1,3 +1,5 @@
+> 历史记录：这是前一轮学习工作室的验收。2026-10-22/23 的全站设计、OCR、256 MiB 上传与出题质量更新，以 [最新全站审计](ui-audit-2026-10-22/review.md) 和 [独立代码审查](ui-audit-2026-10-22/backend-review.md) 为准；下文旧数量和“不支持 OCR”不代表当前版本。
+
 # 学习工作室检查记录 · 2026-10-22
 
 范围为学习首页 `/learning`、资料出题台 `/learning/books/:id`、练习 `/learning/quiz/:id` 的新来源入口，共享原文对话框及直接关联的 HTTP / SQLite / runs / SSE 合同。本次是选定旅程的 quick 前端审查，不代表全站穷举或真实模型教学质量验收。实现基线 `bc170cd`；审查实现 `5a62999`，修复 `a4af94d`、`c9ef9ca`。需求与实现见 [合同](specs/2026-10-22-learning-studio.md)、[实现说明](learning-studio.md)。

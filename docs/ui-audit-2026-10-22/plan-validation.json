@@ -1,0 +1,40 @@
+{
+  "schema_valid": true,
+  "errors": [],
+  "warnings": [],
+  "counts": {
+    "pages_in_scope": 29,
+    "pages_excluded": 0,
+    "definitions": 132,
+    "instances_in_scope": 136,
+    "checks": {
+      "blocked": 166,
+      "passed": 1044
+    },
+    "scenarios": {
+      "blocked": 2,
+      "passed": 38
+    },
+    "findings": {
+      "P1": 2,
+      "P2": 9
+    },
+    "component_plans": 136,
+    "tasks": 32
+  },
+  "gaps": {
+    "missing_dimensions": [],
+    "pages_without_instances": [],
+    "pages_without_scenarios": [],
+    "instances_without_scenarios": [],
+    "high_risk_instances_without_high_risk_scenarios": [],
+    "definitions_without_blueprints": [],
+    "instances_without_plans": [],
+    "findings_without_tasks": []
+  },
+  "critical_unresolved": [],
+  "audit_coverage_closed": false,
+  "plan_complete": true,
+  "production_gates_satisfied": false,
+  "disclaimer": "Mechanical validation of declared scope and records only; no application execution or security certification."
+}
