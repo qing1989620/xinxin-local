@@ -126,6 +126,7 @@ class FileLibrary:
             if parse_error:
                 extraction["warning"] = parse_error
                 extraction.setdefault("complete", False)
+            text = clean_text(text)
             with self.store.connect(write=True) as db:
                 previous = (
                     db.execute(

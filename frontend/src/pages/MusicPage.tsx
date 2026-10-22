@@ -323,18 +323,25 @@ export default function MusicPage() {
   const loadLibrary = useCallback(async () => {
     const revision = ++libraryRevision.current;
     setLibraryError("");
-    try {
-      const [favorite, lists] = await Promise.all([
-        api<{ favorites: Track[] }>("/music/favorites"),
-        api<{ playlists: Playlist[] }>("/music/playlists"),
-      ]);
-      if (revision !== libraryRevision.current) return;
-      setFavorites(favorite.favorites);
-      setPlaylists(lists.playlists);
-    } catch (error) {
-      if (revision === libraryRevision.current)
-        setLibraryError((error as Error).message);
-    }
+    // These are independent collections. A slow favorites request must not
+    // hide a successfully refreshed playlist (especially just after creation).
+    await Promise.all(
+      [
+        api<{ favorites: Track[] }>("/music/favorites").then((result) => {
+          if (revision === libraryRevision.current)
+            setFavorites(result.favorites);
+        }),
+        api<{ playlists: Playlist[] }>("/music/playlists").then((result) => {
+          if (revision === libraryRevision.current)
+            setPlaylists(result.playlists);
+        }),
+      ].map((request) =>
+        request.catch((error) => {
+          if (revision === libraryRevision.current)
+            setLibraryError((error as Error).message);
+        }),
+      ),
+    );
   }, []);
 
   useEffect(() => {
@@ -587,6 +594,10 @@ export default function MusicPage() {
       });
       setCreating(false);
       setNewName("");
+      setPlaylists((current) => [
+        ...current.filter((item) => item.id !== created.playlist.id),
+        created.playlist,
+      ]);
       void loadLibrary();
       toast(`歌单「${created.playlist.name}」建好了`);
     } catch (error) {

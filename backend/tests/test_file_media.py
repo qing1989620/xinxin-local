@@ -126,7 +126,7 @@ def test_surrogate_text_from_pdf_extraction_is_cleaned_before_sqlite(
         # 模拟 pypdf 输出：一对合法代理项（应合成正式码点）+ 一个落单代理项。
         broken = "角\ud835\udc1a色\ud835标"
         monkeypatch.setattr(
-            FileLibrary, "extract", staticmethod(lambda name, content: broken)
+            "app.document_text.extract_document", lambda _path, **_options: (broken, {"complete": True})
         )
         response = client.post(
             "/api/v1/files",

@@ -6,6 +6,7 @@ import re
 from difflib import SequenceMatcher
 
 from .store import clean_text
+from .document_text import MATH_UNCERTAIN
 
 VERSION = 2
 MATERIAL_TYPES = {"knowledge", "exercises", "mixed", "contents", "answers", "frontmatter", "insufficient"}
@@ -14,11 +15,15 @@ TOC_ROW = re.compile(r"^(?:.{2,90}?(?:[.．·…‧]{2,}|\s{2,}|\t)\s*\d{1,4}|(?
 EXERCISE = re.compile(r"^\s*(?:(?:例题?|习题|练习|题目)\s*[一二三四五六七八九十\d]*|\d{1,3}[.．、)）])\s*\S", re.M)
 ANSWER_ROW = re.compile(r"^\s*\d{1,3}[.．、)）]?\s*[A-D](?:[\s,，、;；]+\d{1,3}[.．、)）]?\s*[A-D])*\s*$", re.I)
 METADATA_QUESTION = re.compile(
-    r"(?:(?:第?几|哪[一几]?|多少|什么|何|___|_{3,}).{0,12}(?:页(?:码)?|章节|章|节).{0,10}(?:[?？]|$))"
+    r"(?:第[几多少]+页|哪[一几]?页|页码.{0,10}(?:多少|什么|几|___|[?？]))"
+    r"|(?:(?:第几章|哪[一几]?个?章节|哪[一几]?章).{0,28}(?:讲|介绍|涉及|讨论|内容|知识|[?？]))"
     r"|(?:(?:章|节|目录|附录|知识点|内容).{0,22}(?:位于|在|从|出现|开始|对应).{0,10}(?:第.{0,5}页|页码))"
     r"|(?:(?:哪|什么|何|___|_{3,}).{0,8}(?:出版社|出版时间|ISBN|书名|作者姓名))"
     r"|(?:(?:第[一二三四五六七八九十百零〇\d]+章|章节|目录).{0,15}(?:标题|名称|主题).{0,15}(?:什么|哪|___|_{3,}|[?？]))"
-    r"|(?:(?:which|what).{0,30}(?:page|chapter|publisher|isbn))", re.I)
+    r"|(?:\b(?:on|at)\s+(?:which|what)\s+page\b)"
+    r"|(?:\b(?:which|what)\s+page\s+(?:number|does|do|contains|has|is\s+(?:the\s+)?(?:chapter|section|topic))\b)"
+    r"|(?:\b(?:which|what)\s+chapter\s+(?:does|is|contains|covers)\b)"
+    r"|(?:\b(?:which|what).{0,20}\b(?:publisher|isbn)\b)", re.I)
 MISSING_FIGURE = re.compile(r"如[下右左]?图|下图|见图|图\s*\d+[—.-]\d+|根据.{0,8}图示|as shown in (?:the )?(?:figure|diagram)", re.I)
 
 
@@ -32,7 +37,9 @@ def material_profile(content, title=""):
     numbered = len(EXERCISE.findall(content))
     answers = sum(bool(ANSWER_ROW.fullmatch(line)) for line in lines)
     kind, reason = "knowledge", ""
-    if len(compact(content)) < 80:
+    if MATH_UNCERTAIN in content:
+        kind, reason = "insufficient", "包含尚未可靠转换的公式，请先校对标记处再出题"
+    elif len(compact(content)) < 80:
         kind, reason = "insufficient", "正文不足 80 字，不能可靠出题"
     elif toc >= 3 and toc / max(1, len(lines)) >= .5:
         kind, reason = "contents", "目录只提供章节位置，未提供可考查知识"

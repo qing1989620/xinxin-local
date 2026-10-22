@@ -17,7 +17,7 @@ from app.store import Store
 from test_learning_studio import studio, source_list
 
 
-def scanned_workbook():
+def scanned_workbook(*, header=False, nested=False):
     image = Image.new("RGB", (1500, 1800), "white")
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype("C:/Windows/Fonts/msyh.ttc", 40)
@@ -38,7 +38,21 @@ def scanned_workbook():
                    NameObject("/ColorSpace"): NameObject("/DeviceRGB"), NameObject("/BitsPerComponent"): NumberObject(8), NameObject("/Filter"): NameObject("/DCTDecode")})
     page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): DictionaryObject({NameObject("/Im0"): writer._add_object(bitmap)})})
     commands = DecodedStreamObject()
-    commands.set_data(b"q 600 0 0 720 0 0 cm /Im0 Do Q")
+    drawing = b"q 600 0 0 720 0 0 cm /Im0 Do Q"
+    if nested:
+        from pypdf.generic import ArrayObject
+        form = DecodedStreamObject()
+        form.set_data(drawing)
+        form.update({NameObject("/Type"): NameObject("/XObject"), NameObject("/Subtype"): NameObject("/Form"),
+                     NameObject("/BBox"): ArrayObject([NumberObject(n) for n in (0, 0, 600, 720)]),
+                     NameObject("/Resources"): page["/Resources"]})
+        page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): DictionaryObject({NameObject("/Fm0"): writer._add_object(form)})})
+        drawing = b"q /Fm0 Do Q"
+    if header:
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})
+        page["/Resources"][NameObject("/Font")] = DictionaryObject({NameObject("/F1"): writer._add_object(font)})
+        drawing += b" BT /F1 8 Tf 15 710 Td (Synthetic Workbook header: private teaching copy for document recognition tests only.) Tj ET"
+    commands.set_data(drawing)
     page[NameObject("/Contents")] = writer._add_object(commands)
     buffer = io.BytesIO()
     writer.write(buffer)
@@ -159,3 +173,70 @@ def test_word_preserves_equations_and_exercise_order_without_inflating_images(tm
     assert "${x}^{2}$" in text and r"$\frac{1}{x}$" in text
     assert text.index("1. Find") < text.index("A. 2x") < text.index("2. Simplify")
     assert metadata["complete"]
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_native_header_does_not_hide_scanned_body(tmp_path, monkeypatch, nested):
+    target = tmp_path / "hybrid.pdf"
+    target.write_bytes(scanned_workbook(header=True, nested=nested))
+    text, metadata = extract_document(target)
+    assert len(text) > 40 and not metadata["complete"] and metadata["missing_pages"] == [1]
+    recognized = "导数练习的文字条件：函数 y=x^2 的导函数为 2x。" * 5
+    calls = []
+    def recognize(image, _cancelled):
+        calls.append(image.size)
+        return recognized, False
+    monkeypatch.setattr("app.document_text._recognize", recognize)
+    text, metadata = extract_document(target, ocr=True)
+    assert calls and recognized in text and "Synthetic Workbook header" in text
+    assert metadata["complete"] and metadata["ocr_pages"] == 1
+    monkeypatch.setattr("app.document_text._recognize", lambda *_args: ("", False))
+    _, metadata = extract_document(target, ocr=True)
+    assert not metadata["complete"]  # Native header cannot conceal failed OCR.
+
+
+def test_pdfium_operations_are_serialized_across_document_workers(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import pypdfium2 as pdfium
+    target = tmp_path / "scan.pdf"
+    target.write_bytes(scanned_workbook())
+    original = pdfium.PdfDocument
+    def guarded(*args, **kwargs):
+        from app.document_text import _pdfium_lock
+        assert _pdfium_lock._is_owned()
+        return original(*args, **kwargs)
+    monkeypatch.setattr(pdfium, "PdfDocument", guarded)
+    monkeypatch.setattr("app.document_text._recognize", lambda *_args: ("识别出的导数练习和完整数学条件。" * 8, False))
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = list(workers.map(lambda _: extract_document(target, ocr=True), range(4)))
+    assert all(metadata["complete"] for _, metadata in results)
+
+
+@pytest.mark.parametrize("properties,bases,expected", [
+    ('<m:begChr m:val="|"/><m:endChr m:val="|"/>', ["x"], "$|x|$"),
+    ('<m:begChr m:val="["/><m:endChr m:val="]"/>', ["a,b"], "$[a,b]$"),
+    ('<m:sepChr m:val=";"/>', ["a", "b", "c"], "$(a;b;c)$"),
+])
+def test_word_delimiters_preserve_all_bases(tmp_path, properties, bases, expected):
+    import zipfile
+    from app.document_text import WORD, MATH
+    target = tmp_path / "delimiters.docx"
+    content = "".join(f"<m:e><m:r><m:t>{base}</m:t></m:r></m:e>" for base in bases)
+    xml = f'<w:document xmlns:w="{WORD}" xmlns:m="{MATH}"><w:body><w:p><m:oMath><m:d><m:dPr>{properties}</m:dPr>{content}</m:d></m:oMath></w:p></w:body></w:document>'
+    with zipfile.ZipFile(target, "w") as package:
+        package.writestr("word/document.xml", xml)
+    text, metadata = extract_document(target)
+    assert text == expected and metadata["complete"]
+
+
+def test_unsupported_word_operator_is_visible_and_blocks_generation(tmp_path):
+    import zipfile
+    from app.document_text import WORD, MATH, MATH_UNCERTAIN
+    from app.learning_quality import material_profile
+    target = tmp_path / "unsupported.docx"
+    xml = f'<w:document xmlns:w="{WORD}" xmlns:m="{MATH}"><w:body><w:p><w:r><w:t>{"需要保留原始公式和条件的正文。" * 15}</w:t></w:r><m:oMath><m:acc><m:e><m:r><m:t>x</m:t></m:r></m:e></m:acc></m:oMath></w:p></w:body></w:document>'
+    with zipfile.ZipFile(target, "w") as package:
+        package.writestr("word/document.xml", xml)
+    text, metadata = extract_document(target)
+    assert MATH_UNCERTAIN in text and not metadata["complete"] and metadata["warning"]
+    assert not material_profile(text)["eligible"]

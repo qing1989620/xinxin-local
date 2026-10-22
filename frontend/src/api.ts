@@ -286,7 +286,7 @@ export async function upload(
     const abort = () => request.abort();
     const cleanup = () => options.signal?.removeEventListener("abort", abort);
     request.open("POST", url("/files"));
-    request.timeout = 180000;
+    request.timeout = 900000;
     if (token) request.setRequestHeader("Authorization", `Bearer ${token}`);
     request.setRequestHeader(
       "X-Upload-ID",

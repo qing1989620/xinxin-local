@@ -1479,8 +1479,14 @@ def create_app(config=None):
                 candidates = [unit for unit in listing["sources"] if unit["chapter_id"] == chapter["id"] and unit["eligible"]]
                 if not candidates:
                     raise ValueError("这一章没有可考查的知识正文或完整练习题")
-                payload = LearningGeneration(source_ids=[candidates[0]["id"]], count=body.count, request_key=uid()).model_dump()
-                job = await learning_studio.start(store, library, manager, book_id, payload)
+                # Spread the requested total across the whole chapter, including
+                # its final fragments, rather than repeatedly testing its opening.
+                amount = min(body.count, len(candidates), learning_studio.MAX_SOURCES)
+                selected = [candidates[round(index * (len(candidates) - 1) / (amount - 1))] for index in range(amount)] if amount > 1 else candidates[:1]
+                base, extra = divmod(body.count, amount)
+                allocations = {unit["id"]: base + (index < extra) for index, unit in enumerate(selected)}
+                payload = LearningGeneration(source_ids=list(allocations), count=max(allocations.values()), request_key=uid()).model_dump()
+                job = await learning_studio.start(store, library, manager, book_id, payload, allocations=allocations)
             pending = manager.tasks.get(job["run_id"])
             if pending:
                 await asyncio.shield(pending)

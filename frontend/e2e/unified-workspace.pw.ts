@@ -702,6 +702,53 @@ test("音乐资料库：键盘标签、歌单保存和关闭后的迟到请求",
   });
 });
 
+test("书架弹窗：隐藏上传控件不抢占可见字段的初始焦点", async ({
+  page,
+  request,
+}) => {
+  await login(page, request);
+  await page.goto("/learning");
+  await page.getByRole("button", { name: "加入书架", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "加入书架" });
+  await expect(
+    dialog.getByRole("combobox", { name: "或从私人资料中选择" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("歌单刷新不等待收藏请求，保存后的列表立即可见", async ({
+  page,
+  request,
+}) => {
+  await login(page, request);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/music/favorites", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  try {
+    await page.goto("/music");
+    await page.getByRole("tab", { name: /歌单/ }).click();
+    await page
+      .locator(".listening-index")
+      .getByRole("button", { name: "新建", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "新建歌单" });
+    const name = `不受收藏影响 ${crypto.randomUUID().slice(0, 6)}`;
+    await dialog.getByLabel("名字").fill(name);
+    await dialog.getByRole("button", { name: "建好", exact: true }).click();
+    await expect(
+      page.locator(".playlist-row").filter({ hasText: name }),
+    ).toHaveCount(1);
+  } finally {
+    release();
+  }
+});
+
 test("桌面入口模板：启动和错误窗口窄屏、减少动态及长日志", async ({
   page,
 }, testInfo) => {

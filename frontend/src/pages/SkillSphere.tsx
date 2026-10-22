@@ -149,7 +149,11 @@ export default function SkillSphere({
   }, [nodes]);
   const filtered = useMemo(() => nodes.filter(matches), [nodes, matches]);
   useEffect(() => {
-    setSelected(previous => previous && !filtered.some(node => node.id === previous) ? "" : previous);
+    setSelected((previous) =>
+      previous && !filtered.some((node) => node.id === previous)
+        ? ""
+        : previous,
+    );
   }, [filtered]);
   const tick = useRef<(now: number) => void>(() => {});
   const schedule = useCallback(() => {
@@ -222,7 +226,11 @@ export default function SkillSphere({
   // 球面坐标由渲染器按 domain 稳定排序后计算，这里只负责镜头动画
   const chooseNode = useCallback(
     (node: SphereGraphNode) => {
-      if (!matches(node)) { setDomain("全部"); setQuery(""); setExecutableOnly(false); }
+      if (!matches(node)) {
+        setDomain("全部");
+        setQuery("");
+        setExecutableOnly(false);
+      }
       setSelected(node.id);
       setAuto(false);
       setHover("");
@@ -278,13 +286,18 @@ export default function SkillSphere({
     if (!element) return;
     renderer.current = createSphereRenderer(element);
     setSurface(Boolean(renderer.current));
+    const contrast = matchMedia("(forced-colors: active)");
     const updatePalette = () => {
       const styles = getComputedStyle(element);
-      renderer.current?.setPalette({
-        accent: styles.getPropertyValue("--accent").trim() || "#366e64",
-        ink: styles.getPropertyValue("--ink").trim() || "#292e2b",
-        paper: styles.getPropertyValue("--paper").trim() || "#f7f5ef",
-      });
+      renderer.current?.setPalette(
+        contrast.matches
+          ? { accent: "CanvasText", ink: "CanvasText", paper: "Canvas" }
+          : {
+              accent: styles.getPropertyValue("--accent").trim() || "#366e64",
+              ink: styles.getPropertyValue("--ink").trim() || "#292e2b",
+              paper: styles.getPropertyValue("--paper").trim() || "#f7f5ef",
+            },
+      );
       renderer.current?.draw(currentCamera.current);
     };
     const theme = new MutationObserver(updatePalette);
@@ -292,6 +305,7 @@ export default function SkillSphere({
       attributes: true,
       attributeFilter: ["style", "class", "data-accent"],
     });
+    contrast.addEventListener("change", updatePalette);
     updatePalette();
     const resize = new ResizeObserver(() =>
       renderer.current?.draw(currentCamera.current),
@@ -301,6 +315,7 @@ export default function SkillSphere({
     return () => {
       resize.disconnect();
       theme.disconnect();
+      contrast.removeEventListener("change", updatePalette);
       renderer.current?.dispose();
       renderer.current = null;
     };

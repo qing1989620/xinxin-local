@@ -102,11 +102,19 @@ export function Dialog({
     const element = ref.current;
     const previous = document.activeElement as HTMLElement;
     element?.showModal();
-    element
-      ?.querySelector<HTMLElement>(
-        "[data-autofocus], input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])",
-      )
-      ?.focus({ preventScroll: true });
+    const fields = element?.querySelectorAll<HTMLElement>(
+      "[data-autofocus], input:not([type=hidden]), textarea, select",
+    );
+    const firstVisible =
+      fields &&
+      Array.from(fields).find(
+        (field) =>
+          !field.matches(":disabled") &&
+          !field.closest("[hidden], [inert]") &&
+          field.getClientRects().length > 0 &&
+          getComputedStyle(field).visibility !== "hidden",
+      );
+    firstVisible?.focus({ preventScroll: true });
     return () => {
       element?.close();
       if (previous?.isConnected) previous.focus({ preventScroll: true });

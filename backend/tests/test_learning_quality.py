@@ -56,7 +56,8 @@ def test_metadata_or_missing_figure_questions_are_rejected(stem):
 
 
 def test_real_mathematics_and_reading_are_not_metadata_questions():
-    for stem in ["求 f(x)=x^2 在 x=3 处的导数。", "比较两种算法的空间复杂度。", "请解释段落中作者的论证方法。"]:
+    for stem in ["求 f(x)=x^2 在 x=3 处的导数。", "比较两种算法的空间复杂度。", "请解释段落中作者的论证方法。",
+                 "什么是字节？", "一个字节多少位？", "What is a page fault?", "Which page replacement algorithm minimizes faults?", "解释节拍与节奏的区别。"]:
         assert not quality.question_issue(stem)
 
 
@@ -209,3 +210,38 @@ def test_actual_256_mib_stream_accepts_boundary_and_cleans_one_byte_over(tmp_pat
     with pytest.raises(FileTooLarge):
         library.save_stream("too-large.bin", RepeatingStream(MAX_UPLOAD + 1), extract=False)
     assert not list(library.root.iterdir())
+
+
+def test_dedup_and_legacy_quarantine_cover_the_entire_book(studio):
+    app, client, book = studio
+    from app.store import uid
+    rows = [(uid(), book["id"], book["chapters"][0]["id"], learning._hash(stem, "short"), "short", stem, "[]", "正确答案", "解释完整的知识含义。", "[]", 2, index)
+            for index, stem in enumerate(["导数的几何意义是什么", "什么是字节？", "What is a page fault?"] + [f"第 {number} 组导数综合练习的答案是什么？" for number in range(600)])]
+    with app.state.store.connect(write=True) as db:
+        db.executemany("INSERT INTO questions(id,book_id,chapter_id,hash,kind,stem,options,answer,explanation,tags,difficulty,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    quality.quarantine_legacy(app.state.store)
+    assert all(app.state.store.one("SELECT review FROM questions WHERE id=?", (row[0],))["review"] != "excluded" for row in rows[:3])
+    script(app)
+    result = wait(client, start(client, book, source_list(client, book)[:1]).json()["job"])
+    assert result["created_count"] == 0 and result["items"][0]["duplicates"] >= 1
+
+
+def test_legacy_chapter_generation_distributes_total_across_complete_chapter(studio):
+    app, client, _ = studio
+    book = add_book(client, "第一章 微积分\n" + "导数的概念是瞬时变化率，可用切线斜率说明。\n" * 250 + "积分可用于计算累积量，末尾知识不能被遗漏。\n" * 200)
+    counter = 0
+    def generate(payload):
+        nonlocal counter
+        result = []
+        for _ in range(payload["count"]):
+            counter += 1
+            result.append(question(payload["text"], f"解释第 {counter} 个微积分练习的解题思路。"))
+        return result
+    calls = script(app, generate=generate)
+    response = client.post(f"/api/v1/learning/books/{book['id']}/questions", json={"chapter_id": book["chapters"][0]["id"], "count": 7})
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert len(result["created"]) == result["job"]["target"] == 7
+    payloads = [payload for stage, payload in calls if stage == "generation"]
+    assert len(payloads) > 1 and sum(payload["count"] for payload in payloads) == 7
+    assert any("末尾知识不能被遗漏" in payload["text"] for payload in payloads)

@@ -60,6 +60,12 @@ test("SkillNet：真实读取与工具证据在对话和历史中可见，连接
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const headers = await login(page, request);
+  // Observe a live run after the Agent has mounted. Cold-route performance is
+  // measured separately, not conflated with a 3.6-second synthetic SSE run.
+  await page.goto("/agent");
+  await expect(
+    page.getByRole("textbox", { name: "给 Agent 的任务" }),
+  ).toBeVisible();
   const run = await createRun(
     request,
     headers,

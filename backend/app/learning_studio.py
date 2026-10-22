@@ -232,10 +232,13 @@ def latest(store, book_id: str):
     return snapshot(store, row["id"]) if row else None
 
 
-async def start(store, library, manager, book_id: str, body: dict) -> dict:
+async def start(store, library, manager, book_id: str, body: dict, *, allocations: dict | None = None) -> dict:
     # The caller holds an asyncio lock through this no-I/O scheduling path.
     learning.get_book(store, book_id)
-    signature = hashlib.sha256(encode({key: value for key, value in body.items() if key != "request_key"}).encode()).hexdigest()
+    settings = {key: value for key, value in body.items() if key != "request_key"}
+    if allocations is not None:
+        settings["allocations"] = allocations
+    signature = hashlib.sha256(encode(settings).encode()).hexdigest()
     existing = store.one("SELECT id,signature FROM learning_generations WHERE request_key=?", (body["request_key"],))
     if existing:
         if existing["signature"] != signature:
@@ -252,6 +255,12 @@ async def start(store, library, manager, book_id: str, body: dict) -> dict:
     ensure_sources(store, library, book_id)
     options = {key: body[key] for key in ("count", "kinds", "difficulty", "focus", "mode", "analyze_only")}
     targets = [(ident, 0 if options["analyze_only"] else body["count"]) for ident in dict.fromkeys(body["source_ids"])]
+    if allocations is not None:
+        if options["analyze_only"] or body.get("resume_job_id") or set(allocations) != {ident for ident, _ in targets} or any(
+            type(count) is not int or not 1 <= count <= 24 for count in allocations.values()
+        ):
+            raise ValueError("章节出题分配无效")
+        targets = [(ident, allocations[ident]) for ident, _ in targets]
     if body.get("resume_job_id"):
         previous = snapshot(store, body["resume_job_id"])
         if previous["book_id"] != book_id or previous["status"] in ACTIVE:
@@ -395,7 +404,9 @@ async def execute(store, gateway, job_id, run_id, flag):
                 raise ValueError(analysis["reason"])
             if job["options"].get("mode") == "original" and not any(row["solvable"] for row in analysis["exercises"]):
                 raise ValueError("没有识别出文字条件完整的原题，请改用知识拓展或核对识别结果")
-            previous_stems = [row["stem"] for row in store.all("SELECT stem FROM questions WHERE book_id=? AND review!='excluded' ORDER BY created DESC LIMIT 500", (unit["book_id"],))]
+            # Programmatic dedup covers the entire book. Only the model prompt
+            # is bounded to its latest 100 stems to control context size.
+            previous_stems = [row["stem"] for row in store.all("SELECT stem FROM questions WHERE book_id=? AND review!='excluded' ORDER BY created,rowid", (unit["book_id"],))]
             neighbors = store.all("SELECT content FROM learning_sources WHERE chapter_id=? AND idx IN (?,?) ORDER BY idx", (unit["chapter_id"], unit["idx"] - 1, unit["idx"] + 1))
             maximum_attempts = 0 if job["options"].get("analyze_only") else math.ceil(item["target"] / BATCH_SIZE) + 2
             for _ in range(maximum_attempts):
@@ -448,5 +459,3 @@ async def execute(store, gateway, job_id, run_id, flag):
         store.event(run_id, "learning.source.finished", {"job_id": job_id, "source_id": unit["id"], "status": status, "created_count": created})
     result = snapshot(store, job_id)
     return {"job_id": job_id, "created_count": result["created_count"], "target": result["target"]}
-
-
