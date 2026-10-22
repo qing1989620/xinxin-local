@@ -31,15 +31,43 @@ export default function FilesPage() {
     [preview, setPreview] = useState<FileItem | null>(null),
     [text, setText] = useState(""),
     [textBusy, setTextBusy] = useState(false),
+    [textError, setTextError] = useState(""),
+    [searchBusy, setSearchBusy] = useState(false),
     [nextOffset, setNextOffset] = useState<number | null>(null),
     [totalChars, setTotalChars] = useState(0),
     [results, setResults] = useState<any[] | null>(null);
   const picker = useRef<HTMLInputElement>(null),
     previewId = useRef(""),
+    searchController = useRef<AbortController | null>(null),
     toast = useToast(),
     navigate = useNavigate(),
     [params, setParams] = useSearchParams();
   const uploads = useUploads();
+  useEffect(() => () => searchController.current?.abort(), []);
+  function clearSearch() {
+    searchController.current?.abort();
+    searchController.current = null;
+    setSearchBusy(false);
+    setResults(null);
+  }
+  async function searchText() {
+    if (!query.trim()) return;
+    searchController.current?.abort();
+    const controller = new AbortController();
+    searchController.current = controller;
+    setSearchBusy(true);
+    try {
+      const result = await api<any[]>(
+        `/files/search?q=${encodeURIComponent(query.trim())}`,
+        { signal: controller.signal },
+      );
+      if (!controller.signal.aborted) setResults(result);
+    } catch (error) {
+      if (!controller.signal.aborted) toast((error as Error).message, true);
+    } finally {
+      if (searchController.current === controller) setSearchBusy(false);
+    }
+  }
   const completed = uploads.entries.filter(
     (entry) => entry.state === "completed",
   ).length;
@@ -52,6 +80,7 @@ export default function FilesPage() {
     if (!wanted || !data) return;
     const target = data.find((file) => file.id === wanted);
     if (target && previewId.current !== target.id) void open(target);
+    if (!target) toast("这份资料不存在，可能已被删除", true);
     setParams(
       (previous) => {
         const next = new URLSearchParams(previous);
@@ -70,6 +99,7 @@ export default function FilesPage() {
     previewId.current = file.id;
     setPreview(file);
     setText("");
+    setTextError("");
     setNextOffset(null);
     setTotalChars(0);
     setTextBusy(file.indexed);
@@ -82,7 +112,7 @@ export default function FilesPage() {
         setTotalChars(value.total_chars);
       } catch (error) {
         if (previewId.current === file.id)
-          toast((error as Error).message, true);
+          setTextError((error as Error).message);
       } finally {
         if (previewId.current === file.id) setTextBusy(false);
       }
@@ -96,6 +126,17 @@ export default function FilesPage() {
         overline="YOUR RESOURCE LIBRARY"
         title="私人资源库"
         description="从手机上传，交给 Xinxin 处理，再把结果带走。你的文件，随时接着用。"
+        meta={
+          <>
+            <span>
+              <strong>{data.length}</strong>份资料
+            </span>
+            <span>
+              <strong>{data.filter((file) => file.indexed).length}</strong>
+              份可检索
+            </span>
+          </>
+        }
         action={
           <button
             className="button primary"
@@ -141,7 +182,7 @@ export default function FilesPage() {
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
-              setResults(null);
+              clearSearch();
             }}
             placeholder="搜索文件名，或查找资料中的内容"
             aria-label="搜索私人资料"
@@ -149,18 +190,10 @@ export default function FilesPage() {
         </label>
         <button
           className="button secondary"
-          disabled={!query.trim()}
-          onClick={async () => {
-            try {
-              setResults(
-                await api(`/files/search?q=${encodeURIComponent(query)}`),
-              );
-            } catch (error) {
-              toast((error as Error).message, true);
-            }
-          }}
+          disabled={!query.trim() || searchBusy}
+          onClick={() => void searchText()}
         >
-          检索正文 <ArrowUpRight size={15} />
+          {searchBusy ? "正在检索…" : "检索正文"} <ArrowUpRight size={15} />
         </button>
         <span className="muted small-text">{data.length} 份资料</span>
         <button className="text-button" onClick={reload}>
@@ -259,8 +292,12 @@ export default function FilesPage() {
               ))
           ) : (
             <Empty
-              title="留一份资料，开始建立上下文"
-              description="上传后，Agent 可以检索其中的文字，并给出文件来源。"
+              title={query ? "没有找到这份资料" : "留一份资料，开始建立上下文"}
+              description={
+                query
+                  ? "试试其他文件名，或检索资料正文中的片段。"
+                  : "上传后，Agent 可以检索其中的文字，并给出文件来源。"
+              }
             />
           )}
         </section>
@@ -280,6 +317,8 @@ export default function FilesPage() {
               alt={preview.name}
               className="document-image"
             />
+          ) : textError ? (
+            <ErrorState message={textError} retry={() => void open(preview)} />
           ) : text ? (
             <>
               <pre className="document-text">{text}</pre>

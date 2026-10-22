@@ -31,12 +31,12 @@ export default class ErrorBoundary extends Component<Props, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     return (
-      <main className="boot">
+      <section className="boot render-error" role="alert">
         <span className="brand-mark">x</span>
         <h1>界面出了一点问题</h1>
         <p className="muted">
-          这一页没有正常显示，但你的资料和任务都安全地保存在后端。
-          重新加载通常就能恢复；也可以回到工作台。
+          这一页没有正常显示。已保存的资料与任务仍可在重新连接后继续查看。
+          可以重新加载，或回到工作台。
         </p>
         <div className="error-actions">
           <button
@@ -58,7 +58,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <summary>查看技术细节</summary>
           <pre>{error.message || String(error)}</pre>
         </details>
-      </main>
+      </section>
     );
   }
 }

@@ -72,25 +72,42 @@ import {
 } from "./api";
 import { Dialog, Loading, useToast } from "./ui";
 import Dashboard from "./pages/Dashboard";
-import AgentPage from "./pages/AgentPage";
 import { configureConversationLocation } from "./conversationLocation";
-import TasksPage from "./pages/TasksPage";
-import FilesPage from "./pages/FilesPage";
-import MusicPage from "./pages/MusicPage";
-import LearningPage from "./pages/LearningPage";
-import BookPage from "./pages/BookPage";
-import QuizPage from "./pages/QuizPage";
 import { MiniPlayer, useMusicPlayer } from "./musicPlayer";
 import ErrorBoundary from "./ErrorBoundary";
-import {
-  ServersPage,
-  SkillsPage,
-  MemoriesPage,
-  SchedulesPage,
-  SettingsPage,
-  ToolsPage,
-} from "./pages/WorkspacePages";
-
+const AgentPage = lazy(() => import("./pages/AgentPage"));
+const TasksPage = lazy(() => import("./pages/TasksPage"));
+const FilesPage = lazy(() => import("./pages/FilesPage"));
+const MusicPage = lazy(() => import("./pages/MusicPage"));
+const LearningPage = lazy(() => import("./pages/LearningPage"));
+const BookPage = lazy(() => import("./pages/BookPage"));
+const QuizPage = lazy(() => import("./pages/QuizPage"));
+const SkillsPage = lazy(() => import("./pages/SkillsPage"));
+const ServersPage = lazy(() =>
+  import("./pages/WorkspacePages").then((module) => ({
+    default: module.ServersPage,
+  })),
+);
+const MemoriesPage = lazy(() =>
+  import("./pages/WorkspacePages").then((module) => ({
+    default: module.MemoriesPage,
+  })),
+);
+const SchedulesPage = lazy(() =>
+  import("./pages/WorkspacePages").then((module) => ({
+    default: module.SchedulesPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import("./pages/WorkspacePages").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+const ToolsPage = lazy(() =>
+  import("./pages/WorkspacePages").then((module) => ({
+    default: module.ToolsPage,
+  })),
+);
 const ContentPage = lazy(() => import("./pages/ContentPage"));
 const navigation = [
   { to: "/", label: "工作台", icon: LayoutDashboard, end: true },
@@ -106,6 +123,65 @@ const navigation = [
   { to: "/memories", label: "记忆", icon: Bookmark },
   { to: "/schedules", label: "自动化", icon: Clock3 },
 ];
+const searchablePages = [
+  ...navigation,
+  { to: "/settings", label: "设置", icon: SettingsIcon },
+];
+
+function PageSearch({ onClose }: { onClose: () => void }) {
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+  const matches = searchablePages.filter((item) =>
+    `${item.label} ${item.to}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase()),
+  );
+  function open(path: string) {
+    navigate(path);
+    onClose();
+  }
+  return (
+    <Dialog title="在空间里寻找" onClose={onClose}>
+      <form
+        role="search"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (matches[0]) open(matches[0].to);
+        }}
+      >
+        <label className="search-field command-search">
+          <Search size={18} aria-hidden="true" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label="查找页面"
+            placeholder="工作台、Agent、资料、设置…"
+          />
+        </label>
+      </form>
+      <p className="command-caption" role="status">
+        {matches.length
+          ? `${matches.length} 个入口 · Enter 打开首项，Tab 选择`
+          : "没有匹配的页面，试试其他关键词"}
+      </p>
+      <div className="command-list">
+        {matches.map((item) => (
+          <button type="button" key={item.to} onClick={() => open(item.to)}>
+            <item.icon size={18} aria-hidden="true" />
+            <span>
+              {item.label}
+              <small>
+                {item.to === "/" ? "你的私人工作空间" : item.to.slice(1)}
+              </small>
+            </span>
+            <ArrowUpRight size={15} aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
 
 function AuthScreen({
   configured,
@@ -362,12 +438,14 @@ function AuthScreen({
           </form>
           <button
             className="text-button connection-toggle"
+            aria-expanded={connection}
+            aria-controls="backend-connection"
             onClick={() => setConnection(!connection)}
           >
             连接自己的后端 <ChevronRight size={14} />
           </button>
           {connection && (
-            <div className="connection-form">
+            <div className="connection-form" id="backend-connection">
               <label>
                 后端地址
                 <input
@@ -414,7 +492,6 @@ export default function App() {
       localStorage.getItem("xinxin-sidebar") === "compact",
     ),
     [search, setSearch] = useState(false),
-    [searchText, setSearchText] = useState(""),
     [theme, setTheme] = useState(
       localStorage.getItem("xinxin-accent") || "teal",
     ),
@@ -429,6 +506,14 @@ export default function App() {
   const navigate = useNavigate(),
     location = useLocation(),
     toast = useToast();
+  const currentPage =
+    searchablePages.find(
+      (item) => item.to !== "/" && location.pathname.startsWith(item.to),
+    )?.label || (location.pathname === "/" ? "工作台" : "页面未找到");
+  useEffect(() => {
+    document.title = `Xinxin · ${currentPage}`;
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname, currentPage]);
   async function boot() {
     setState("loading");
     let gotStatus = false;
@@ -697,8 +782,9 @@ export default function App() {
         <nav aria-label="主导航">
           {navigation.map((item, index) => (
             <div key={item.to}>
-              {index === 3 && <p className="nav-section">我的资源</p>}
-              {index === 9 && <p className="nav-section">长期协作</p>}
+              {index === 0 && <p className="nav-section">开始工作</p>}
+              {index === 3 && <p className="nav-section">探索与创作</p>}
+              {index === 10 && <p className="nav-section">长期协作</p>}
               <NavLink
                 to={item.to}
                 aria-label={item.label}
@@ -750,9 +836,19 @@ export default function App() {
                 player?.stop();
                 try {
                   await post("/auth/logout", {});
+                } catch {
+                  toast(
+                    "本机已退出；服务暂不可用，未能确认服务器会话撤销",
+                    true,
+                  );
                 } finally {
-                  await setSession("");
-                  setState("auth");
+                  try {
+                    await setSession("");
+                  } catch {
+                    toast("本机会话已清除，设备凭据同步暂未完成", true);
+                  } finally {
+                    setState("auth");
+                  }
                 }
               }}
             >
@@ -820,7 +916,7 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main id="main" className="main">
+        <main id="main" className="main" tabIndex={-1}>
           <ErrorBoundary resetKey={location.pathname}>
             <Suspense fallback={<Loading />}>
               <Routes>
@@ -852,8 +948,10 @@ export default function App() {
                 <Route
                   path="*"
                   element={
-                    <div className="empty">
+                    <div className="empty missing-page">
+                      <p className="eyebrow">404 / A DIFFERENT TURN</p>
                       <h1>这里还没有内容</h1>
+                      <p>这个入口可能已移动。回到工作台，继续下一件事。</p>
                       <button
                         className="button primary"
                         onClick={() => navigate("/")}
@@ -895,41 +993,7 @@ export default function App() {
           <span>更多</span>
         </button>
       </nav>
-      {search && (
-        <Dialog title="在空间里寻找" onClose={() => setSearch(false)}>
-          <label className="search-field">
-            <Search size={18} />
-            <input
-              autoFocus
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              placeholder="工作台、Agent、资料、服务器…"
-            />
-          </label>
-          <div className="command-list">
-            {navigation
-              .filter((item) =>
-                (item.label + " " + item.to)
-                  .toLowerCase()
-                  .includes(searchText.toLowerCase()),
-              )
-              .map((item) => (
-                <button
-                  key={item.to}
-                  onClick={() => {
-                    navigate(item.to);
-                    setSearch(false);
-                    setSearchText("");
-                  }}
-                >
-                  <item.icon size={18} />
-                  {item.label}
-                  <ArrowUpRight size={15} />
-                </button>
-              ))}
-          </div>
-        </Dialog>
-      )}
+      {search && <PageSearch onClose={() => setSearch(false)} />}
     </div>
   );
 }

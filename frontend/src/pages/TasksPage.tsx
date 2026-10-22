@@ -58,28 +58,44 @@ export default function TasksPage() {
     [query, setQuery] = useState(""),
     [detail, setDetail] = useState<Run | null>(null),
     [events, setEvents] = useState<EventItem[]>([]);
+  const [detailError, setDetailError] = useState("");
+  const [detailRevision, setDetailRevision] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
   const id = params.get("run");
   const currentId = useRef(id);
   currentId.current = id;
   async function load(id: string) {
     const result = await api<Run>(`/runs/${id}`);
-    if (currentId.current === id) setDetail(result);
+    if (currentId.current === id) {
+      setDetail(result);
+      setDetailError("");
+    }
   }
   useEffect(() => {
     setDetail(null);
     setEvents([]);
+    setDetailError("");
+    setCancelling(false);
     if (!id) return;
-    void load(id).catch((error) => toast(error.message, true));
     const controller = new AbortController();
+    void load(id).catch((error) => {
+      if (controller.signal.aborted || currentId.current !== id) return;
+      setDetailError(error.message);
+      controller.abort();
+    });
     watchRun(
       id,
       (event) => {
+        if (controller.signal.aborted || currentId.current !== id) return;
         setEvents((old) =>
           old.some((item) => item.seq === event.seq) ? old : [...old, event],
         );
         if (event.kind === "finished") {
           reload();
-          void load(id).catch((error) => toast(error.message, true));
+          void load(id).catch((error) => {
+            if (!controller.signal.aborted && currentId.current === id)
+              setDetailError(error.message);
+          });
         }
         if (event.kind === "started")
           setDetail((old) =>
@@ -87,9 +103,19 @@ export default function TasksPage() {
           );
       },
       controller.signal,
-    ).catch((error) => toast(error.message, true));
+      undefined,
+      (snapshot) => {
+        if (controller.signal.aborted || currentId.current !== id) return;
+        setDetail(snapshot);
+        if (!["queued", "running", "cancelling"].includes(snapshot.status))
+          reload();
+      },
+    ).catch((error) => {
+      if (!controller.signal.aborted && currentId.current === id)
+        setDetailError(error.message);
+    });
     return () => controller.abort();
-  }, [id]);
+  }, [id, detailRevision]);
   useEffect(() => {
     if (
       data?.some((run) =>
@@ -116,6 +142,23 @@ export default function TasksPage() {
         overline="ACTIONS & OUTCOMES"
         title="任务与交付"
         description="任务在后端持续执行。回到这里，继续查看过程与交付。"
+        meta={
+          <>
+            <span>
+              <strong>{data.length}</strong>项行动
+            </span>
+            <span>
+              <strong>
+                {
+                  data.filter((run) =>
+                    ["queued", "running", "cancelling"].includes(run.status),
+                  ).length
+                }
+              </strong>
+              项进行中
+            </span>
+          </>
+        }
         action={
           <button className="button primary" onClick={() => navigate("/agent")}>
             新建任务 <ArrowUpRight size={17} />
@@ -133,6 +176,7 @@ export default function TasksPage() {
             <button
               key={value}
               className={filter === value ? "selected" : ""}
+              aria-pressed={filter === value}
               onClick={() => setFilter(value)}
             >
               {label}
@@ -219,10 +263,8 @@ export default function TasksPage() {
                   <strong>{date(detail.created)}</strong>
                   <span>用量</span>
                   <strong>
-                    {parseJson<{ total_tokens?: number }>(
-                      detail.usage,
-                      {},
-                    ).total_tokens || 0}{" "}
+                    {parseJson<{ total_tokens?: number }>(detail.usage, {})
+                      .total_tokens || 0}{" "}
                     tokens
                   </strong>
                 </div>
@@ -231,18 +273,25 @@ export default function TasksPage() {
                 ) && (
                   <button
                     className="button secondary"
+                    disabled={cancelling || detail.status === "cancelling"}
                     onClick={async () => {
+                      if (cancelling) return;
+                      setCancelling(true);
                       try {
                         await post(`/runs/${id}/cancel`, {});
                         await load(id);
                         reload();
                       } catch (error) {
                         toast((error as Error).message, true);
+                      } finally {
+                        if (currentId.current === id) setCancelling(false);
                       }
                     }}
                   >
                     <Square size={14} />
-                    停止任务
+                    {cancelling || detail.status === "cancelling"
+                      ? "正在停止…"
+                      : "停止任务"}
                   </button>
                 )}
                 {detail.error && (
@@ -320,6 +369,11 @@ export default function TasksPage() {
                     ))}
                 </ol>
               </>
+            ) : detailError ? (
+              <ErrorState
+                message={detailError}
+                retry={() => setDetailRevision((value) => value + 1)}
+              />
             ) : (
               <Loading />
             )}

@@ -8,13 +8,13 @@
   :root{
     --bg:#f7f5ef;
     --ink:#2b2f2d;
-    --muted:#7c857f;
+    --muted:#626d64;
     --accent:#376c62;
     --danger:#9b4a3a;
     --hairline:#e3ded2;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
+  html,body{min-height:100%}
   body{
     background:var(--bg);
     color:var(--ink);
@@ -25,9 +25,10 @@
     padding:32px 24px;
     -webkit-font-smoothing:antialiased;
   }
-  .card{width:min(560px,92vw)}
+  .card{width:min(640px,100%);padding:32px;border:1px solid var(--hairline);border-radius:12px;background:#fffdf9}
+  .eyebrow{font-size:10px;letter-spacing:.16em;color:var(--muted);margin-bottom:24px}
   .mark{width:56px;height:56px;margin:0 0 24px;display:block}
-  h1{font-size:19px;font-weight:600;letter-spacing:.06em;margin-bottom:12px}
+  h1{font-size:32px;font-weight:550;letter-spacing:-.04em;margin-bottom:16px;line-height:1.35}
   .lead{font-size:13px;line-height:1.85;color:var(--muted);margin-bottom:20px}
   .message{
     border:1px solid var(--hairline);
@@ -80,17 +81,19 @@
     padding:2px 7px;
     color:var(--ink);
   }
+  @media(max-width:480px){body{padding:20px 14px}.card{padding:24px 19px}h1{font-size:28px}.steps code{overflow-wrap:anywhere}}
 </style>
 </head>
 <body>
   <main class="card">
+    <p class="eyebrow">XINXIN / CONNECTION & RECOVERY</p>
     <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
       <rect width="64" height="64" rx="16" fill="#376c62"/>
       <path d="M19 19l26 26M45 19L19 45" stroke="#faf8f0" stroke-width="4" stroke-linecap="round"/>
       <circle cx="32" cy="32" r="7" fill="#faf8f0"/>
     </svg>
     <h1>这次没能启动</h1>
-    <p class="lead">电脑端已经尽力了：本地服务没有在预期时间内就绪。下面是原因和日志尾部。</p>
+    <p class="lead">本机服务暂未就绪。可以根据下方原因重新启动，或查看日志继续排查。</p>
     <div class="message">{{MESSAGE}}</div>
     <div class="log">{{LOG}}</div>
     <p class="logpath">完整日志：<code>{{LOGPATH}}</code></p>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import GalleryExplorer from "./GalleryExplorer";
 import EmailSettings from "./EmailSettings";
@@ -52,6 +52,7 @@ import {
 } from "../ui";
 
 export function ServersPage() {
+  const submitting = useRef(false);
   const { data, error, reload } = useResource<ServerItem[]>("/servers"),
     [dialog, setDialog] = useState(false),
     [busy, setBusy] = useState(false),
@@ -69,6 +70,8 @@ export function ServersPage() {
   });
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       if (editing) await put(`/servers/${editing}`, form);
@@ -89,6 +92,7 @@ export function ServersPage() {
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -215,6 +219,7 @@ export function ServersPage() {
       {dialog && (
         <Dialog
           title={editing ? "编辑服务器" : "登记服务器"}
+          busy={busy}
           onClose={() => {
             setDialog(false);
             setEditing(null);
@@ -230,109 +235,111 @@ export function ServersPage() {
           }}
         >
           <form className="form-stack" onSubmit={save}>
-            <label>
-              名称
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="我的云服务器"
-                required
-              />
-            </label>
-            <div className="form-columns">
+            <fieldset className="form-fields" disabled={busy}>
               <label>
-                主机地址
+                名称
                 <input
-                  value={form.host}
-                  onChange={(e) => setForm({ ...form, host: e.target.value })}
-                  placeholder="IP 或域名，不含协议"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="我的云服务器"
                   required
                 />
               </label>
-              <label>
-                SSH 端口
-                <input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={form.port}
-                  onChange={(e) =>
-                    setForm({ ...form, port: Number(e.target.value) })
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <div className="form-columns">
-              <label>
-                用户名
-                <input
-                  value={form.username}
-                  onChange={(e) =>
-                    setForm({ ...form, username: e.target.value })
-                  }
-                  required
-                />
-              </label>
-              <label>
-                部署工作目录
-                <input
-                  value={form.workdir}
-                  onChange={(e) =>
-                    setForm({ ...form, workdir: e.target.value })
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <details className="advanced-settings">
-              <summary>
-                SSH 连接凭据 <ChevronRight size={16} />
-              </summary>
-              <label>
-                私钥
-                <textarea
-                  value={form.private_key}
-                  onChange={(e) =>
-                    setForm({ ...form, private_key: e.target.value })
-                  }
-                  rows={5}
-                  autoComplete="off"
-                  placeholder={
-                    editing
-                      ? "留空保留已保存的私钥"
-                      : "-----BEGIN OPENSSH PRIVATE KEY-----"
-                  }
-                />
-              </label>
-              <label>
-                已验证的主机公钥
-                <textarea
-                  value={form.host_key}
-                  onChange={(e) =>
-                    setForm({ ...form, host_key: e.target.value })
-                  }
-                  rows={3}
-                  placeholder="known_hosts 格式；请核对服务器指纹"
-                />
-              </label>
-              <p className="field-help">
-                私钥加密保存在后端；连接始终验证主机公钥。可以先登记，补齐凭据后再发起执行任务。
-              </p>
-            </details>
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setDialog(false)}
-              >
-                取消
-              </button>
-              <button className="button primary" disabled={busy}>
-                {busy ? "正在保存…" : "保存服务器"}
-                <ArrowUpRight size={16} />
-              </button>
-            </div>
+              <div className="form-columns">
+                <label>
+                  主机地址
+                  <input
+                    value={form.host}
+                    onChange={(e) => setForm({ ...form, host: e.target.value })}
+                    placeholder="IP 或域名，不含协议"
+                    required
+                  />
+                </label>
+                <label>
+                  SSH 端口
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={form.port}
+                    onChange={(e) =>
+                      setForm({ ...form, port: Number(e.target.value) })
+                    }
+                    required
+                  />
+                </label>
+              </div>
+              <div className="form-columns">
+                <label>
+                  用户名
+                  <input
+                    value={form.username}
+                    onChange={(e) =>
+                      setForm({ ...form, username: e.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  部署工作目录
+                  <input
+                    value={form.workdir}
+                    onChange={(e) =>
+                      setForm({ ...form, workdir: e.target.value })
+                    }
+                    required
+                  />
+                </label>
+              </div>
+              <details className="advanced-settings">
+                <summary>
+                  SSH 连接凭据 <ChevronRight size={16} />
+                </summary>
+                <label>
+                  私钥
+                  <textarea
+                    value={form.private_key}
+                    onChange={(e) =>
+                      setForm({ ...form, private_key: e.target.value })
+                    }
+                    rows={5}
+                    autoComplete="off"
+                    placeholder={
+                      editing
+                        ? "留空保留已保存的私钥"
+                        : "-----BEGIN OPENSSH PRIVATE KEY-----"
+                    }
+                  />
+                </label>
+                <label>
+                  已验证的主机公钥
+                  <textarea
+                    value={form.host_key}
+                    onChange={(e) =>
+                      setForm({ ...form, host_key: e.target.value })
+                    }
+                    rows={3}
+                    placeholder="known_hosts 格式；请核对服务器指纹"
+                  />
+                </label>
+                <p className="field-help">
+                  私钥加密保存在后端；连接始终验证主机公钥。可以先登记，补齐凭据后再发起执行任务。
+                </p>
+              </details>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={() => setDialog(false)}
+                >
+                  取消
+                </button>
+                <button className="button primary" disabled={busy}>
+                  {busy ? "正在保存…" : "保存服务器"}
+                  <ArrowUpRight size={16} />
+                </button>
+              </div>
+            </fieldset>
           </form>
         </Dialog>
       )}
@@ -358,6 +365,8 @@ type MemoryItem = {
   created: number;
 };
 export function MemoriesPage() {
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const { data, error, reload } = useResource<MemoryItem[]>("/memories"),
     [dialog, setDialog] = useState(false),
     [content, setContent] = useState(""),
@@ -372,6 +381,11 @@ export function MemoriesPage() {
         overline="A CONTINUING UNDERSTANDING"
         title="长期记忆"
         description="少一些重复解释，多一点长期理解。这里的每条记忆，都由你掌握。"
+        meta={
+          <span>
+            <strong>{data.length}</strong>条长期记忆
+          </span>
+        }
         action={
           <button
             className="button primary"
@@ -441,12 +455,16 @@ export function MemoriesPage() {
       {dialog && (
         <Dialog
           title={editing ? "编辑记忆" : "留下一条记忆"}
+          busy={busy}
           onClose={() => setDialog(false)}
         >
           <form
             className="form-stack"
             onSubmit={async (event) => {
               event.preventDefault();
+              if (submitting.current) return;
+              submitting.current = true;
+              setBusy(true);
               try {
                 if (editing)
                   await put(`/memories/${editing}`, { content, category });
@@ -456,37 +474,42 @@ export function MemoriesPage() {
                 reload();
               } catch (error) {
                 toast((error as Error).message, true);
+              } finally {
+                submitting.current = false;
+                setBusy(false);
               }
             }}
           >
-            <label>
-              类别
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="preference">偏好</option>
-                <option value="fact">事实</option>
-                <option value="project">项目</option>
-                <option value="habit">习惯</option>
-              </select>
-            </label>
-            <label>
-              记住什么
-              <textarea
-                rows={5}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                required
-                maxLength={1000}
-                placeholder="例如：我偏好简洁的中文回复，重要结论附上证据。"
-              />
-            </label>
-            <div className="dialog-actions">
-              <button className="button primary">
-                保存记忆 <Check size={16} />
-              </button>
-            </div>
+            <fieldset className="form-fields" disabled={busy}>
+              <label>
+                类别
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  <option value="preference">偏好</option>
+                  <option value="fact">事实</option>
+                  <option value="project">项目</option>
+                  <option value="habit">习惯</option>
+                </select>
+              </label>
+              <label>
+                记住什么
+                <textarea
+                  rows={5}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  required
+                  maxLength={1000}
+                  placeholder="例如：我偏好简洁的中文回复，重要结论附上证据。"
+                />
+              </label>
+              <div className="dialog-actions">
+                <button className="button primary" disabled={busy}>
+                  {busy ? "正在保存…" : "保存记忆"} <Check size={16} />
+                </button>
+              </div>
+            </fieldset>
           </form>
         </Dialog>
       )}
@@ -505,6 +528,8 @@ type ScheduleItem = {
   server_id: string | null;
 };
 export function SchedulesPage() {
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const { data, error, reload } = useResource<ScheduleItem[]>("/schedules"),
     [dialog, setDialog] = useState(false),
     [title, setTitle] = useState(""),
@@ -523,6 +548,17 @@ export function SchedulesPage() {
         overline="STEADY, QUIET PROGRESS"
         title="自动化"
         description="以固定间隔创建 Agent 任务。后端运行时持续调度，记录每一次结果。"
+        meta={
+          <>
+            <span>
+              <strong>{data.length}</strong>项自动化
+            </span>
+            <span>
+              <strong>{data.filter((item) => item.enabled).length}</strong>
+              项已启用
+            </span>
+          </>
+        }
         action={
           <button
             className="button primary"
@@ -633,12 +669,16 @@ export function SchedulesPage() {
       {dialog && (
         <Dialog
           title={editing ? "编辑定期行动" : "创建定期行动"}
+          busy={busy}
           onClose={() => setDialog(false)}
         >
           <form
             className="form-stack"
             onSubmit={async (event) => {
               event.preventDefault();
+              if (submitting.current) return;
+              submitting.current = true;
+              setBusy(true);
               try {
                 const payload = {
                   title,
@@ -656,72 +696,77 @@ export function SchedulesPage() {
                 reload();
               } catch (error) {
                 toast((error as Error).message, true);
+              } finally {
+                submitting.current = false;
+                setBusy(false);
               }
             }}
           >
-            <label>
-              名称
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-                maxLength={100}
-              />
-            </label>
-            <label>
-              每隔多少分钟
-              <input
-                type="number"
-                min={5}
-                max={525600}
-                value={minutes}
-                onChange={(e) => setMinutes(Number(e.target.value))}
-                required
-              />
-            </label>
-            <label>
-              让 Agent 做什么
-              <textarea
-                rows={5}
-                value={task}
-                onChange={(e) => setTask(e.target.value)}
-                required
-                maxLength={12000}
-              />
-            </label>
-            <div className="form-columns">
+            <fieldset className="form-fields" disabled={busy}>
               <label>
-                执行权限
-                <select
-                  value={permission}
-                  onChange={(e) => setPermission(e.target.value)}
-                >
-                  <option value="read">只读 · 阅读和分析</option>
-                  <option value="workspace">工作区 · 创建文件和图表</option>
-                  <option value="full">完整 · 后端主机和服务器命令</option>
-                </select>
+                名称
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                  maxLength={100}
+                />
               </label>
               <label>
-                目标服务器
-                <select
-                  value={serverId}
-                  onChange={(e) => setServerId(e.target.value)}
-                >
-                  <option value="">不选择远程服务器</option>
-                  {servers.data?.map((server) => (
-                    <option key={server.id} value={server.id}>
-                      {server.name}
-                    </option>
-                  ))}
-                </select>
+                每隔多少分钟
+                <input
+                  type="number"
+                  min={5}
+                  max={525600}
+                  value={minutes}
+                  onChange={(e) => setMinutes(Number(e.target.value))}
+                  required
+                />
               </label>
-            </div>
-            <div className="dialog-actions">
-              <button className="button primary">
-                {editing ? "保存自动化" : "创建自动化"}{" "}
-                <ArrowUpRight size={16} />
-              </button>
-            </div>
+              <label>
+                让 Agent 做什么
+                <textarea
+                  rows={5}
+                  value={task}
+                  onChange={(e) => setTask(e.target.value)}
+                  required
+                  maxLength={12000}
+                />
+              </label>
+              <div className="form-columns">
+                <label>
+                  执行权限
+                  <select
+                    value={permission}
+                    onChange={(e) => setPermission(e.target.value)}
+                  >
+                    <option value="read">只读 · 阅读和分析</option>
+                    <option value="workspace">工作区 · 创建文件和图表</option>
+                    <option value="full">完整 · 后端主机和服务器命令</option>
+                  </select>
+                </label>
+                <label>
+                  目标服务器
+                  <select
+                    value={serverId}
+                    onChange={(e) => setServerId(e.target.value)}
+                  >
+                    <option value="">不选择远程服务器</option>
+                    {servers.data?.map((server) => (
+                      <option key={server.id} value={server.id}>
+                        {server.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="dialog-actions">
+                <button className="button primary" disabled={busy}>
+                  {busy ? "正在保存…" : editing ? "保存自动化" : "创建自动化"}{" "}
+                  <ArrowUpRight size={16} />
+                </button>
+              </div>
+            </fieldset>
           </form>
         </Dialog>
       )}
@@ -794,6 +839,9 @@ export function SettingsPage({
   background: string;
   onBackground: (value: string) => void;
 }) {
+  const submitting = useRef(false);
+  const passwordSubmitting = useRef(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
   const { data, error, reload } = useResource<SettingsData>("/settings"),
     [model, setModel] = useState(""),
     [modelUrl, setModelUrl] = useState(""),
@@ -817,6 +865,8 @@ export function SettingsPage({
   if (!data) return <Loading />;
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       await put("/settings", {
@@ -834,6 +884,7 @@ export function SettingsPage({
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -844,7 +895,15 @@ export function SettingsPage({
         title="让空间，贴近自己。"
         description="外观、模型与连接，按你的习惯安排。"
       />
-      <section className="settings-section">
+      <nav className="settings-index" aria-label="设置分区">
+        <a href="#appearance">外观</a>
+        <a href="#connection">连接</a>
+        <a href="#email">邮箱</a>
+        <a href="#model">对话模型</a>
+        <a href="#image-service">图像服务</a>
+        <a href="#account">主人账号</a>
+      </nav>
+      <section className="settings-section" id="appearance">
         <div className="settings-intro">
           <Palette size={22} strokeWidth={1.3} />
           <h2>空间的颜色</h2>
@@ -908,8 +967,8 @@ export function SettingsPage({
         <code>{theme.startsWith("#") ? theme : "自由选择色彩"}</code>
         <span>自动保持文字可读性</span>
       </label>
-      {network.data && (
-        <section className="settings-section">
+      {(network.data || network.error) && (
+        <section className="settings-section" id="connection">
           <div className="settings-intro">
             <Wifi size={22} strokeWidth={1.3} />
             <h2>连接地址</h2>
@@ -919,131 +978,138 @@ export function SettingsPage({
               只有人不在同一网络时，才用下面的外部地址。
             </p>
           </div>
-          <div className="address-list">
-            <AddressRow label="本机" value={network.data.local} />
-            <AddressRow
-              label="手机 / 局域网"
-              value={network.data.lan || "未检测到局域网地址"}
-              hint="同一 WiFi，地址不变"
-            />
-            <AddressRow
-              label="外部访问"
-              value={network.data.public || "未开启"}
-              hint={
-                network.data.public ? "重启后会变化" : "启动公网访问后显示"
-              }
-            />
-          </div>
+          {network.error && (
+            <ErrorState message={network.error} retry={network.reload} />
+          )}
+          {network.data && (
+            <div className="address-list">
+              <AddressRow label="本机" value={network.data.local} />
+              <AddressRow
+                label="手机 / 局域网"
+                value={network.data.lan || "未检测到局域网地址"}
+                hint="同一 WiFi，地址不变"
+              />
+              <AddressRow
+                label="外部访问"
+                value={network.data.public || "未开启"}
+                hint={
+                  network.data.public ? "重启后会变化" : "启动公网访问后显示"
+                }
+              />
+            </div>
+          )}
         </section>
       )}
       <EmailSettings />
       <form onSubmit={save}>
-        <section className="settings-section">
-          <div className="settings-intro">
-            <Sparkles size={22} strokeWidth={1.3} />
-            <h2>对话模型</h2>
-            <p>
-              默认使用 DeepSeek V4.1 Flash。
-              <br />
-              密钥只发送到自己的后端，保存后不回显。
-            </p>
-            <span className="subtle-badge">
-              {data.model_configured ? "密钥已配置" : "等待配置"}
-            </span>
+        <fieldset className="settings-model-fields" disabled={busy}>
+          <section className="settings-section" id="model">
+            <div className="settings-intro">
+              <Sparkles size={22} strokeWidth={1.3} />
+              <h2>对话模型</h2>
+              <p>
+                默认使用 DeepSeek V4.1 Flash。
+                <br />
+                密钥只发送到自己的后端，保存后不回显。
+              </p>
+              <span className="subtle-badge">
+                {data.model_configured ? "密钥已配置" : "等待配置"}
+              </span>
+            </div>
+            <div className="form-stack settings-fields">
+              <label>
+                模型 ID
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  required
+                  placeholder="deepseek-flash"
+                />
+              </label>
+              <label>
+                完整 API 地址
+                <input
+                  type="url"
+                  value={modelUrl}
+                  onChange={(e) => setModelUrl(e.target.value)}
+                  required
+                  placeholder="https://api.deepseek.com/chat/completions"
+                />
+              </label>
+              <label>
+                API 密钥
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={key}
+                  onChange={(e) => setKey(e.target.value)}
+                  placeholder={
+                    data.model_configured
+                      ? "已配置，留空保留现有密钥"
+                      : "输入你的 DeepSeek API 密钥"
+                  }
+                />
+              </label>
+            </div>
+          </section>
+          <section className="settings-section" id="image-service">
+            <div className="settings-intro">
+              <Image size={22} strokeWidth={1.3} />
+              <h2>图像生成</h2>
+              <p>
+                拾景工具使用单独的图像服务。
+                <br />
+                DeepSeek 负责对话与工具调度。
+              </p>
+              <span className="subtle-badge">
+                {data.image_configured ? "图像密钥已配置" : "可选配置"}
+              </span>
+            </div>
+            <div className="form-stack settings-fields">
+              <label>
+                图片编辑接口地址
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="兼容 images/edits，返回 b64_json"
+                />
+              </label>
+              <label>
+                图像模型 ID
+                <input
+                  value={imageModel}
+                  onChange={(e) => setImageModel(e.target.value)}
+                />
+              </label>
+              <label>
+                图像服务密钥
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={imageKey}
+                  onChange={(e) => setImageKey(e.target.value)}
+                  placeholder={
+                    data.image_configured
+                      ? "已配置，留空保留"
+                      : "输入图像服务密钥"
+                  }
+                />
+              </label>
+              <p className="field-help">
+                只向你配置的图像服务发送所选参考图与转换指令。拾景技能用于个人非商业创作。
+              </p>
+            </div>
+          </section>
+          <div className="settings-save">
+            <button className="button primary" disabled={busy}>
+              {busy ? "正在保存…" : "保存模型设置"}
+              <Check size={16} />
+            </button>
           </div>
-          <div className="form-stack settings-fields">
-            <label>
-              模型 ID
-              <input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                required
-                placeholder="deepseek-flash"
-              />
-            </label>
-            <label>
-              完整 API 地址
-              <input
-                type="url"
-                value={modelUrl}
-                onChange={(e) => setModelUrl(e.target.value)}
-                required
-                placeholder="https://api.deepseek.com/chat/completions"
-              />
-            </label>
-            <label>
-              API 密钥
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                placeholder={
-                  data.model_configured
-                    ? "已配置，留空保留现有密钥"
-                    : "输入你的 DeepSeek API 密钥"
-                }
-              />
-            </label>
-          </div>
-        </section>
-        <section className="settings-section">
-          <div className="settings-intro">
-            <Image size={22} strokeWidth={1.3} />
-            <h2>图像生成</h2>
-            <p>
-              拾景工具使用单独的图像服务。
-              <br />
-              DeepSeek 负责对话与工具调度。
-            </p>
-            <span className="subtle-badge">
-              {data.image_configured ? "图像密钥已配置" : "可选配置"}
-            </span>
-          </div>
-          <div className="form-stack settings-fields">
-            <label>
-              图片编辑接口地址
-              <input
-                type="url"
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder="兼容 images/edits，返回 b64_json"
-              />
-            </label>
-            <label>
-              图像模型 ID
-              <input
-                value={imageModel}
-                onChange={(e) => setImageModel(e.target.value)}
-              />
-            </label>
-            <label>
-              图像服务密钥
-              <input
-                type="password"
-                autoComplete="new-password"
-                value={imageKey}
-                onChange={(e) => setImageKey(e.target.value)}
-                placeholder={
-                  data.image_configured
-                    ? "已配置，留空保留"
-                    : "输入图像服务密钥"
-                }
-              />
-            </label>
-            <p className="field-help">
-              只向你配置的图像服务发送所选参考图与转换指令。拾景技能用于个人非商业创作。
-            </p>
-          </div>
-        </section>
-        <div className="settings-save">
-          <button className="button primary" disabled={busy}>
-            {busy ? "正在保存…" : "保存模型设置"}
-            <Check size={16} />
-          </button>
-        </div>
+        </fieldset>
       </form>
-      <section className="settings-section">
+      <section className="settings-section" id="account">
         <div className="settings-intro">
           <LockKeyhole size={22} strokeWidth={1.3} />
           <h2>主人账号</h2>
@@ -1057,6 +1123,9 @@ export function SettingsPage({
           className="form-stack settings-fields"
           onSubmit={async (event) => {
             event.preventDefault();
+            if (passwordSubmitting.current) return;
+            passwordSubmitting.current = true;
+            setPasswordBusy(true);
             try {
               const result = await put("/auth/password", password);
               await setSession(result.token);
@@ -1064,37 +1133,43 @@ export function SettingsPage({
               toast("密码已更新，其他会话已退出");
             } catch (error) {
               toast((error as Error).message, true);
+            } finally {
+              passwordSubmitting.current = false;
+              setPasswordBusy(false);
             }
           }}
         >
-          <label>
-            原密码
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={password.current}
-              onChange={(e) =>
-                setPassword({ ...password, current: e.target.value })
-              }
-              required
-            />
-          </label>
-          <label>
-            新密码
-            <input
-              type="password"
-              autoComplete="new-password"
-              minLength={10}
-              value={password.password}
-              onChange={(e) =>
-                setPassword({ ...password, password: e.target.value })
-              }
-              required
-            />
-          </label>
-          <button className="button secondary">
-            修改密码 <ArrowUpRight size={16} />
-          </button>
+          <fieldset className="form-fields" disabled={passwordBusy}>
+            <label>
+              原密码
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password.current}
+                onChange={(e) =>
+                  setPassword({ ...password, current: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              新密码
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={10}
+                value={password.password}
+                onChange={(e) =>
+                  setPassword({ ...password, password: e.target.value })
+                }
+                required
+              />
+            </label>
+            <button className="button secondary" disabled={passwordBusy}>
+              {passwordBusy ? "正在修改…" : "修改密码"}{" "}
+              <ArrowUpRight size={16} />
+            </button>
+          </fieldset>
         </form>
       </section>
     </div>
@@ -1102,11 +1177,15 @@ export function SettingsPage({
 }
 
 export function ToolsPage() {
+  const submitting = useRef(false);
+  const uploading = useRef(false);
+  const [uploadBusy, setUploadBusy] = useState(false);
   const [tool, setTool] = useState<"plot" | "image" | null>(null),
     files = useResource<FileItem[]>("/files"),
     settings = useResource<SettingsData>("/settings"),
     [fileId, setFileId] = useState(""),
     [columns, setColumns] = useState<string[]>([]),
+    [columnsError, setColumnsError] = useState(""),
     [x, setX] = useState(""),
     [y, setY] = useState(""),
     [kind, setKind] = useState("line"),
@@ -1120,6 +1199,9 @@ export function ToolsPage() {
   useEffect(() => {
     let alive = true;
     setColumns([]);
+    setX("");
+    setY("");
+    setColumnsError("");
     if (fileId && tool === "plot")
       api<{ columns: string[] }>(`/files/${fileId}/columns`)
         .then((value) => {
@@ -1128,13 +1210,23 @@ export function ToolsPage() {
           setX(value.columns[0] || "");
           setY(value.columns[1] || value.columns[0] || "");
         })
-        .catch((error) => toast(error.message, true));
+        .catch((error) => {
+          if (alive) setColumnsError(error.message);
+        });
     return () => {
       alive = false;
     };
   }, [fileId, tool]);
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (
+      submitting.current ||
+      uploading.current ||
+      !fileId ||
+      (tool === "plot" && (!columns.includes(x) || !columns.includes(y)))
+    )
+      return;
+    submitting.current = true;
     setBusy(true);
     try {
       const payload =
@@ -1153,6 +1245,7 @@ export function ToolsPage() {
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -1228,185 +1321,205 @@ export function ToolsPage() {
       {tool && (
         <Dialog
           title={tool === "plot" ? "创建一张数据图" : "拾景 · 图片风格转换"}
+          busy={busy || uploadBusy}
           onClose={() => setTool(null)}
         >
           <form className="form-stack" onSubmit={create}>
-            <label>
-              {tool === "plot" ? "选择 CSV" : "选择一张私人照片"}
-              <select
-                value={fileId}
-                onChange={(e) => setFileId(e.target.value)}
-                required
-              >
-                <option value="">从私人资料中选择</option>
-                {files.data
-                  ?.filter((file) =>
-                    tool === "plot"
-                      ? file.name.toLowerCase().endsWith(".csv")
-                      : file.mime.startsWith("image/"),
-                  )
-                  .map((file) => (
-                    <option key={file.id} value={file.id}>
-                      {file.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <label className="upload-inline">
-              或上传新文件
-              <input
-                type="file"
-                accept={
-                  tool === "plot" ? ".csv" : "image/png,image/jpeg,image/webp"
-                }
-                onChange={async (event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    try {
-                      const saved = await upload(file);
-                      files.reload();
-                      setFileId(saved.id);
-                    } catch (error) {
-                      toast((error as Error).message, true);
-                    }
+            <fieldset className="form-fields" disabled={busy || uploadBusy}>
+              {files.error && (
+                <ErrorState message={files.error} retry={files.reload} />
+              )}
+              <label>
+                {tool === "plot" ? "选择 CSV" : "选择一张私人照片"}
+                <select
+                  value={fileId}
+                  onChange={(e) => setFileId(e.target.value)}
+                  required
+                >
+                  <option value="">从私人资料中选择</option>
+                  {files.data
+                    ?.filter((file) =>
+                      tool === "plot"
+                        ? file.name.toLowerCase().endsWith(".csv")
+                        : file.mime.startsWith("image/"),
+                    )
+                    .map((file) => (
+                      <option key={file.id} value={file.id}>
+                        {file.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="upload-inline">
+                或上传新文件
+                <input
+                  type="file"
+                  accept={
+                    tool === "plot" ? ".csv" : "image/png,image/jpeg,image/webp"
                   }
-                }}
-              />
-            </label>
-            {tool === "plot" ? (
-              <>
-                <label>
-                  标题
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    required
-                    maxLength={100}
-                  />
-                </label>
-                <div className="form-columns">
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (file && !uploading.current) {
+                      uploading.current = true;
+                      setUploadBusy(true);
+                      try {
+                        const saved = await upload(file);
+                        files.reload();
+                        setFileId(saved.id);
+                      } catch (error) {
+                        toast((error as Error).message, true);
+                      } finally {
+                        uploading.current = false;
+                        setUploadBusy(false);
+                      }
+                    }
+                  }}
+                />
+              </label>
+              {tool === "plot" ? (
+                <>
                   <label>
-                    X 列
-                    <select
-                      value={x}
-                      onChange={(e) => setX(e.target.value)}
+                    标题
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
                       required
-                    >
-                      {columns.map((column) => (
-                        <option key={column}>{column}</option>
-                      ))}
-                    </select>
+                      maxLength={100}
+                    />
                   </label>
-                  <label>
-                    Y 列
-                    <select
-                      value={y}
-                      onChange={(e) => setY(e.target.value)}
-                      required
-                    >
-                      {columns.map((column) => (
-                        <option key={column}>{column}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="form-columns">
-                  <label>
-                    画法
-                    <select
-                      value={kind}
-                      onChange={(e) => setKind(e.target.value)}
-                    >
-                      <option value="line">折线 · 趋势</option>
-                      <option value="bar">柱状 · 对比</option>
-                      <option value="scatter">散点 · 关系</option>
-                      <option value="hist">直方 · 分布</option>
-                    </select>
-                  </label>
-                  <label>
-                    配色
-                    <select
-                      value={palette}
-                      onChange={(e) => setPalette(e.target.value)}
-                    >
-                      <option value="teal">深青</option>
-                      <option value="clay">陶红</option>
-                      <option value="indigo">靛蓝</option>
-                      <option value="ink">墨灰</option>
-                    </select>
-                  </label>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="style-choice">
-                  {[
-                    ["collage", "实景拼贴", "保留照片中的真实关系"],
-                    ["distillation", "影像蒸馏", "提炼情绪，构成独立作品"],
-                  ].map(([value, label, description]) => (
-                    <button
-                      type="button"
-                      key={value}
-                      className={style === value ? "selected" : ""}
-                      onClick={() => setStyle(value)}
-                      aria-pressed={style === value}
-                    >
-                      <strong>{label}</strong>
-                      <small>{description}</small>
-                    </button>
-                  ))}
-                </div>
-                <label>
-                  你想保留的感觉
-                  <textarea
-                    rows={4}
-                    value={instruction}
-                    onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="可以写情绪、色彩、文字语言，或最想保留的关系。"
-                    maxLength={3000}
-                  />
-                </label>
-                <p className="field-help">
-                  所选照片和转换指令会发送给你在设置中配置的图像服务。原图留在私人资料中，由你随时删除。
-                </p>
-                {!settings.data?.image_configured && (
-                  <div className="form-error">
-                    图像服务还未配置。
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => navigate("/settings")}
-                    >
-                      前往设置 <ArrowUpRight size={14} />
-                    </button>
+                  <div className="form-columns">
+                    <label>
+                      X 列
+                      <select
+                        value={x}
+                        onChange={(e) => setX(e.target.value)}
+                        required
+                      >
+                        {columns.map((column) => (
+                          <option key={column}>{column}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      Y 列
+                      <select
+                        value={y}
+                        onChange={(e) => setY(e.target.value)}
+                        required
+                      >
+                        {columns.map((column) => (
+                          <option key={column}>{column}</option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
-                )}
-              </>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="button secondary"
-                onClick={() => setTool(null)}
-              >
-                取消
-              </button>
-              <button
-                className="button primary"
-                disabled={
-                  busy ||
-                  !fileId ||
-                  (tool === "image" && !settings.data?.image_configured)
-                }
-              >
-                {busy
-                  ? "正在创建任务…"
-                  : tool === "plot"
-                    ? "生成图表"
-                    : "开始转换"}
-                <WandSparkles size={16} />
-              </button>
-            </div>
+                  <div className="form-columns">
+                    <label>
+                      画法
+                      <select
+                        value={kind}
+                        onChange={(e) => setKind(e.target.value)}
+                      >
+                        <option value="line">折线 · 趋势</option>
+                        <option value="bar">柱状 · 对比</option>
+                        <option value="scatter">散点 · 关系</option>
+                        <option value="hist">直方 · 分布</option>
+                      </select>
+                    </label>
+                    <label>
+                      配色
+                      <select
+                        value={palette}
+                        onChange={(e) => setPalette(e.target.value)}
+                      >
+                        <option value="teal">深青</option>
+                        <option value="clay">陶红</option>
+                        <option value="indigo">靛蓝</option>
+                        <option value="ink">墨灰</option>
+                      </select>
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="style-choice">
+                    {[
+                      ["collage", "实景拼贴", "保留照片中的真实关系"],
+                      ["distillation", "影像蒸馏", "提炼情绪，构成独立作品"],
+                    ].map(([value, label, description]) => (
+                      <button
+                        type="button"
+                        key={value}
+                        className={style === value ? "selected" : ""}
+                        onClick={() => setStyle(value)}
+                        aria-pressed={style === value}
+                      >
+                        <strong>{label}</strong>
+                        <small>{description}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <label>
+                    你想保留的感觉
+                    <textarea
+                      rows={4}
+                      value={instruction}
+                      onChange={(e) => setInstruction(e.target.value)}
+                      placeholder="可以写情绪、色彩、文字语言，或最想保留的关系。"
+                      maxLength={3000}
+                    />
+                  </label>
+                  <p className="field-help">
+                    所选照片和转换指令会发送给你在设置中配置的图像服务。原图留在私人资料中，由你随时删除。
+                  </p>
+                  {!settings.data?.image_configured && (
+                    <div className="form-error">
+                      图像服务还未配置。
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => navigate("/settings")}
+                      >
+                        前往设置 <ArrowUpRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => setTool(null)}
+                >
+                  取消
+                </button>
+                <button
+                  className="button primary"
+                  disabled={
+                    busy ||
+                    uploadBusy ||
+                    !fileId ||
+                    (tool === "plot" &&
+                      (!columns.includes(x) || !columns.includes(y))) ||
+                    (tool === "image" && !settings.data?.image_configured)
+                  }
+                >
+                  {busy
+                    ? "正在创建任务…"
+                    : tool === "plot"
+                      ? "生成图表"
+                      : "开始转换"}
+                  <WandSparkles size={16} />
+                </button>
+              </div>
+              {columnsError && (
+                <p className="form-error" role="alert">
+                  {columnsError}。请重新选择 CSV 文件。
+                </p>
+              )}
+            </fieldset>
           </form>
         </Dialog>
       )}

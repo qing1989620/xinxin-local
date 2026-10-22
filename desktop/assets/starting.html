@@ -8,7 +8,7 @@
   :root{
     --bg:#f7f5ef;
     --ink:#2b2f2d;
-    --muted:#7c857f;
+    --muted:#626d64;
     --accent:#376c62;
     --hairline:#e3ded2;
   }
@@ -23,11 +23,12 @@
     justify-content:center;
     -webkit-font-smoothing:antialiased;
   }
-  .card{width:min(420px,82vw);text-align:center}
+  .card{width:min(480px,86vw);text-align:center;padding:42px 28px;border:1px solid var(--hairline);border-radius:12px;background:#fffdf9}
+  .eyebrow{font-size:10px;letter-spacing:.16em;margin-bottom:28px;color:var(--muted)}
   .mark{width:72px;height:72px;margin:0 auto 30px;display:block}
   .mark .ring{transform-origin:32px 32px;animation:breathe 2.4s ease-in-out infinite}
   @keyframes breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.72;transform:scale(.965)}}
-  h1{font-size:19px;font-weight:600;letter-spacing:.06em;margin-bottom:10px}
+  h1{font-size:30px;font-weight:550;letter-spacing:-.04em;margin-bottom:18px;line-height:1.35}
   p{font-size:13px;line-height:1.75;color:var(--muted);min-height:23px}
   .elapsed{margin-top:22px;font-size:12px;color:var(--muted);letter-spacing:.08em;font-variant-numeric:tabular-nums}
   .elapsed b{color:var(--accent);font-weight:600}
@@ -37,6 +38,7 @@
 </head>
 <body>
   <main class="card">
+    <p class="eyebrow">XINXIN / A SPACE OF YOUR OWN</p>
     <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
       <g class="ring">
         <rect width="64" height="64" rx="16" fill="#376c62"/>
@@ -45,17 +47,18 @@
       </g>
     </svg>
     <h1>Xinxin 正在启动</h1>
-    <p id="phase">正在唤醒本机服务</p>
+    <p id="phase" role="status" aria-live="polite">正在唤醒本机服务</p>
     <div class="elapsed">已等待 <b id="sec">0</b> 秒</div>
     <div class="hint">启动完成后会自动打开应用窗口<br>关掉这个页面不会中断启动</div>
   </main>
   <script>
     var t0 = Date.now();
-    var phases = ["正在唤醒本机服务", "首次启动需要构建界面，请稍候", "仍在准备，本地服务值得等待"];
+    var phases = ["正在唤醒本机服务", "正在准备界面与连接，请稍候", "仍在准备，完成后会自动进入空间"];
     setInterval(function () {
       var s = Math.floor((Date.now() - t0) / 1000);
       document.getElementById("sec").textContent = s;
-      document.getElementById("phase").textContent = phases[Math.min(phases.length - 1, Math.floor(s / 20))];
+      var phase = phases[Math.min(phases.length - 1, Math.floor(s / 20))];
+      if (document.getElementById("phase").textContent !== phase) document.getElementById("phase").textContent = phase;
     }, 1000);
   </script>
 </body>

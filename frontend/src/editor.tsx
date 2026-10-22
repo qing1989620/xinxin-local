@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   EditorContent,
   NodeViewWrapper,
@@ -65,10 +65,14 @@ export default function RichEditor({
   value,
   onChange,
   readOnly = false,
+  disabled = false,
+  onUploadingChange,
 }: {
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;
+  disabled?: boolean;
+  onUploadingChange?: (busy: boolean) => void;
 }) {
   const picker = useRef<HTMLInputElement>(null),
     toast = useToast();
@@ -84,9 +88,21 @@ export default function RichEditor({
       Placeholder.configure({ placeholder: "写下想留住的内容…" }),
     ],
     content: parse(value),
-    editable: !readOnly,
+    editable: !readOnly && !disabled,
+    editorProps: {
+      attributes: readOnly
+        ? { role: "document", "aria-label": "文章正文" }
+        : {
+            role: "textbox",
+            "aria-label": "文章正文编辑器",
+            "aria-multiline": "true",
+          },
+    },
     onUpdate: ({ editor }) => onChange?.(JSON.stringify(editor.getJSON())),
   });
+  useEffect(() => {
+    editor?.setEditable(!readOnly && !disabled);
+  }, [editor, readOnly, disabled]);
   return (
     <div className={`rich-editor ${readOnly ? "read-only" : ""}`}>
       {!readOnly && (
@@ -186,8 +202,10 @@ export default function RichEditor({
         onChange={async (event) => {
           const file = event.target.files?.[0];
           if (file) {
+            onUploadingChange?.(true);
             try {
               const saved = await upload(file);
+              if (!editor || editor.isDestroyed) return;
               editor
                 ?.chain()
                 .focus()
@@ -198,6 +216,8 @@ export default function RichEditor({
                 .run();
             } catch (error) {
               toast((error as Error).message, true);
+            } finally {
+              onUploadingChange?.(false);
             }
           }
           event.target.value = "";

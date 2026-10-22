@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   ArrowUpRight,
@@ -44,6 +44,9 @@ const kinds = [
   ["resume", "简历"],
 ];
 export default function ContentPage() {
+  const submitting = useRef(false);
+  const uploading = useRef(false);
+  const [imageBusy, setImageBusy] = useState(false);
   const [params, setParams] = useSearchParams(),
     kind = kinds.some(([id]) => id === params.get("kind"))
       ? params.get("kind")!
@@ -107,13 +110,15 @@ export default function ContentPage() {
     setDirty(false);
   }
   function close() {
+    if (submitting.current || uploading.current) return;
     if (dirty && !confirm("有尚未保存的修改，确认关闭？")) return;
     setEdit(null);
     setDirty(false);
   }
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!edit) return;
+    if (!edit || submitting.current || uploading.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       const payload = { ...form };
@@ -128,6 +133,7 @@ export default function ContentPage() {
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -142,11 +148,17 @@ export default function ContentPage() {
     }
   }
   async function image(file: File, key = "file_id") {
+    if (uploading.current) return;
+    uploading.current = true;
+    setImageBusy(true);
     try {
       const result = await upload(file);
       change(key, result.id);
     } catch (error) {
       toast((error as Error).message, true);
+    } finally {
+      uploading.current = false;
+      setImageBusy(false);
     }
   }
   if (error) return <ErrorState message={error} retry={reload} />;
@@ -160,6 +172,12 @@ export default function ContentPage() {
         overline="THE PERSONAL SIDE"
         title="记录，属于自己的片段。"
         description="文章、相册、诗词与经历，都在自己的私人空间里妥善安放。"
+        meta={
+          <span>
+            <strong>{data.length}</strong>篇
+            {kinds.find(([id]) => id === kind)?.[1]}记录
+          </span>
+        }
         action={
           <button className="button primary" onClick={() => begin()}>
             <Plus size={17} />
@@ -173,6 +191,7 @@ export default function ContentPage() {
             <button
               key={value}
               className={kind === value ? "selected" : ""}
+              aria-pressed={kind === value}
               onClick={() => setParams({ kind: value })}
             >
               {label}
@@ -325,164 +344,181 @@ export default function ContentPage() {
         <Dialog
           title={`${edit.id ? "编辑" : "新建"}${kinds.find(([id]) => id === edit.kind)?.[1]}`}
           onClose={close}
+          busy={busy || imageBusy}
           wide={["article", "resume"].includes(edit.kind)}
         >
           <form onSubmit={save} className="form-stack">
-            {edit.kind === "resume" ? (
-              <ResumeForm form={form} change={change} />
-            ) : edit.kind === "poem" ? (
-              <>
-                <label>
-                  内容
-                  <textarea
-                    rows={8}
-                    value={form.content || ""}
-                    onChange={(e) => change("content", e.target.value)}
-                    required
-                  />
-                </label>
-                <div className="form-columns">
+            <fieldset className="form-fields" disabled={busy || imageBusy}>
+              {edit.kind === "resume" ? (
+                <ResumeForm form={form} change={change} />
+              ) : edit.kind === "poem" ? (
+                <>
                   <label>
-                    作者
-                    <input
-                      value={form.author || ""}
-                      onChange={(e) => change("author", e.target.value)}
+                    内容
+                    <textarea
+                      rows={8}
+                      value={form.content || ""}
+                      onChange={(e) => change("content", e.target.value)}
+                      required
                     />
                   </label>
-                  <label>
-                    出处
-                    <input
-                      value={form.source || ""}
-                      onChange={(e) => change("source", e.target.value)}
-                    />
-                  </label>
-                </div>
-              </>
-            ) : (
-              <>
-                <label>
-                  标题
-                  <input
-                    value={form.title || form.name || ""}
-                    onChange={(e) => change("title", e.target.value)}
-                    required
-                    maxLength={200}
-                  />
-                </label>
-                {edit.kind === "article" ? (
-                  <>
-                    <div className="form-columns">
-                      <label>
-                        合集
-                        <select
-                          value={form.collection_id || ""}
-                          onChange={(e) =>
-                            change("collection_id", e.target.value)
-                          }
-                        >
-                          <option value="">未归入合集</option>
-                          {collections.data?.map((collection) => (
-                            <option key={collection.id} value={collection.id}>
-                              {collection.payload.title ||
-                                collection.payload.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        状态
-                        <select
-                          value={form.published ? "published" : "draft"}
-                          onChange={(e) =>
-                            change("published", e.target.value === "published")
-                          }
-                        >
-                          <option value="draft">草稿</option>
-                          <option value="published">已发布 · 私人</option>
-                        </select>
-                      </label>
-                    </div>
+                  <div className="form-columns">
                     <label>
-                      摘要
-                      <textarea
-                        rows={2}
-                        value={form.summary || ""}
-                        onChange={(e) => change("summary", e.target.value)}
-                        maxLength={2000}
-                      />
-                    </label>
-                    <div className="editor-field">
-                      <span className="field-label">正文</span>
-                      <RichEditor
-                        key={edit.id || "new"}
-                        value={form.content || ""}
-                        onChange={(value) => change("content", value)}
-                      />
-                    </div>
-                    <label className="checkbox-label">
+                      作者
                       <input
-                        type="checkbox"
-                        checked={Boolean(form.pinned)}
-                        onChange={(e) => change("pinned", e.target.checked)}
+                        value={form.author || ""}
+                        onChange={(e) => change("author", e.target.value)}
                       />
-                      置顶这篇文章
                     </label>
-                  </>
-                ) : (
-                  <>
                     <label>
-                      描述
-                      <textarea
-                        rows={3}
-                        value={form.description || ""}
-                        onChange={(e) => change("description", e.target.value)}
+                      出处
+                      <input
+                        value={form.source || ""}
+                        onChange={(e) => change("source", e.target.value)}
                       />
                     </label>
-                    {edit.kind === "photo" && (
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label>
+                    标题
+                    <input
+                      value={form.title || form.name || ""}
+                      onChange={(e) => change("title", e.target.value)}
+                      required
+                      maxLength={200}
+                    />
+                  </label>
+                  {edit.kind === "article" ? (
+                    <>
+                      <div className="form-columns">
+                        <label>
+                          合集
+                          <select
+                            value={form.collection_id || ""}
+                            onChange={(e) =>
+                              change("collection_id", e.target.value)
+                            }
+                          >
+                            <option value="">未归入合集</option>
+                            {collections.data?.map((collection) => (
+                              <option key={collection.id} value={collection.id}>
+                                {collection.payload.title ||
+                                  collection.payload.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          状态
+                          <select
+                            value={form.published ? "published" : "draft"}
+                            onChange={(e) =>
+                              change(
+                                "published",
+                                e.target.value === "published",
+                              )
+                            }
+                          >
+                            <option value="draft">草稿</option>
+                            <option value="published">已发布 · 私人</option>
+                          </select>
+                        </label>
+                      </div>
                       <label>
-                        分类
-                        <input
-                          value={form.category || ""}
-                          onChange={(e) => change("category", e.target.value)}
-                          placeholder="例如：日常、旅行、项目"
+                        摘要
+                        <textarea
+                          rows={2}
+                          value={form.summary || ""}
+                          onChange={(e) => change("summary", e.target.value)}
+                          maxLength={2000}
                         />
                       </label>
-                    )}
-                    <label>
-                      图片
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e) => {
-                          if (e.target.files?.[0])
-                            void image(e.target.files[0]);
-                        }}
-                      />
-                    </label>
-                    {form.file_id && (
-                      <PrivateImage
-                        path={`/files/${form.file_id}/download?inline=true`}
-                        alt="所选图片"
-                        className="form-image-preview"
-                      />
-                    )}
-                  </>
-                )}
-              </>
-            )}
-            <div className="dialog-actions">
-              <button
-                type="button"
-                className="button secondary"
-                onClick={close}
-              >
-                取消
-              </button>
-              <button className="button primary" disabled={busy}>
-                {busy ? "正在保存…" : "保存记录"}
-                <ArrowUpRight size={16} />
-              </button>
-            </div>
+                      <div className="editor-field">
+                        <span className="field-label">正文</span>
+                        <RichEditor
+                          key={edit.id || "new"}
+                          value={form.content || ""}
+                          disabled={busy || imageBusy}
+                          onUploadingChange={(active) => {
+                            uploading.current = active;
+                            setImageBusy(active);
+                          }}
+                          onChange={(value) => change("content", value)}
+                        />
+                      </div>
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(form.pinned)}
+                          onChange={(e) => change("pinned", e.target.checked)}
+                        />
+                        置顶这篇文章
+                      </label>
+                    </>
+                  ) : (
+                    <>
+                      <label>
+                        描述
+                        <textarea
+                          rows={3}
+                          value={form.description || ""}
+                          onChange={(e) =>
+                            change("description", e.target.value)
+                          }
+                        />
+                      </label>
+                      {edit.kind === "photo" && (
+                        <label>
+                          分类
+                          <input
+                            value={form.category || ""}
+                            onChange={(e) => change("category", e.target.value)}
+                            placeholder="例如：日常、旅行、项目"
+                          />
+                        </label>
+                      )}
+                      <label>
+                        图片
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => {
+                            if (e.target.files?.[0])
+                              void image(e.target.files[0]);
+                          }}
+                        />
+                      </label>
+                      {form.file_id && (
+                        <PrivateImage
+                          path={`/files/${form.file_id}/download?inline=true`}
+                          alt="所选图片"
+                          className="form-image-preview"
+                        />
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={close}
+                >
+                  取消
+                </button>
+                <button className="button primary" disabled={busy || imageBusy}>
+                  {imageBusy
+                    ? "正在上传图片…"
+                    : busy
+                      ? "正在保存…"
+                      : "保存记录"}
+                  <ArrowUpRight size={16} />
+                </button>
+              </div>
+            </fieldset>
           </form>
         </Dialog>
       )}

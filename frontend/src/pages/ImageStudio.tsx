@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ArrowUpRight,
-  Download,
-  ImagePlus,
-  Loader2,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, Download, ImagePlus, Loader2, X } from "lucide-react";
 import { api, getBlob, saveBlob } from "../api";
 import { loadPrivateImage } from "../privateImages";
 import { useToast } from "../ui";
@@ -38,7 +32,12 @@ type RecentImage = {
 type ProviderInfo = {
   default: string;
   pollinations: { available: boolean; label: string; model: string };
-  openrouter: { available: boolean; label: string; model: string; reason?: string };
+  openrouter: {
+    available: boolean;
+    label: string;
+    model: string;
+    reason?: string;
+  };
 };
 
 const SIZES: { key: string; label: string; width: number; height: number }[] = [
@@ -61,6 +60,7 @@ function ImageThumb({
   useEffect(() => {
     let url = "";
     let alive = true;
+    setSource("");
     // 与画廊一致：优先后端有界预览图（几十~一两百 KB），没有预览再回退原图。
     loadPrivateImage(`/files/${fileId}/download`)
       .then((blob) => {
@@ -78,7 +78,9 @@ function ImageThumb({
   }, [fileId]);
   if (!source)
     return <span className={`image-thumb loading ${className || ""}`}>…</span>;
-  return <img className={`image-thumb ${className || ""}`} src={source} alt={alt} />;
+  return (
+    <img className={`image-thumb ${className || ""}`} src={source} alt={alt} />
+  );
 }
 
 export default function ImageStudio({
@@ -88,6 +90,8 @@ export default function ImageStudio({
   open: boolean;
   onClose: () => void;
 }) {
+  const submitting = useRef(false);
+  const input = useRef<HTMLTextAreaElement>(null);
   const [prompt, setPrompt] = useState(""),
     [sizeKey, setSizeKey] = useState("square"),
     [provider, setProvider] = useState(""),
@@ -107,6 +111,8 @@ export default function ImageStudio({
   }, []);
   useEffect(() => {
     if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    input.current?.focus();
     let alive = true;
     api<ProviderInfo>("/images/providers")
       .then((value) => {
@@ -120,6 +126,7 @@ export default function ImageStudio({
     void refreshRecent();
     return () => {
       alive = false;
+      if (previous?.isConnected) previous.focus();
     };
   }, [open, refreshRecent]);
   useEffect(() => {
@@ -133,7 +140,8 @@ export default function ImageStudio({
   if (!open) return null;
   const size = SIZES.find((item) => item.key === sizeKey) || SIZES[0];
   async function generate() {
-    if (!prompt.trim() || busy) return;
+    if (!prompt.trim() || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       const result = await api<ImageResult>("/images", {
@@ -152,12 +160,19 @@ export default function ImageStudio({
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
   const latestId = latest?.id || latest?.file_id;
   return (
-    <div className="image-studio" ref={panel} role="dialog" aria-label="生图工作台">
+    <div
+      className="image-studio"
+      ref={panel}
+      role="dialog"
+      aria-label="生图工作台"
+      aria-busy={busy || undefined}
+    >
       <header>
         <ImagePlus size={15} />
         <strong>画一张图</strong>
@@ -167,11 +182,17 @@ export default function ImageStudio({
               providers.pollinations.label
             : "读取档位…"}
         </span>
-        <button className="icon-button" aria-label="收起生图面板" onClick={onClose}>
+        <button
+          className="icon-button"
+          aria-label="收起生图面板"
+          onClick={onClose}
+        >
           <X size={14} />
         </button>
       </header>
       <textarea
+        ref={input}
+        disabled={busy}
         rows={2}
         maxLength={2000}
         value={prompt}
@@ -179,7 +200,12 @@ export default function ImageStudio({
         placeholder="描述你想要的画面，比如：夜色中的城市天台，霓虹灯，一只白猫"
         aria-label="生图描述"
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing &&
+            event.keyCode !== 229
+          ) {
             event.preventDefault();
             void generate();
           }
@@ -190,6 +216,7 @@ export default function ImageStudio({
           {SIZES.map((item) => (
             <button
               key={item.key}
+              disabled={busy}
               aria-pressed={sizeKey === item.key}
               className={sizeKey === item.key ? "selected" : ""}
               onClick={() => setSizeKey(item.key)}
@@ -200,6 +227,7 @@ export default function ImageStudio({
         </div>
         {providers && providers.openrouter.available && (
           <select
+            disabled={busy}
             aria-label="生图档位"
             value={provider}
             onChange={(event) => setProvider(event.target.value)}
@@ -213,13 +241,20 @@ export default function ImageStudio({
           disabled={busy || !prompt.trim()}
           onClick={() => void generate()}
         >
-          {busy ? <Loader2 size={15} className="spin" /> : <ImagePlus size={15} />}
+          {busy ? (
+            <Loader2 size={15} className="spin" />
+          ) : (
+            <ImagePlus size={15} />
+          )}
           {busy ? "生成中…" : "生成"}
         </button>
       </div>
       {latest && latestId && (
         <div className="image-studio-result">
-          <ImageThumb fileId={latestId} alt={latest.image?.prompt || latest.name} />
+          <ImageThumb
+            fileId={latestId}
+            alt={latest.image?.prompt || latest.name}
+          />
           <div>
             <strong>{latest.name}</strong>
             <small>
@@ -262,7 +297,11 @@ export default function ImageStudio({
       {recent.length > 0 && (
         <div className="image-studio-recent" aria-label="最近生成的图">
           {recent.map((item) => (
-            <ImageThumb key={item.file_id} fileId={item.file_id} alt={item.name} />
+            <ImageThumb
+              key={item.file_id}
+              fileId={item.file_id}
+              alt={item.name}
+            />
           ))}
         </div>
       )}

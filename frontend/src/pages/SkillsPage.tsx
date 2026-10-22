@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -95,6 +95,20 @@ function generationOf(skill: Skill): OriginKind {
   return originKind(skill);
 }
 export default function SkillsPage() {
+  const detailRequest = useRef<AbortController | null>(null);
+  const resourceRequest = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      detailRequest.current?.abort();
+      resourceRequest.current?.abort();
+    },
+    [],
+  );
+  function closeDetail() {
+    detailRequest.current?.abort();
+    resourceRequest.current?.abort();
+    setDetail(null);
+  }
   const request = useRef(0);
   const { data, error, reload } = useResource<Skill[]>("/skills"),
     { data: status, error: statusError } =
@@ -114,8 +128,16 @@ export default function SkillsPage() {
     toast = useToast(),
     navigate = useNavigate();
   async function open(skill: Pick<Skill, "id">) {
+    if (!skill) return;
+    detailRequest.current?.abort();
+    resourceRequest.current?.abort();
+    const controller = new AbortController();
+    detailRequest.current = controller;
     try {
-      const result = await api<Detail>(`/skills/${skill.id}`);
+      const result = await api<Detail>(`/skills/${skill.id}`, {
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       setDetail({
         ...result,
         name: result.name || skill.id,
@@ -127,20 +149,25 @@ export default function SkillsPage() {
       });
       setResourceText("");
     } catch (error) {
-      toast((error as Error).message, true);
+      if (!controller.signal.aborted) toast((error as Error).message, true);
     }
   }
   async function readResource(path: string) {
     if (!detail) return;
+    resourceRequest.current?.abort();
+    const controller = new AbortController();
+    resourceRequest.current = controller;
     try {
       const result = await api<{ text: string; bytes: number; sha256: string }>(
         `/skills/${detail.name}/resource?path=${encodeURIComponent(path)}`,
+        { signal: controller.signal },
       );
+      if (controller.signal.aborted) return;
       setResourceText(
         `# ${path}（${result.bytes} 字节 · sha256 ${result.sha256.slice(0, 12)}）\n\n${result.text}`,
       );
     } catch (error) {
-      toast((error as Error).message, true);
+      if (!controller.signal.aborted) toast((error as Error).message, true);
     }
   }
   async function find(value: string) {
@@ -183,6 +210,14 @@ export default function SkillsPage() {
         overline="CAPABILITIES, WITH INTENTION"
         title="技能中心"
         description="让合适的能力，在合适的时候参与工作。"
+        meta={
+          <>
+            <span>
+              <strong>{data.length}</strong>项能力
+            </span>
+            <span>SkillNet · 从目标找到方法</span>
+          </>
+        }
         action={
           <button
             className="button secondary"
@@ -342,9 +377,7 @@ export default function SkillsPage() {
                     {skill.tools.length} 个工具
                     {skill.relations.length > 0 &&
                       ` · ${skill.relations.length} 项依赖`}
-                    {skill.stats?.pulls
-                      ? ` · ${skill.stats.pulls} 次调用`
-                      : ""}
+                    {skill.stats?.pulls ? ` · ${skill.stats.pulls} 次调用` : ""}
                   </span>
                 </div>
               </button>
@@ -560,7 +593,7 @@ export default function SkillsPage() {
         </div>
       )}
       {detail && (
-        <Dialog title={detail.name} onClose={() => setDetail(null)} wide>
+        <Dialog title={detail.name} onClose={closeDetail} wide>
           <div className="skill-detail-meta">
             <span className="subtle-badge">{detail.skill?.domain}</span>
             <span>{detail.skill?.tools?.length || 0} 个注册工具</span>
@@ -644,7 +677,10 @@ export default function SkillsPage() {
                 </a>{" "}
                 · {detail.provenance.license}
                 <br />
-                固定版本 {String(detail.provenance.revision || detail.provenance.commit || "").slice(0, 12)}
+                固定版本{" "}
+                {String(
+                  detail.provenance.revision || detail.provenance.commit || "",
+                ).slice(0, 12)}
                 ，保留原始参考包。方法说明已接入；脚本与外部依赖须按任务检查，未经自动执行认证。
               </p>
             )}

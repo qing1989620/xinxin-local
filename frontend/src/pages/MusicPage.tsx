@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { api, post, put, remove } from "../api";
-import { Dialog, Loading, useToast } from "../ui";
+import { Dialog, ErrorState, Loading, useToast } from "../ui";
 import { useMusicPlayer, type PlayerTrack } from "../musicPlayer";
 import { activeLrcIndex, mergeLrc } from "../lib/lrc";
 
@@ -263,6 +263,20 @@ function TrackList({
 }
 
 export default function MusicPage() {
+  const playlistRequest = useRef<AbortController | null>(null);
+  const libraryRevision = useRef(0);
+  const librarySubmitting = useRef(false);
+  const [libraryBusy, setLibraryBusy] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
+  const [listBusy, setListBusy] = useState(false);
+  const [listError, setListError] = useState("");
+  useEffect(
+    () => () => {
+      playlistRequest.current?.abort();
+      libraryRevision.current += 1;
+    },
+    [],
+  );
   const toast = useToast();
   const player = useMusicPlayer();
   const searchRequest = useRef(0);
@@ -307,15 +321,19 @@ export default function MusicPage() {
   }, []);
 
   const loadLibrary = useCallback(async () => {
+    const revision = ++libraryRevision.current;
+    setLibraryError("");
     try {
       const [favorite, lists] = await Promise.all([
         api<{ favorites: Track[] }>("/music/favorites"),
         api<{ playlists: Playlist[] }>("/music/playlists"),
       ]);
+      if (revision !== libraryRevision.current) return;
       setFavorites(favorite.favorites);
       setPlaylists(lists.playlists);
-    } catch {
-      // 收藏/歌单读取失败不影响播放
+    } catch (error) {
+      if (revision === libraryRevision.current)
+        setLibraryError((error as Error).message);
     }
   }, []);
 
@@ -528,7 +546,9 @@ export default function MusicPage() {
   }
 
   async function addToPlaylist(playlist: Playlist) {
-    if (!addingTrack) return;
+    if (!addingTrack || librarySubmitting.current) return;
+    librarySubmitting.current = true;
+    setLibraryBusy(true);
     try {
       const result = await post<{ added: boolean; reason?: string }>(
         `/music/playlists/${playlist.id}/tracks`,
@@ -550,12 +570,17 @@ export default function MusicPage() {
       void loadLibrary();
     } catch (error) {
       toast((error as Error).message, true);
+    } finally {
+      librarySubmitting.current = false;
+      setLibraryBusy(false);
     }
   }
 
   async function createPlaylist(event: FormEvent) {
     event.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || librarySubmitting.current) return;
+    librarySubmitting.current = true;
+    setLibraryBusy(true);
     try {
       const created = await post<{ playlist: Playlist }>("/music/playlists", {
         name: newName.trim(),
@@ -566,31 +591,56 @@ export default function MusicPage() {
       toast(`歌单「${created.playlist.name}」建好了`);
     } catch (error) {
       toast((error as Error).message, true);
+    } finally {
+      librarySubmitting.current = false;
+      setLibraryBusy(false);
     }
   }
 
-  async function openPlaylist(playlist: Playlist) {
+  async function openPlaylist(playlist: Pick<Playlist, "id" | "name">) {
+    playlistRequest.current?.abort();
+    const controller = new AbortController();
+    playlistRequest.current = controller;
+    setOpenList(playlist);
+    setListTracks([]);
+    setListError("");
+    setListBusy(true);
     try {
       const result = await api<{
         playlist: { id: string; name: string };
         tracks: Track[];
-      }>(`/music/playlists/${playlist.id}`);
+      }>(`/music/playlists/${playlist.id}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       setOpenList(result.playlist);
       setListTracks(result.tracks);
     } catch (error) {
-      toast((error as Error).message, true);
+      if (!controller.signal.aborted) setListError((error as Error).message);
+    } finally {
+      if (!controller.signal.aborted) setListBusy(false);
     }
+  }
+  function closePlaylist() {
+    playlistRequest.current?.abort();
+    setOpenList(null);
+    setListTracks([]);
+    setListBusy(false);
+    setListError("");
   }
 
   async function removeFromPlaylist(track: Track) {
     if (!openList) return;
+    const currentRequest = playlistRequest.current;
     try {
       await remove(
         `/music/playlists/${openList.id}/tracks?key=${encodeURIComponent(trackKey(track))}`,
       );
-      setListTracks((current) =>
-        current.filter((item) => trackKey(item) !== trackKey(track)),
-      );
+      if (
+        playlistRequest.current === currentRequest &&
+        !currentRequest?.signal.aborted
+      )
+        setListTracks((current) =>
+          current.filter((item) => trackKey(item) !== trackKey(track)),
+        );
       void loadLibrary();
     } catch (error) {
       toast((error as Error).message, true);
@@ -704,14 +754,42 @@ export default function MusicPage() {
 
       <div className="listening-body">
         <section className="listening-index" aria-label="曲目检索">
-          <div className="library-tabs" role="tablist">
+          <div
+            className="library-tabs"
+            role="tablist"
+            aria-label="音乐资料库"
+            onKeyDown={(event) => {
+              const tabs = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                  '[role="tab"]',
+                ),
+              );
+              const current = tabs.indexOf(
+                document.activeElement as HTMLButtonElement,
+              );
+              let next = current;
+              if (event.key === "ArrowRight")
+                next = (current + 1) % tabs.length;
+              else if (event.key === "ArrowLeft")
+                next = (current + tabs.length - 1) % tabs.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = tabs.length - 1;
+              else return;
+              event.preventDefault();
+              tabs[next]?.focus();
+              tabs[next]?.click();
+            }}
+          >
             <button
               role="tab"
+              id="music-tab-search"
+              aria-controls="music-library-panel"
+              tabIndex={view === "search" ? 0 : -1}
               aria-selected={view === "search"}
               className={view === "search" ? "active" : ""}
               onClick={() => {
                 setView("search");
-                setOpenList(null);
+                closePlaylist();
               }}
             >
               <Search size={13} />
@@ -719,11 +797,14 @@ export default function MusicPage() {
             </button>
             <button
               role="tab"
+              id="music-tab-favorites"
+              aria-controls="music-library-panel"
+              tabIndex={view === "favorites" ? 0 : -1}
               aria-selected={view === "favorites"}
               className={view === "favorites" ? "active" : ""}
               onClick={() => {
                 setView("favorites");
-                setOpenList(null);
+                closePlaylist();
               }}
             >
               <Heart size={13} />
@@ -732,11 +813,14 @@ export default function MusicPage() {
             </button>
             <button
               role="tab"
+              id="music-tab-playlists"
+              aria-controls="music-library-panel"
+              tabIndex={view === "playlists" ? 0 : -1}
               aria-selected={view === "playlists"}
               className={view === "playlists" ? "active" : ""}
               onClick={() => {
                 setView("playlists");
-                setOpenList(null);
+                closePlaylist();
               }}
             >
               <ListMusic size={13} />
@@ -745,216 +829,240 @@ export default function MusicPage() {
             </button>
           </div>
 
-          {view === "search" && (
-            <>
-              <form className="search-line" onSubmit={search} role="search">
-                <Search size={19} strokeWidth={1.5} />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="搜一首歌、一张专辑，或者一个歌手"
-                  aria-label="搜索音乐"
-                />
-                {query ? (
-                  <button
-                    type="button"
-                    className="search-clear"
-                    onClick={() => {
-                      searchRequest.current += 1;
-                      setQuery("");
-                      setTracks(null);
-                      setSearching(false);
-                      setCalibrating(false);
-                      setFallback(false);
-                      try {
-                        sessionStorage.removeItem("xinxin-music-search");
-                      } catch {
-                        /* 可选缓存 */
-                      }
-                    }}
-                    aria-label="清空搜索"
-                  >
-                    <X size={14} />
-                  </button>
-                ) : (
-                  <span className="search-hint" aria-hidden="true">
-                    <CornerDownLeft size={12} />
-                  </span>
-                )}
-              </form>
-
-              {fallback && (
-                <p className="source-note">
-                  GD
-                  音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
-                  换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
-                </p>
-              )}
-
-              <div className="source-tabs" role="tablist" aria-label="音乐源">
-                {SOURCES.map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="tab"
-                    aria-selected={source === value}
-                    className={source === value ? "active" : ""}
-                    onClick={() => setSource(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </>
+          {libraryError && (
+            <ErrorState
+              message={libraryError}
+              retry={() => void loadLibrary()}
+            />
           )}
-
-          {view === "playlists" && openList ? (
-            <>
-              <div className="list-head">
-                <button className="back-link" onClick={() => setOpenList(null)}>
-                  <ChevronLeft size={15} />
-                  全部歌单
-                </button>
-                <button
-                  className="button secondary small"
-                  disabled={!listTracks.length}
-                  onClick={() => player?.playQueue(listTracks, 0)}
-                >
-                  <Play size={13} />
-                  播放全部
-                </button>
-              </div>
-              <div className="index-head">
-                <span>{openList.name}</span>
-                <span>{listTracks.length} 首</span>
-              </div>
-              <TrackList
-                {...trackListProps}
-                list={listTracks}
-                queue={listTracks}
-                empty={<p>这个歌单还是空的。去搜几首，点「+」放进来。</p>}
-              />
-              {listTracks.length > 0 && (
-                <div className="list-foot">
-                  {listTracks.map((track) => (
+          <div
+            role="tabpanel"
+            id="music-library-panel"
+            aria-labelledby={`music-tab-${view}`}
+          >
+            {view === "search" && (
+              <>
+                <form className="search-line" onSubmit={search} role="search">
+                  <Search size={19} strokeWidth={1.5} />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="搜一首歌、一张专辑，或者一个歌手"
+                    aria-label="搜索音乐"
+                  />
+                  {query ? (
                     <button
-                      key={trackKey(track)}
-                      className="saved-remove"
-                      onClick={() => void removeFromPlaylist(track)}
+                      type="button"
+                      className="search-clear"
+                      onClick={() => {
+                        searchRequest.current += 1;
+                        setQuery("");
+                        setTracks(null);
+                        setSearching(false);
+                        setCalibrating(false);
+                        setFallback(false);
+                        try {
+                          sessionStorage.removeItem("xinxin-music-search");
+                        } catch {
+                          /* 可选缓存 */
+                        }
+                      }}
+                      aria-label="清空搜索"
                     >
-                      <X size={11} />
-                      {track.name}
+                      <X size={14} />
+                    </button>
+                  ) : (
+                    <span className="search-hint" aria-hidden="true">
+                      <CornerDownLeft size={12} />
+                    </span>
+                  )}
+                </form>
+
+                {fallback && (
+                  <p className="source-note">
+                    GD
+                    音乐台当前不可用，已切到网易云直连；标「会员」的曲子需要会员账号，
+                    换一首免费的就能放。酷我 / QQ / JOOX 要等 GD 恢复。
+                  </p>
+                )}
+
+                <div className="source-tabs" role="group" aria-label="音乐源">
+                  {SOURCES.map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={source === value}
+                      className={source === value ? "active" : ""}
+                      onClick={() => setSource(value)}
+                    >
+                      {label}
                     </button>
                   ))}
                 </div>
-              )}
-            </>
-          ) : view === "playlists" ? (
-            <>
-              <div className="index-head">
-                <span>歌单</span>
-                <button
-                  className="link-quiet"
-                  onClick={() => setCreating(true)}
-                >
-                  <Plus size={12} />
-                  新建
-                </button>
-              </div>
-              {playlists.length === 0 ? (
-                <div className="index-empty">
-                  <ListMusic size={22} strokeWidth={1.1} />
-                  <p>
-                    还没有歌单。建一个「深夜」「通勤」这样的清单，把喜欢的歌攒起来。
-                  </p>
+              </>
+            )}
+
+            {view === "playlists" && openList ? (
+              <>
+                <div className="list-head">
+                  <button className="back-link" onClick={closePlaylist}>
+                    <ChevronLeft size={15} />
+                    全部歌单
+                  </button>
+                  <button
+                    className="button secondary small"
+                    disabled={!listTracks.length}
+                    onClick={() => player?.playQueue(listTracks, 0)}
+                  >
+                    <Play size={13} />
+                    播放全部
+                  </button>
                 </div>
-              ) : (
-                <ul className="playlist-list">
-                  {playlists.map((playlist) => (
-                    <li key={playlist.id}>
-                      <button
-                        className="playlist-row"
-                        onClick={() => void openPlaylist(playlist)}
-                      >
-                        <span className="playlist-icon">
-                          <ListMusic size={15} />
-                        </span>
-                        <span className="playlist-meta">
-                          <strong>{playlist.name}</strong>
-                          <small>{playlist.tracks} 首</small>
-                        </span>
-                        <ChevronRight size={14} className="playlist-arrow" />
-                      </button>
-                      <button
-                        className="row-icon"
-                        aria-label="删除歌单"
-                        onClick={() => void dropPlaylist(playlist)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : view === "favorites" ? (
-            <>
-              <div className="index-head">
-                <span>收藏</span>
-                <span>{favorites.length} 首</span>
-              </div>
-              <TrackList
-                {...trackListProps}
-                list={favorites}
-                queue={favorites}
-                empty={
-                  <p>还没有收藏。在搜索结果里点歌名右边的心，就会留在这里。</p>
-                }
-              />
-              {favorites.length > 0 && (
-                <button
-                  className="button secondary small saved-play"
-                  onClick={() => player?.playQueue(favorites, 0)}
-                >
-                  <Play size={13} />
-                  播放全部
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <div className="index-head">
-                <span>曲目</span>
-                <span>
-                  {searching
-                    ? "检索中"
-                    : calibrating
-                      ? "校准情绪中"
-                      : tracks
-                        ? `${tracks.length} 首`
-                        : "按回车开始"}
-                </span>
-              </div>
-              {tracks === null ? (
-                <div className="index-empty">
-                  <Music2 size={22} strokeWidth={1.1} />
-                  <p>
-                    还没有检索。每首歌会按标题与专辑的词义给出一个情绪指数，
-                    最近播放的整体倾向，决定此刻房间的氛围。
-                  </p>
+                <div className="index-head">
+                  <span>{openList.name}</span>
+                  <span>{listTracks.length} 首</span>
                 </div>
-              ) : (
                 <TrackList
                   {...trackListProps}
-                  list={tracks}
-                  queue={tracks}
+                  list={listTracks}
+                  queue={listTracks}
                   empty={
-                    <p>没有结果。换个关键词，或者切到酷我 / JOOX 再试。</p>
+                    listBusy ? (
+                      <Loading label="正在读取歌单" />
+                    ) : listError ? (
+                      <ErrorState
+                        message={listError}
+                        retry={() => void openPlaylist(openList)}
+                      />
+                    ) : (
+                      <p>这个歌单还是空的。去搜几首，点「+」放进来。</p>
+                    )
                   }
                 />
-              )}
-            </>
-          )}
+                {listTracks.length > 0 && (
+                  <div className="list-foot">
+                    {listTracks.map((track) => (
+                      <button
+                        key={trackKey(track)}
+                        className="saved-remove"
+                        onClick={() => void removeFromPlaylist(track)}
+                      >
+                        <X size={11} />
+                        {track.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : view === "playlists" ? (
+              <>
+                <div className="index-head">
+                  <span>歌单</span>
+                  <button
+                    className="link-quiet"
+                    onClick={() => setCreating(true)}
+                  >
+                    <Plus size={12} />
+                    新建
+                  </button>
+                </div>
+                {playlists.length === 0 ? (
+                  <div className="index-empty">
+                    <ListMusic size={22} strokeWidth={1.1} />
+                    <p>
+                      还没有歌单。建一个「深夜」「通勤」这样的清单，把喜欢的歌攒起来。
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="playlist-list">
+                    {playlists.map((playlist) => (
+                      <li key={playlist.id}>
+                        <button
+                          className="playlist-row"
+                          onClick={() => void openPlaylist(playlist)}
+                        >
+                          <span className="playlist-icon">
+                            <ListMusic size={15} />
+                          </span>
+                          <span className="playlist-meta">
+                            <strong>{playlist.name}</strong>
+                            <small>{playlist.tracks} 首</small>
+                          </span>
+                          <ChevronRight size={14} className="playlist-arrow" />
+                        </button>
+                        <button
+                          className="row-icon"
+                          aria-label="删除歌单"
+                          onClick={() => void dropPlaylist(playlist)}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : view === "favorites" ? (
+              <>
+                <div className="index-head">
+                  <span>收藏</span>
+                  <span>{favorites.length} 首</span>
+                </div>
+                <TrackList
+                  {...trackListProps}
+                  list={favorites}
+                  queue={favorites}
+                  empty={
+                    <p>
+                      还没有收藏。在搜索结果里点歌名右边的心，就会留在这里。
+                    </p>
+                  }
+                />
+                {favorites.length > 0 && (
+                  <button
+                    className="button secondary small saved-play"
+                    onClick={() => player?.playQueue(favorites, 0)}
+                  >
+                    <Play size={13} />
+                    播放全部
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="index-head">
+                  <span>曲目</span>
+                  <span>
+                    {searching
+                      ? "检索中"
+                      : calibrating
+                        ? "校准情绪中"
+                        : tracks
+                          ? `${tracks.length} 首`
+                          : "按回车开始"}
+                  </span>
+                </div>
+                {tracks === null ? (
+                  <div className="index-empty">
+                    <Music2 size={22} strokeWidth={1.1} />
+                    <p>
+                      还没有检索。每首歌会按标题与专辑的词义给出一个情绪指数，
+                      最近播放的整体倾向，决定此刻房间的氛围。
+                    </p>
+                  </div>
+                ) : (
+                  <TrackList
+                    {...trackListProps}
+                    list={tracks}
+                    queue={tracks}
+                    empty={
+                      <p>没有结果。换个关键词，或者切到酷我 / JOOX 再试。</p>
+                    }
+                  />
+                )}
+              </>
+            )}
+          </div>
         </section>
 
         <aside className="listening-room">
@@ -1287,6 +1395,7 @@ export default function MusicPage() {
       {addingTrack && (
         <Dialog
           title={`把《${addingTrack.name}》加入`}
+          busy={libraryBusy}
           onClose={() => setAddingTrack(null)}
         >
           <div className="stack">
@@ -1297,6 +1406,7 @@ export default function MusicPage() {
               <button
                 key={playlist.id}
                 className="picker-row"
+                disabled={libraryBusy}
                 onClick={() => void addToPlaylist(playlist)}
               >
                 <ListMusic size={14} />
@@ -1306,6 +1416,7 @@ export default function MusicPage() {
             ))}
             <button
               className="button secondary"
+              disabled={libraryBusy}
               onClick={() => {
                 setAddingTrack(null);
                 setCreating(true);
@@ -1319,12 +1430,17 @@ export default function MusicPage() {
       )}
 
       {creating && (
-        <Dialog title="新建歌单" onClose={() => setCreating(false)}>
+        <Dialog
+          title="新建歌单"
+          onClose={() => setCreating(false)}
+          busy={libraryBusy}
+        >
           <form className="stack" onSubmit={createPlaylist}>
             <label className="field">
               <span>名字</span>
               <input
                 value={newName}
+                disabled={libraryBusy}
                 onChange={(event) => setNewName(event.target.value)}
                 placeholder="深夜 / 通勤 / 写代码"
                 maxLength={30}
@@ -1335,12 +1451,16 @@ export default function MusicPage() {
               <button
                 type="button"
                 className="button ghost"
+                disabled={libraryBusy}
                 onClick={() => setCreating(false)}
               >
                 取消
               </button>
-              <button className="button primary" disabled={!newName.trim()}>
-                建好
+              <button
+                className="button primary"
+                disabled={!newName.trim() || libraryBusy}
+              >
+                {libraryBusy ? "正在创建…" : "建好"}
               </button>
             </div>
           </form>
