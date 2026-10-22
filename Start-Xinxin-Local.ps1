@@ -145,7 +145,7 @@ function Start-XinxinService([string]$Role,[string]$Executable,[string[]]$Argume
 $pythonPath=Join-Path $backendPath '.venv/Scripts/python.exe'
 if(-not(Test-Path -LiteralPath $pythonPath)){
   Push-Location -LiteralPath $backendPath
-  try{python -m venv .venv;if($LASTEXITCODE -ne 0){throw 'Python 3.12+ is required'};& $pythonPath -m pip install -r requirements.lock;if($LASTEXITCODE -ne 0){throw 'Backend dependency installation failed'}}finally{Pop-Location}
+  try{Invoke-XinxinNative 'python' @('-m','venv','.venv') 'Python 3.12+ is required';Invoke-XinxinNative $pythonPath @('-m','pip','install','-r','requirements.lock') 'Backend dependency installation failed'}finally{Pop-Location}
 }
 $backendBuild=& $pythonPath (Join-Path $backendPath 'scripts/local_runtime.py') fingerprint
 if($LASTEXITCODE -ne 0 -or -not $backendBuild){throw 'Cannot identify the backend build.'}
@@ -172,8 +172,8 @@ function Test-FrontendBuild{
 }
 Push-Location -LiteralPath $frontendPath
 try{
-  if(-not(Test-Path -LiteralPath 'node_modules/vite/bin/vite.js')){npm.cmd ci;if($LASTEXITCODE -ne 0){throw 'Frontend dependency installation failed'}}
-  if(-not(Test-FrontendBuild)){Write-Host 'Building frontend (local edition)...';npm.cmd run build;if($LASTEXITCODE -ne 0){throw 'Frontend production build failed'}}
+  if(-not(Test-Path -LiteralPath 'node_modules/vite/bin/vite.js')){Invoke-XinxinNative 'npm.cmd' @('ci') 'Frontend dependency installation failed'}
+  if(-not(Test-FrontendBuild)){Write-Host 'Building frontend (local edition)...';Invoke-XinxinNative 'npm.cmd' @('run','build') 'Frontend production build failed'}
 }finally{Pop-Location}
 
 # 3. 启动后端（只绑回环；CORS 额外放行局域网入口，保证手机 app 直连时跨源通过）

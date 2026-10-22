@@ -240,11 +240,11 @@ function Show-ErrorWindow([string]$Message) {
   if (-not (Test-Path -LiteralPath $templatePath)) { return }
   $lines = @()
   if (Test-Path -LiteralPath $logPath) {
-    foreach ($line in (Get-Content -LiteralPath $logPath -Tail 14 -ErrorAction SilentlyContinue)) {
+    foreach ($line in (Get-Content -LiteralPath $logPath -Encoding UTF8 -Tail 14 -ErrorAction SilentlyContinue)) {
       $lines += (Protect-Html $line)
     }
   }
-  $html = Get-Content -LiteralPath $templatePath -Raw
+  $html = Get-Content -LiteralPath $templatePath -Encoding UTF8 -Raw
   $html = $html.Replace('{{MESSAGE}}', (Protect-Html $Message))
   $html = $html.Replace('{{LOG}}', ($lines -join '<br/>'))
   # 让用户知道完整日志在哪：错误页只放尾部，排查时常常需要全文
@@ -274,10 +274,13 @@ function Start-LocalStack {
   # 不清空会把上一次启动的输出重复搬进日志。
   $startLog = Join-Path $runtimePath 'desktop-start.log'
   if (Test-Path -LiteralPath $startLog) { Remove-Item -LiteralPath $startLog -Force -ErrorAction SilentlyContinue }
-  & $startScript -NoBrowser *>> $startLog
-  if (Test-Path -LiteralPath $startLog) {
-    foreach ($line in (Get-Content -LiteralPath $startLog -ErrorAction SilentlyContinue)) {
-      if ($line -and $line.Trim()) { Write-Log "  start| $($line.TrimEnd())" }
+  try {
+    & $startScript -NoBrowser *>> $startLog
+  } finally {
+    if (Test-Path -LiteralPath $startLog) {
+      foreach ($line in (Get-Content -LiteralPath $startLog -Encoding Unicode -ErrorAction SilentlyContinue)) {
+        if ($line -and $line.Trim()) { Write-Log "  start| $($line.TrimEnd())" }
+      }
     }
   }
 }
@@ -386,6 +389,13 @@ try {
     Start-Sleep -Milliseconds 500
   }
   if (-not $entryUrl) { throw '本地服务未在预期时间内就绪，详见 .runtime/desktop.log' }
+
+  # A previous failed launch may have left an error window in this dedicated
+  # temporary profile. Once healthy, close those windows before reusing the app.
+  foreach ($temporary in @(Get-EdgeAppWindows $splashProfile)) {
+    try { Stop-WindowTree $temporary.ProcessId; Write-Log 'closed temporary startup window' } catch {}
+  }
+  $splash = $null
 
   $open = @(Get-EdgeAppWindows $appProfile)
   if ($open.Count -gt 0 -and (Test-XinxinDesktopBuild $projectPath $appProfile)) {

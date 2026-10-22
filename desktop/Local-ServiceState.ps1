@@ -1,4 +1,4 @@
-# Shared local startup checks. Keep helpers free of startup side effects.
+﻿# Shared local startup checks. Keep helpers free of startup side effects.
 function Get-XinxinFileHash([string]$Path) {
   $algorithm = [System.Security.Cryptography.SHA256]::Create()
   try { return [System.BitConverter]::ToString($algorithm.ComputeHash([System.IO.File]::ReadAllBytes($Path))).Replace('-', '') }
@@ -59,4 +59,22 @@ function Test-XinxinDesktopBuild([string]$Project, [string]$Profile) {
   if (-not (Test-Path -LiteralPath $indexPath) -or -not (Test-Path -LiteralPath $stampPath)) { return $false }
   $stamp = (Get-Content -LiteralPath $stampPath -Raw).Trim()
   return $stamp -eq (Get-XinxinFileHash $indexPath)
+}
+
+# PowerShell 5.1 promotes redirected native stderr to ErrorRecord objects.
+# Build warnings are output; the native exit code decides success.
+function Invoke-XinxinNative([string]$Executable, [string[]]$Arguments, [string]$FailureMessage) {
+  $command = Get-Command -Name $Executable -CommandType Application -ErrorAction Stop
+  $previousPreference = $ErrorActionPreference
+  $previousEncoding = [Console]::OutputEncoding
+  try {
+    $ErrorActionPreference = 'Continue'
+    [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    & $command.Source @Arguments 2>&1 | ForEach-Object { Write-Output $_.ToString() }
+    $nativeExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousPreference
+    [Console]::OutputEncoding = $previousEncoding
+  }
+  if ($nativeExit -ne 0) { throw "$FailureMessage (exit $nativeExit)" }
 }
