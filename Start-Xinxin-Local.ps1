@@ -215,7 +215,7 @@ if($NoGateway){
     $env:XINXIN_LOG_DIR=Join-Path $projectPath 'logs'
     $env:XINXIN_GATEWAY_PORT="$GatewayPort"
     New-Item -ItemType Directory -Force -Path $env:XINXIN_LOG_DIR | Out-Null
-    Start-XinxinService 'gateway' $caddyExe @('run','--config',$caddyfilePath,'--adapter','caddyfile','--envfile',$gatewayEnvFile) $projectPath $GatewayPort $gatewayReady
+    Start-XinxinService 'gateway' $caddyExe @('run','--config',$caddyfilePath,'--adapter','caddyfile','--envfile',$gatewayEnvFile) $projectPath $GatewayPort $gatewayReady ((Get-XinxinFileHash $caddyfilePath) + ":$GatewayPort")
     $gatewayStarted=$true
   }finally{$env:XINXIN_LOG_DIR=$oldLogDir;$env:XINXIN_GATEWAY_PORT=$oldPort}
 }

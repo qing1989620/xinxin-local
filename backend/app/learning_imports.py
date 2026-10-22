@@ -14,14 +14,17 @@ ACTIVE = {"queued", "running", "cancelling"}
 
 
 def snapshot(store, ident):
-    row = store.one("SELECT * FROM learning_imports WHERE id=?", (ident,))
+    # One SQLite statement keeps the linked book and run state in the same
+    # read snapshot. Otherwise a fast cached import can return completed with
+    # the previous NULL book_id and send the client to a nonexistent book.
+    row = store.one("SELECT i.*,r.status AS run_status,r.error AS run_error,"
+                    "(SELECT data FROM events WHERE run_id=i.run_id AND kind='learning.import.page' ORDER BY seq DESC LIMIT 1) AS progress_data "
+                    "FROM learning_imports i LEFT JOIN runs r ON r.id=i.run_id WHERE i.id=?", (ident,))
     if not row:
         raise ValueError("资料识别任务不存在")
-    run = store.one("SELECT status,error FROM runs WHERE id=?", (row["run_id"],)) or {}
-    progress = store.one("SELECT data FROM events WHERE run_id=? AND kind='learning.import.page' ORDER BY seq DESC LIMIT 1", (row["run_id"],))
     return {"id": row["id"], "run_id": row["run_id"], "file_id": row["file_id"],
-            "book_id": row["book_id"], "status": run.get("status", "interrupted"),
-            "error": run.get("error", ""), "progress": json.loads(progress["data"]) if progress else None}
+            "book_id": row["book_id"], "status": row["run_status"] or "interrupted",
+            "error": row["run_error"] or "", "progress": json.loads(row["progress_data"]) if row["progress_data"] else None}
 
 
 async def start(store, library, manager, body):

@@ -402,7 +402,7 @@ async def execute(store, gateway, job_id, run_id, flag):
                 "type": analysis["type"], "points": len(analysis["knowledge_points"]), "exercises": len(analysis["exercises"])})
             if not analysis["eligible"]:
                 raise ValueError(analysis["reason"])
-            if job["options"].get("mode") == "original" and not any(row["solvable"] for row in analysis["exercises"]):
+            if not job["options"].get("analyze_only") and job["options"].get("mode") == "original" and not any(row["solvable"] for row in analysis["exercises"]):
                 raise ValueError("没有识别出文字条件完整的原题，请改用知识拓展或核对识别结果")
             # Programmatic dedup covers the entire book. Only the model prompt
             # is bounded to its latest 100 stems to control context size.

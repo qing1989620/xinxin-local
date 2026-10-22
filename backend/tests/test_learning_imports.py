@@ -17,7 +17,7 @@ from app.store import Store
 from test_learning_studio import studio, source_list
 
 
-def scanned_workbook(*, header=False, nested=False):
+def scanned_workbook(*, header=False, nested=False, inline=False):
     image = Image.new("RGB", (1500, 1800), "white")
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype("C:/Windows/Fonts/msyh.ttc", 40)
@@ -39,6 +39,10 @@ def scanned_workbook(*, header=False, nested=False):
     page[NameObject("/Resources")] = DictionaryObject({NameObject("/XObject"): DictionaryObject({NameObject("/Im0"): writer._add_object(bitmap)})})
     commands = DecodedStreamObject()
     drawing = b"q 600 0 0 720 0 0 cm /Im0 Do Q"
+    if inline:
+        # Inline images are content-stream objects, not /XObject resources.
+        drawing = b"q 600 0 0 720 0 0 cm BI /W 1500 /H 1800 /CS /RGB /BPC 8 /F /DCT ID " + jpeg.getvalue() + b"\nEI Q"
+        page[NameObject("/Resources")] = DictionaryObject()
     if nested:
         from pypdf.generic import ArrayObject
         form = DecodedStreamObject()
@@ -97,7 +101,9 @@ def test_real_local_chinese_ocr_and_physical_page_source_labels(studio, monkeypa
     monkeypatch.setattr("app.document_text._recognize", must_not_repeat_ocr)
     repeated = wait_import(client, start(client, uploaded["id"]).json()["job"])
     assert repeated["status"] == "completed" and repeated["book_id"] != book["id"]
-    repeated_book = client.get(f"/api/v1/learning/books/{repeated['book_id']}").json()["book"]
+    response = client.get(f"/api/v1/learning/books/{repeated['book_id']}")
+    assert response.status_code == 200, response.text
+    repeated_book = response.json()["book"]
     assert repeated_book["extraction"]["resumed_ocr_pages"] == 1
     client.delete(f"/api/v1/files/{uploaded['id']}")
     assert client.get(f"/api/v1/learning/books/{book['id']}").json()["book"]["extraction"]["ocr_pages"] == 1
@@ -175,10 +181,10 @@ def test_word_preserves_equations_and_exercise_order_without_inflating_images(tm
     assert metadata["complete"]
 
 
-@pytest.mark.parametrize("nested", [False, True])
-def test_native_header_does_not_hide_scanned_body(tmp_path, monkeypatch, nested):
+@pytest.mark.parametrize("nested,inline", [(False, False), (True, False), (False, True)])
+def test_native_header_does_not_hide_scanned_body(tmp_path, monkeypatch, nested, inline):
     target = tmp_path / "hybrid.pdf"
-    target.write_bytes(scanned_workbook(header=True, nested=nested))
+    target.write_bytes(scanned_workbook(header=True, nested=nested, inline=inline))
     text, metadata = extract_document(target)
     assert len(text) > 40 and not metadata["complete"] and metadata["missing_pages"] == [1]
     recognized = "导数练习的文字条件：函数 y=x^2 的导函数为 2x。" * 5
@@ -216,6 +222,7 @@ def test_pdfium_operations_are_serialized_across_document_workers(tmp_path, monk
     ('<m:begChr m:val="|"/><m:endChr m:val="|"/>', ["x"], "$|x|$"),
     ('<m:begChr m:val="["/><m:endChr m:val="]"/>', ["a,b"], "$[a,b]$"),
     ('<m:sepChr m:val=";"/>', ["a", "b", "c"], "$(a;b;c)$"),
+    ('<m:begChr m:val="{"/><m:endChr m:val="}"/>', ["a,b"], r"$\{a,b\}$"),
 ])
 def test_word_delimiters_preserve_all_bases(tmp_path, properties, bases, expected):
     import zipfile
@@ -240,3 +247,40 @@ def test_unsupported_word_operator_is_visible_and_blocks_generation(tmp_path):
     text, metadata = extract_document(target)
     assert MATH_UNCERTAIN in text and not metadata["complete"] and metadata["warning"]
     assert not material_profile(text)["eligible"]
+
+
+def test_word_barless_fraction_preserves_stack_instead_of_division(tmp_path):
+    import zipfile
+    from app.document_text import WORD, MATH
+    target = tmp_path / "combination.docx"
+    xml = f'<w:document xmlns:w="{WORD}" xmlns:m="{MATH}"><w:body><w:p><m:oMath><m:f><m:fPr><m:type m:val="noBar"/></m:fPr><m:num><m:r><m:t>5</m:t></m:r></m:num><m:den><m:r><m:t>2</m:t></m:r></m:den></m:f></m:oMath></w:p></w:body></w:document>'
+    with zipfile.ZipFile(target, "w") as package:
+        package.writestr("word/document.xml", xml)
+    text, metadata = extract_document(target)
+    assert text == r"$\genfrac{}{}{0pt}{}{5}{2}$" and metadata["complete"]
+
+
+def test_import_snapshot_cannot_publish_completed_before_book_link(studio, monkeypatch):
+    app, client, book = studio
+    store = app.state.store
+    monkeypatch.setattr(learning_imports, "extract_document", lambda *_args, **_kwargs: ("合成知识正文，可完整用于学习分析。" * 30, {"complete": True}))
+    finished = wait_import(client, start(client, book["file_id"]).json()["job"])
+    imported = finished["book_id"]
+    with store.connect(write=True) as db:
+        db.execute("UPDATE learning_imports SET book_id=NULL WHERE id=?", (finished["id"],))
+        db.execute("UPDATE runs SET status='running' WHERE id=?", (finished["run_id"],))
+    original = store.one
+    advanced = False
+    def concurrent_read(sql, args=()):
+        nonlocal advanced
+        row = original(sql, args)
+        if not advanced and "learning_imports" in sql:
+            advanced = True
+            with store.connect(write=True) as db:
+                db.execute("UPDATE learning_imports SET book_id=? WHERE id=?", (imported, finished["id"]))
+                db.execute("UPDATE runs SET status='completed' WHERE id=?", (finished["run_id"],))
+        return row
+    monkeypatch.setattr(store, "one", concurrent_read)
+    snapshot = learning_imports.snapshot(store, finished["id"])
+    assert snapshot["status"] != "completed" or snapshot["book_id"] == imported
+    assert learning_imports.snapshot(store, finished["id"])["book_id"] == imported

@@ -896,14 +896,16 @@ test("设置：320px 布局、四种主题、背景、邮件分支及连接错�
 test("退出：后端暂不可用时仍清除本机会话，错误有反馈", async ({
   page,
   request,
+  isMobile,
 }) => {
   await login(page, request);
   await page.route("**/api/v1/auth/logout", (route) =>
     route.fulfill({ status: 503, json: { detail: "合成退出失败" } }),
   );
   await page.goto("/");
-  if (await page.getByRole("button", { name: "更多", exact: true }).isVisible())
-    await page.getByRole("button", { name: "更多", exact: true }).click();
+  await expect(page.locator(".mission-card")).toBeVisible();
+  if (isMobile)
+    await page.getByRole("button", { name: "展开导航", exact: true }).click();
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "回到你的空间" }),

@@ -50,6 +50,26 @@ def test_numbered_exercises_and_table_of_contents_are_not_lost():
     assert len(chapters) == 2
 
 
+def test_multilevel_exercise_instructions_remain_in_source_body():
+    text = "第一章 导数\n" + "导数表示瞬时变化率，切线斜率是重要的几何意义。" * 10
+    text += "\n1.1 求下列函数的导数\nf(x)=x^2\n" + "请写出计算过程并解释每一步依据。" * 10
+    text += "\n1.2 下列说法中正确的是\nA. 导数表示变化率\nB. 导数一定为正\n" + "需要结合具体函数判断结论是否成立。" * 8
+    combined = "\n".join(row["content"] for row in learning.split_chapters(text))
+    assert "1.1 求下列函数的导数" in combined and "1.2 下列说法中正确的是" in combined
+
+
+@pytest.mark.parametrize("first,second", [
+    ("求 f(x)=x+1 在 x=2 处的值。", "求 f(x)=x-1 在 x=2 处的值。"),
+    ("判断 x≤2 是否成立。", "判断 x≥2 是否成立。"),
+    ("求 x*2 的值。", "求 x/2 的值。"),
+    ("说明压力增大后的变化。", "说明压力减小后的变化。"),
+    ("求 X 在此处的值。", "求 x 在此处的值。"),
+])
+def test_dedup_preserves_mathematical_and_logical_meaning(first, second):
+    assert not quality.duplicate_stem(second, [first])
+    assert quality.duplicate_stem(first + "？", [first])
+
+
 @pytest.mark.parametrize("stem", ["第三章在第几页？", "哪个章节讲导数，在第几页开始？", "导数这一章位于第 ___ 页。", "What page does Chapter 2 begin on?", "如图所示，求三角形面积。"])
 def test_metadata_or_missing_figure_questions_are_rejected(stem):
     assert quality.question_issue(stem)
@@ -123,6 +143,13 @@ def test_analysis_requires_literal_evidence_and_can_be_requested_without_questio
     assert listing["sources"][0]["analysis"]["summary"]
     wait(client, start(client, book, units[:1]).json()["job"])
     assert [kind for kind, _ in calls].count("analysis") == 1  # cached, versioned analysis
+
+
+def test_analyze_only_does_not_require_exercises_in_original_mode(studio):
+    app, client, book = studio
+    script(app)
+    done = wait(client, start(client, book, source_list(client, book)[:1], analyze_only=True, mode="original").json()["job"])
+    assert done["status"] == "completed" and done["finished_sources"] == 1 and done["created_count"] == 0
 
 
 def test_original_mode_does_not_mislabel_variations(studio):
@@ -221,6 +248,9 @@ def test_dedup_and_legacy_quarantine_cover_the_entire_book(studio):
         db.executemany("INSERT INTO questions(id,book_id,chapter_id,hash,kind,stem,options,answer,explanation,tags,difficulty,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     quality.quarantine_legacy(app.state.store)
     assert all(app.state.store.one("SELECT review FROM questions WHERE id=?", (row[0],))["review"] != "excluded" for row in rows[:3])
+    app.state.store.execute("UPDATE questions SET review='excluded' WHERE id=?", (rows[1][0],))
+    quality.quarantine_legacy(app.state.store)
+    assert app.state.store.one("SELECT review FROM questions WHERE id=?", (rows[1][0],))["review"] == "legacy"
     script(app)
     result = wait(client, start(client, book, source_list(client, book)[:1]).json()["job"])
     assert result["created_count"] == 0 and result["items"][0]["duplicates"] >= 1

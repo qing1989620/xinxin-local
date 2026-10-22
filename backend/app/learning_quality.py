@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from difflib import SequenceMatcher
+import unicodedata
 
 from .store import clean_text
 from .document_text import MATH_UNCERTAIN
@@ -151,19 +151,24 @@ def parse_reviews(value, count):
 
 
 def duplicate_stem(stem, previous):
-    normalized = re.sub(r"[\W_]+", "", stem).casefold()
-    digits = re.findall(r"\d+(?:\.\d+)?", stem)
-    for old in previous:
-        other = re.sub(r"[\W_]+", "", old).casefold()
-        if normalized == other or (digits == re.findall(r"\d+(?:\.\d+)?", old) and SequenceMatcher(None, normalized, other).ratio() > .94):
-            return True
-    return False
+    def normalize(value):
+        # Retain symbols, grouping, sub/superscripts and case-sensitive variable
+        # names. Punctuation-only differences are duplicates; a high edit ratio
+        # alone cannot distinguish + from -, 增大 from 减小, or ≤ from ≥.
+        value = value.translate(str.maketrans("（）：，。？", "():,.?"))
+        return "".join(char for char in value if not char.isspace() and (
+            unicodedata.category(char)[0] not in {"P", "Z"} or char in "+-*/=<>^%|&~!_()[]{}.,:;'\\"
+        )).rstrip(".,")
+    normalized = normalize(stem)
+    return any(normalized == normalize(old) for old in previous)
 
 
 def quarantine_legacy(store):
     """Preserve old questions/answers; exclude obvious unusable items from new quizzes."""
-    rows = store.all("SELECT id,stem FROM questions WHERE review='legacy'")
+    rows = store.all("SELECT id,stem,review FROM questions WHERE review='legacy' OR (review='excluded' AND generation_id IS NULL)")
     excluded = [(row["id"],) for row in rows if question_issue(row["stem"])]
-    if excluded:
+    restored = [(row["id"],) for row in rows if row["review"] == "excluded" and not question_issue(row["stem"])]
+    if excluded or restored:
         with store.connect(write=True) as db:
             db.executemany("UPDATE questions SET review='excluded' WHERE id=?", excluded)
+            db.executemany("UPDATE questions SET review='legacy' WHERE id=?", restored)

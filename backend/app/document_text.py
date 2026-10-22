@@ -35,14 +35,22 @@ def _math_text(node):
         if kind in {"sSub", "sSubSup"}: result += "_{" + argument("sub") + "}"
         if kind in {"sSup", "sSubSup"}: result += "^{" + argument("sup") + "}"
         return result
-    if kind == "f": return r"\frac{" + argument("num") + "}{" + argument("den") + "}"
+    if kind == "f":
+        style = node.find(f"{{{MATH}}}fPr/{{{MATH}}}type")
+        value = style.get(f"{{{MATH}}}val", "bar") if style is not None else "bar"
+        if value not in {"bar", "lin", "skw", "noBar"}:
+            return MATH_UNCERTAIN + argument("num") + ";" + argument("den")
+        operator = r"\genfrac{}{}{0pt}{}" if value == "noBar" else r"\frac"
+        return operator + "{" + argument("num") + "}{" + argument("den") + "}"
     if kind == "rad":
-        degree = argument("deg")
+        hidden = node.find(f"{{{MATH}}}radPr/{{{MATH}}}degHide")
+        degree = "" if hidden is not None and hidden.get(f"{{{MATH}}}val", "1") in {"1", "true", "on"} else argument("deg")
         return r"\sqrt" + ("[" + degree + "]" if degree else "") + "{" + argument("e") + "}"
     if kind == "d":
         def delimiter(name, default):
             value = node.find(f"{{{MATH}}}dPr/{{{MATH}}}{name}")
-            return value.get(f"{{{MATH}}}val", default) if value is not None else default
+            char = value.get(f"{{{MATH}}}val", default) if value is not None else default
+            return {"{": r"\{", "}": r"\}", "\\": r"\backslash "}.get(char, char)
         # A delimiter can have several bases, e.g. (a|b), not just the first e.
         return delimiter("begChr", "(") + delimiter("sepChr", "|").join(
             _math_text(child) for child in node.findall(f"{{{MATH}}}e")
@@ -174,27 +182,26 @@ def extract_document(path: Path, *, suffix=None, ocr=False, cancelled=None, prog
                 needs_ocr = len("".join(text.split())) < 40
                 # Some workbooks have a native header/watermark over a scanned
                 # body. Native character count alone cannot establish coverage.
-                resources = page.get("/Resources")
-                has_objects = bool(resources and resources.get_object().get("/XObject"))
                 image = None
-                if needs_ocr or has_objects:
-                    with _pdfium_lock:
-                        import pypdfium2 as pdfium
-                        if renderer is None:
-                            renderer = pdfium.PdfDocument(path)
-                        rendered_page = renderer[index]
-                        bitmap = None
-                        try:
-                            needs_ocr = needs_ocr or _large_raster(rendered_page)
-                            cached = (cached_pages or {}).get(index + 1) if ocr else None
-                            if needs_ocr and ocr and not cached:
-                                width, height = rendered_page.get_size()
-                                bitmap = rendered_page.render(scale=min(2.5, 2600 / max(width, height)))
-                                image = bitmap.to_pil().copy()
-                        finally:
-                            if bitmap is not None:
-                                bitmap.close()
-                            rendered_page.close()
+                # Inspect every page: inline BI/ID/EI images have no XObject
+                # resource entry and can still contain the entire scanned body.
+                with _pdfium_lock:
+                    import pypdfium2 as pdfium
+                    if renderer is None:
+                        renderer = pdfium.PdfDocument(path)
+                    rendered_page = renderer[index]
+                    bitmap = None
+                    try:
+                        needs_ocr = needs_ocr or _large_raster(rendered_page)
+                        cached = (cached_pages or {}).get(index + 1) if ocr else None
+                        if needs_ocr and ocr and not cached:
+                            width, height = rendered_page.get_size()
+                            bitmap = rendered_page.render(scale=min(2.5, 2600 / max(width, height)))
+                            image = bitmap.to_pil().copy()
+                    finally:
+                        if bitmap is not None:
+                            bitmap.close()
+                        rendered_page.close()
                 if needs_ocr:
                     cached = (cached_pages or {}).get(index + 1) if ocr else None
                     recognized = ""

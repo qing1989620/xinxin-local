@@ -114,15 +114,20 @@ def split_chapters(text: str) -> list[dict]:
 
     for line in lines:
         stripped = line.strip()
-        if stripped and len(stripped) <= 48 and not TOC_ROW.match(stripped) and HEADING.match(stripped):
+        numbered_exercise = re.match(r"^\d+(?:\.\d+)+\s+(?:求|证明|计算|解答|判断|试|已知|设|说明|比较|画出|find\b|prove\b|calculate\b|solve\b)", stripped, re.I)
+        if stripped and len(stripped) <= 48 and not numbered_exercise and not TOC_ROW.match(stripped) and HEADING.match(stripped):
             so_far = "\n".join(buffer).strip()
             if not so_far:
                 # 开头第一行就是标题：直接当成章节名，不要造一个空章
                 title = stripped[:80]
-                buffer = []
+                # Numeric headings can also be numbered exercise instructions.
+                # Keep the original line even when it serves as a section label.
+                buffer = [line] if re.match(r"^\d+\.", stripped) else []
                 continue
             if len(so_far) > MIN_SPLIT_CHARS:
                 flush(stripped[:80])
+                if re.match(r"^\d+\.", stripped):
+                    buffer.append(line)
                 continue
         buffer.append(line)
     flush("")

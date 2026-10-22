@@ -15,7 +15,7 @@ http://:8088 {
 	@api path /api/* /health
 	handle @api {
 		request_body {
-			max_size 67371008
+			max_size 268697600
 		}
 		reverse_proxy 127.0.0.1:8000 {
 			flush_interval -1
