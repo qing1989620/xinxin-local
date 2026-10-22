@@ -34,7 +34,7 @@ from .creative import gallery, plot_csv, transform_image
 from .conversations import deletion_preview, purge_conversation, batch_deletion_preview, purge_conversations
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
-from . import learning, learning_studio, music
+from . import learning, learning_studio, learning_imports, learning_quality, music
 from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
@@ -123,17 +123,27 @@ class BookCreate(Input):
 
 class QuestionGen(Input):
     chapter_id: str = Field(min_length=1, max_length=64)
-    count: int = Field(default=5, ge=1, le=12)
+    count: int = Field(default=12, ge=1, le=24)
+
+
+class LearningImport(BookCreate):
+    request_key: str = Field(min_length=8, max_length=80)
+
+
+class SourceCorrection(Input):
+    content: str = Field(min_length=80, max_length=8000)
 
 
 class LearningGeneration(Input):
-    source_ids: list[str] = Field(default_factory=list, max_length=10)
-    count: int = Field(default=3, ge=1, le=6)
+    source_ids: list[str] = Field(default_factory=list, max_length=40)
+    count: int = Field(default=12, ge=1, le=24)
     kinds: list[Literal["single", "fill", "short"]] = Field(default=["single", "fill", "short"], min_length=1, max_length=3)
     difficulty: int = Field(default=0, ge=0, le=3)
     focus: str = Field(default="", max_length=240)
     request_key: str = Field(min_length=8, max_length=80)
     resume_job_id: str = Field(default="", max_length=64)
+    mode: Literal["auto", "original", "practice"] = "auto"
+    analyze_only: bool = False
 
 
 class QuizStart(Input):
@@ -318,6 +328,7 @@ def create_app(config=None):
     backend_build = source_fingerprint(ROOT)
     config = config or Config.from_env()
     store = Store(config.data_dir)
+    learning_quality.quarantine_legacy(store)
     auth = Auth(store)
     mail = MailCodes(store, auth)
     library = FileLibrary(store)
@@ -1284,6 +1295,8 @@ def create_app(config=None):
 
     @app.delete("/api/v1/files/{ident}", dependencies=[Depends(owner)])
     def delete_file(ident: str):
+        if store.one("SELECT i.id FROM learning_imports i JOIN runs r ON r.id=i.run_id WHERE i.file_id=? AND r.status IN ('queued','running','cancelling')", (ident,)):
+            raise HTTPException(409, "资料正在识别，请先停止任务再删除原文件")
         library.delete(ident)
         return {"ok": True}
 
@@ -1384,12 +1397,34 @@ def create_app(config=None):
         data = dict(row)
         if not data.get("text"):
             try:
-                data["text"] = library.extract(data["name"], library.path(file_id).read_bytes())
+                from .document_text import extract_document
+                data["text"], metadata = extract_document(library.path(file_id))
+                data["pages"] = metadata.get("pages", 0)
             except ValueError:
                 raise HTTPException(404, "这份文件已经不在资料库里了")
             except Exception:
                 data["text"] = ""
         return data
+
+    @app.post("/api/v1/learning/imports", dependencies=[Depends(owner)])
+    async def learning_import_start(body: LearningImport):
+        try:
+            async with learning_lock:
+                return {"job": await learning_imports.start(store, library, manager, body.model_dump())}
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @app.get("/api/v1/learning/imports", dependencies=[Depends(owner)])
+    def learning_import_latest():
+        row = store.one("SELECT id FROM learning_imports ORDER BY created DESC,rowid DESC LIMIT 1")
+        return {"job": learning_imports.snapshot(store, row["id"]) if row else None}
+
+    @app.get("/api/v1/learning/imports/{ident}", dependencies=[Depends(owner)])
+    def learning_import_status(ident: str):
+        try:
+            return {"job": learning_imports.snapshot(store, ident)}
+        except ValueError as error:
+            raise HTTPException(404, str(error))
 
     @app.get("/api/v1/learning/books", dependencies=[Depends(owner)])
     def learning_books():
@@ -1437,9 +1472,24 @@ def create_app(config=None):
         if chapter["book_id"] != book_id:
             raise HTTPException(400, "这一章不属于这本书")
         try:
-            return await learning.generate_questions(
-                store, model_gateway(), book, chapter, body.count
-            )
+            # Keep the old synchronous response, but use the exact same durable
+            # analysis/generation/review path so old clients cannot bypass it.
+            async with learning_lock:
+                listing = learning_studio.sources(store, library, book_id)
+                candidates = [unit for unit in listing["sources"] if unit["chapter_id"] == chapter["id"] and unit["eligible"]]
+                if not candidates:
+                    raise ValueError("这一章没有可考查的知识正文或完整练习题")
+                payload = LearningGeneration(source_ids=[candidates[0]["id"]], count=body.count, request_key=uid()).model_dump()
+                job = await learning_studio.start(store, library, manager, book_id, payload)
+            pending = manager.tasks.get(job["run_id"])
+            if pending:
+                await asyncio.shield(pending)
+            result = learning_studio.snapshot(store, job["id"])
+            if result["status"] == "failed" and any("模型未返回有效题目数组" in item["error"] for item in result["items"]):
+                raise ValueError("模型这次没返回可解析的题目；本次任务已保留，可在学习工作室重试")
+            rows = store.all("SELECT * FROM questions WHERE generation_id=? ORDER BY created,rowid", (job["id"],))
+            return {"created": [learning.format_question(row) for row in rows],
+                    "skipped": sum(item["rejected"] + item["duplicates"] for item in result["items"]), "job": result}
         except ValueError as error:
             raise HTTPException(409, str(error))
 
@@ -1463,6 +1513,14 @@ def create_app(config=None):
             return {"source": learning_studio.source(store, source_id, offset)}
         except ValueError as error:
             raise HTTPException(404, str(error))
+
+    @app.put("/api/v1/learning/sources/{source_id}", dependencies=[Depends(owner)])
+    async def learning_source_correct(source_id: str, body: SourceCorrection):
+        try:
+            async with learning_lock:
+                return {"source": learning_studio.correct_source(store, source_id, body.content)}
+        except ValueError as error:
+            raise HTTPException(409, str(error))
 
     @app.get("/api/v1/learning/books/{book_id}/generation", dependencies=[Depends(owner)])
     def learning_generation_latest(book_id: str):

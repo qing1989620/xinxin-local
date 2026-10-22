@@ -49,8 +49,14 @@ def question(text, stem="导数的几何意义是什么？", kind="single"):
 
 def model(app, responder):
     async def transport(request):
-        payload = json.loads(json.loads(request.content)["messages"][1]["content"])
-        result = responder(payload)
+        messages = json.loads(request.content)["messages"]
+        payload = json.loads(messages[1]["content"])
+        if "学习材料分析协议 v2" in messages[0]["content"]:
+            result = {"type": "knowledge", "summary": "本段解释导数表示瞬时变化率，几何意义为切线斜率。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
+        elif "学习出题复核协议 v2" in messages[0]["content"]:
+            result = {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}
+        else:
+            result = responder(payload)
         if asyncio.iscoroutine(result):
             result = await result
         return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(result, ensure_ascii=True)}}], "usage": {"total_tokens": 80}})
@@ -73,14 +79,15 @@ def wait(client, job):
     pytest.fail("generation did not terminate")
 
 
-def test_long_chapters_and_source_chunks_preserve_all_text():
+def test_long_chapters_and_source_chunks_preserve_all_text(monkeypatch):
     body = "甲乙丙丁。" * (MAX_CHAPTER_CHARS // 2)
     chapters = split_chapters("第一章 测试\n" + body)
     assert len(chapters) > 1
     assert "".join(chapter["content"] for chapter in chapters) == body
     assert "".join(chunks(body)) == body
-    with pytest.raises(ValueError, match="60"):
-        split_chapters("纯正文" * (MAX_CHAPTER_CHARS * 21))
+    monkeypatch.setattr("app.learning.MAX_CHAPTERS", 2)
+    with pytest.raises(ValueError, match="2 个章节"):
+        split_chapters("纯正文" * MAX_CHAPTER_CHARS)
 
 
 def test_sources_are_stable_and_neighbors_bounded(studio):
@@ -144,7 +151,7 @@ def test_durable_generation_citations_idempotency_and_replay(studio):
     quiz = client.post("/api/v1/learning/quiz", json={"book_id": book["id"]}).json()["session"]
     assert "answer" not in quiz["questions"][0] and not quiz["questions"][0]["source_quote"]
     usage = json.loads(app.state.store.one("SELECT usage FROM runs WHERE id=?", (job["run_id"],))["usage"])
-    assert usage["calls"] == 1 and usage["total_tokens"] == 80
+    assert usage["calls"] == 3 and usage["total_tokens"] == 240
 
 
 @pytest.mark.parametrize("patch", [
@@ -166,7 +173,7 @@ def test_partial_repair_and_resume_only_missing_count(studio):
     units = source_list(client, book)
     model(app, lambda payload: [question(payload["text"])])
     job = wait(client, start(client, book, units[:1], count=2).json()["job"])
-    assert job["status"] == "partial" and job["created_count"] == 1 and job["items"][0]["duplicates"] == 1
+    assert job["status"] == "partial" and job["created_count"] == 1 and job["items"][0]["duplicates"] == 2
     calls = []
     def respond(payload):
         calls.append(payload)
@@ -219,9 +226,9 @@ def test_limits_authorization_cross_book_and_delete_cleanup(studio):
     units = source_list(client, book)
     other = add_book(client, "第二章 概率\n" + "概率是衡量随机事件发生可能性的数值。" * 50)
     assert start(client, other, units[:1]).status_code == 409
-    assert start(client, book, units[:1] * 11).status_code == 422
+    assert start(client, book, units[:1] * 41).status_code == 422
     assert start(client, book, []).status_code == 409
-    assert start(client, book, units[:1], count=7).status_code == 422
+    assert start(client, book, units[:1], count=25).status_code == 422
     assert client.get(f"/api/v1/learning/books/{book['id']}/sources", headers={"Authorization": "Bearer invalid"}).status_code == 401
     model(app, lambda payload: [question(payload["text"])])
     job = wait(client, start(client, book, units[:1]).json()["job"])

@@ -103,8 +103,8 @@ describe("resource uploads", () => {
     const count = UploadRequest.instances.length;
     await expect(upload(new File([], "empty.txt"))).rejects.toThrow("为空");
     await expect(
-      upload({ size: 64 * 1024 * 1024 + 1 } as File),
-    ).rejects.toThrow("64 MB");
+      upload({ size: 256 * 1024 * 1024 + 1 } as File),
+    ).rejects.toThrow("256 MB");
     expect(UploadRequest.instances.length).toBe(count);
   });
   it("allows HTTP LAN only in the native local-test build", async () => {

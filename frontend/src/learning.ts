@@ -1,6 +1,7 @@
 export type Chapter = { id: string; idx: number; title: string; chars: number };
 export type StudyBook = {
   id: string;
+  file_id?: string;
   title: string;
   subject: string;
   chapter_count: number;
@@ -12,6 +13,22 @@ export type StudyBook = {
   chapters: Chapter[];
   created: number;
   updated: number;
+  extraction?: {
+    complete?: boolean;
+    pages?: number;
+    ocr_pages?: number;
+    missing_pages?: number[];
+    warning?: string;
+  };
+};
+export type MaterialAnalysis = {
+  type: string;
+  type_label: string;
+  eligible: boolean;
+  reason: string;
+  summary: string;
+  knowledge_points: Array<{ name: string; quote: string }>;
+  exercises: Array<{ label: string; quote: string; solvable: boolean }>;
 };
 export type SourceUnit = {
   id: string;
@@ -22,12 +39,44 @@ export type SourceUnit = {
   question_count: number;
   page_from: number | null;
   page_to: number | null;
+  eligible?: boolean;
+  type_label?: string;
+  reason?: string;
+  analysis?:
+    | (Omit<MaterialAnalysis, "knowledge_points" | "exercises"> & {
+        knowledge_points: Array<{ name: string }>;
+        exercises: Array<{ label: string; solvable: boolean }>;
+      })
+    | null;
 };
-export type SourceText = SourceUnit & {
+export type SourceListing = {
+  sources: SourceUnit[];
+  max_sources: number;
+  max_questions: number;
+  coverage: {
+    analyzed: number;
+    total: number;
+    eligible: number;
+    knowledge_points: number;
+    exercises: number;
+  };
+};
+export type ImportJob = {
+  id: string;
+  run_id: string;
+  file_id: string;
+  book_id: string | null;
+  status: string;
+  error: string;
+  progress: { page: number; total: number; method: string } | null;
+};
+export type SourceText = Omit<SourceUnit, "analysis"> & {
   book_id: string;
   content: string;
   has_previous: boolean;
   has_next: boolean;
+  edited_at?: number | null;
+  analysis?: MaterialAnalysis | null;
 };
 export type Generation = {
   id: string;
@@ -43,6 +92,8 @@ export type Generation = {
     kinds: Array<"single" | "fill" | "short">;
     difficulty: number;
     focus: string;
+    mode?: "auto" | "original" | "practice";
+    analyze_only?: boolean;
   };
   items: Array<{
     source_id: string;

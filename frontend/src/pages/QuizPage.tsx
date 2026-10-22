@@ -32,6 +32,7 @@ type Question = {
   position: number;
   source_id?: string;
   source_quote?: string;
+  origin?: string;
 };
 
 type Session = {
@@ -544,6 +545,7 @@ export default function QuizPage() {
                     ? "填空"
                     : "简答"}
               </span>
+              {question.origin && question.origin !== "legacy" && <span className="quiz-tag">{question.origin === "original" ? "原题整理" : "知识拓展"}</span>}
               <span className="quiz-difficulty">
                 {"★".repeat(question.difficulty)}
               </span>

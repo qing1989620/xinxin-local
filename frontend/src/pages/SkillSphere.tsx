@@ -15,7 +15,12 @@ import {
   ChevronRight,
   Zap,
 } from "lucide-react";
-import { clamp, focusCamera, INITIAL_CAMERA, type Camera } from "./lunarGeometry";
+import {
+  clamp,
+  focusCamera,
+  INITIAL_CAMERA,
+  type Camera,
+} from "./lunarGeometry";
 import {
   createSphereRenderer,
   type SphereNode,
@@ -64,7 +69,6 @@ type SkillActivity = {
 const ACTIVITY_INTERVAL = 6000;
 
 const DIRECTORY_CAP = 60;
-const DOMAIN_CHIPS = 12;
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 2.6;
 const RELATION_LABEL: Record<string, string> = {
@@ -141,10 +145,12 @@ export default function SkillSphere({
       counts.set(node.domain, (counts.get(node.domain) || 0) + 1);
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, DOMAIN_CHIPS)
       .map(([name, count]) => ({ name, count }));
   }, [nodes]);
   const filtered = useMemo(() => nodes.filter(matches), [nodes, matches]);
+  useEffect(() => {
+    setSelected(previous => previous && !filtered.some(node => node.id === previous) ? "" : previous);
+  }, [filtered]);
   const tick = useRef<(now: number) => void>(() => {});
   const schedule = useCallback(() => {
     if (!frame.current && options.current.active && !document.hidden)
@@ -216,13 +222,14 @@ export default function SkillSphere({
   // 球面坐标由渲染器按 domain 稳定排序后计算，这里只负责镜头动画
   const chooseNode = useCallback(
     (node: SphereGraphNode) => {
+      if (!matches(node)) { setDomain("全部"); setQuery(""); setExecutableOnly(false); }
       setSelected(node.id);
       setAuto(false);
       setHover("");
       const point = renderer.current?.point(node.id);
       if (point) moveTo(focusCamera(point, currentCamera.current));
     },
-    [moveTo],
+    [moveTo, matches],
   );
   useEffect(() => {
     const media = matchMedia("(prefers-reduced-motion: reduce)");
@@ -271,6 +278,21 @@ export default function SkillSphere({
     if (!element) return;
     renderer.current = createSphereRenderer(element);
     setSurface(Boolean(renderer.current));
+    const updatePalette = () => {
+      const styles = getComputedStyle(element);
+      renderer.current?.setPalette({
+        accent: styles.getPropertyValue("--accent").trim() || "#366e64",
+        ink: styles.getPropertyValue("--ink").trim() || "#292e2b",
+        paper: styles.getPropertyValue("--paper").trim() || "#f7f5ef",
+      });
+      renderer.current?.draw(currentCamera.current);
+    };
+    const theme = new MutationObserver(updatePalette);
+    theme.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "class", "data-accent"],
+    });
+    updatePalette();
     const resize = new ResizeObserver(() =>
       renderer.current?.draw(currentCamera.current),
     );
@@ -278,6 +300,7 @@ export default function SkillSphere({
     renderer.current?.draw(currentCamera.current);
     return () => {
       resize.disconnect();
+      theme.disconnect();
       renderer.current?.dispose();
       renderer.current = null;
     };
@@ -351,7 +374,11 @@ export default function SkillSphere({
     const map = new Map<string, NodeState>();
     // finished 按时间倒序返回，先写入者更新；running 覆盖一切历史状态
     for (const item of activity.finished) {
-      if (item.state === "done" || item.state === "failed" || item.state === "running")
+      if (
+        item.state === "done" ||
+        item.state === "failed" ||
+        item.state === "running"
+      )
         map.set(item.id, item.state);
     }
     for (const id of activity.running) map.set(id, "running");
@@ -410,7 +437,10 @@ export default function SkillSphere({
         <header className="atlas-stage-heading">
           <div>
             <span className="atlas-kicker">XINXIN / CAPABILITY ATLAS</span>
-            <h2>小小星球，大有可为。</h2>
+            <h2>让能力，彼此连接。</h2>
+            <p className="atlas-stage-description">
+              一次灵感，在这里找到它的下一步。
+            </p>
           </div>
           <span className="atlas-live">
             <i />
@@ -527,7 +557,11 @@ export default function SkillSphere({
             if (hover) setHover("");
           }}
         >
-          <div className="atlas-stars" aria-hidden="true" />
+          <span className="atlas-orbit-caption" aria-hidden="true">
+            CONNECTED
+            <br />
+            POSSIBILITIES
+          </span>
           <canvas className="atlas-particles" ref={canvas} aria-hidden="true" />
           <div className="atlas-scale" aria-hidden="true">
             <i />
@@ -537,6 +571,16 @@ export default function SkillSphere({
             {(((camera.yaw * 180) / Math.PI) % 360).toFixed(1)}° /{" "}
             {((camera.pitch * 180) / Math.PI).toFixed(1)}°
           </p>
+        </div>
+        <div className="atlas-focus-note">
+          <span>{current ? "EXPLORING NOW" : "YOUR CAPABILITY UNIVERSE"}</span>
+          <strong>
+            {current?.name ||
+              `${graph?.skill_count ?? nodes.length} 个能力，等你探索。`}
+          </strong>
+          <small>
+            {current ? "已聚焦关联能力" : "点选节点，展开它的真实关系"}
+          </small>
         </div>
         <div className="atlas-controls" aria-label="星图显示控制">
           <div>
@@ -613,20 +657,14 @@ export default function SkillSphere({
             <Move size={12} />
             拖动探索 · 点选聚焦 · 滚轮缩放
           </span>
-          <span>
-            {surface ? "CAPABILITY SPHERE" : "技能节点视图"} /{" "}
-            {graph?.edge_count || edges.length} 项关系
-            {graph?.relation_types?.length
-              ? `（${graph.relation_types.map((type) => RELATION_LABEL[type] || type).join(" · ")}）`
-              : ""}
-          </span>
+          <span>{surface ? "SKILLNET / ATLAS" : "技能目录"}</span>
         </footer>
       </div>
       <aside className="atlas-directory">
         <header>
-          <span className="eyebrow">A LITTLE HELP, A LOT DONE.</span>
-          <h2>有事，尽管交给我。</h2>
-          <p>选一个能力，看看 Xinxin 能怎么帮你。</p>
+          <span className="eyebrow">FIND YOUR NEXT POSSIBILITY</span>
+          <h2>想做的，都有下一步。</h2>
+          <p>找到一种能力，让 Xinxin 陪你把想法做出来。</p>
         </header>
         <label className="atlas-search">
           <Search size={15} />
@@ -642,18 +680,20 @@ export default function SkillSphere({
           />
           <kbd>{filtered.length}</kbd>
         </label>
-        <div className="atlas-filters" aria-label="筛选技能领域">
-          {[{ name: "全部", count: nodes.length }, ...domains].map((item) => (
-            <button
-              key={item.name}
-              aria-pressed={domain === item.name}
-              onClick={() => setDomain(item.name)}
-            >
-              {item.name === "全部" ? "全部" : item.name}
-              <span>{item.count}</span>
-            </button>
-          ))}
-        </div>
+        <label className="atlas-domain-filter">
+          <span>探索领域</span>
+          <select
+            aria-label="筛选技能领域"
+            value={domain}
+            onChange={(event) => setDomain(event.target.value)}
+          >
+            {[{ name: "全部", count: nodes.length }, ...domains].map((item) => (
+              <option value={item.name} key={item.name}>
+                {item.name} · {item.count}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="atlas-directory-list" aria-label="技能列表">
           {filtered.slice(0, DIRECTORY_CAP).map((node) => (
             <button
@@ -736,7 +776,8 @@ export default function SkillSphere({
                 }}
               >
                 <Network size={13} />
-                {RELATION_LABEL[type] || type} {byId.get(target)?.name || target}
+                {RELATION_LABEL[type] || type}{" "}
+                {byId.get(target)?.name || target}
                 <ArrowUpRight size={12} />
               </button>
             ))}
@@ -752,7 +793,17 @@ export default function SkillSphere({
             </div>
           </section>
         ) : (
-          <p>选择一个能力后，在这里查看用途与工具。</p>
+          <section className="atlas-inspector atlas-inspector-empty">
+            <Network size={24} strokeWidth={1.1} />
+            <p className="eyebrow">ONE IDEA. MANY WAYS.</p>
+            <h3>一个想法，很多种可能。</h3>
+            <p>
+              从星球或目录中选择一个能力，
+              <br />
+              看看它的用途、工具与关联方法。
+            </p>
+            <span>选择 → 理解 → 和 Xinxin 开始</span>
+          </section>
         )}
         <footer className="atlas-model-status">
           <i />

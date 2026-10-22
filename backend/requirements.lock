@@ -54,3 +54,9 @@ httpcore2==2.13.1
 httpx2==2.13.1
 tqdm==4.70.1
 truststore==0.10.5
+# Offline Chinese/English OCR (models bundled by RapidOCR) and PDF page rendering.
+rapidocr-onnxruntime==1.4.4
+pypdfium2==5.14.0
+opencv-python==5.0.0.93
+pyclipper==1.4.0
+shapely==2.2.0

@@ -43,7 +43,7 @@ class UploadGuard:
                 )(scope, receive, send)
             if length < 0 or length > MAX_BODY_BYTES:
                 return await JSONResponse(
-                    {"detail": "文件超过 64 MB 上传上限"}, status_code=413
+                    {"detail": "文件超过 256 MB 上传上限"}, status_code=413
                 )(scope, receive, send)
         total, exceeded, replied = 0, False, False
 
@@ -66,7 +66,7 @@ class UploadGuard:
                 if not replied:
                     replied = True
                     await JSONResponse(
-                        {"detail": "文件超过 64 MB 上传上限"}, status_code=413
+                        {"detail": "文件超过 256 MB 上传上限"}, status_code=413
                     )(scope, receive, send)
                 return
             await send(message)

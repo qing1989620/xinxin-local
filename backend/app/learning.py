@@ -17,9 +17,10 @@ from pathlib import Path
 from .music import atmosphere
 from .persona import IDENTITY
 from .store import clean_text, uid
+from .learning_quality import TOC_ROW
 
 MAX_CHAPTER_CHARS = 24_000
-MAX_CHAPTERS = 60
+MAX_CHAPTERS = 500
 MIN_SPLIT_CHARS = 40
 MIN_CHAPTER_CHARS = 40
 TUTOR_HISTORY = 6
@@ -31,7 +32,7 @@ HEADING = re.compile(
     r"第[一二三四五六七八九十百零〇\d]{1,4}[章节讲篇部](?:[\s:：、.．·—-].*)?"
     r"|(?:Chapter|CHAPTER)\s+\d{1,4}(?:[\s:：.．—-].*)?"
     r"|(?:序言|前言|目录|绪论|导论|附录|后记|结语|参考文献)(?:[\s:：、.．—-].*)?"
-    r"|\d{1,2}(?:\.\d{1,2}){0,2}[\s、.．]\s*\S.{0,38}"
+    r"|\d{1,2}(?:\.\d{1,2}){1,2}\s+[^。？！?！=]{1,38}"
     r")\s*$"
 )
 
@@ -113,7 +114,7 @@ def split_chapters(text: str) -> list[dict]:
 
     for line in lines:
         stripped = line.strip()
-        if stripped and len(stripped) <= 48 and HEADING.match(stripped):
+        if stripped and len(stripped) <= 48 and not TOC_ROW.match(stripped) and HEADING.match(stripped):
             so_far = "\n".join(buffer).strip()
             if not so_far:
                 # 开头第一行就是标题：直接当成章节名，不要造一个空章
@@ -146,7 +147,7 @@ def split_chapters(text: str) -> list[dict]:
                 title += f" · {offset // MAX_CHAPTER_CHARS + 1}"
             complete.append({"title": title, "content": content[offset:offset + MAX_CHAPTER_CHARS]})
     if len(complete) > MAX_CHAPTERS:
-        raise ValueError("资料超过 60 个章节 / 分段，请拆成数份上传，避免正文丢失")
+        raise ValueError(f"资料超过 {MAX_CHAPTERS} 个章节 / 分段，请拆成数份上传，避免正文丢失")
     return complete
 
 
@@ -159,6 +160,10 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
         raise ValueError("没有识别到可用的章节内容")
     ident = uid()
     now = int(time.time())
+    extraction = store.one("SELECT data FROM file_extractions WHERE file_id=?", (file_row.get("id"),))
+    metadata = json.loads(extraction["data"]) if extraction else {}
+    pages = int(metadata.get("pages", file_row.get("pages") or 0))
+    metadata.pop("page_spans", None)
     book_title = clean_text(title or Path(file_row["name"]).stem or "未命名书本")[:120]
     with store.connect(write=True) as db:
         db.execute(
@@ -170,7 +175,7 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
                 book_title,
                 "",
                 clean_text(subject[:40]),
-                int(file_row.get("pages") or 0),
+                pages,
                 len(content),
                 "ready",
                 now,
@@ -183,6 +188,7 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
                 " VALUES(?,?,?,?,?,?,?,?)",
                 (uid(), ident, index, chapter["title"], None, None, chapter["content"], now),
             )
+        db.execute("INSERT INTO learning_book_extractions VALUES(?,?)", (ident, json.dumps(metadata, ensure_ascii=False)))
     return get_book(store, ident)
 
 
@@ -196,13 +202,18 @@ def get_book(store, book_id: str) -> dict:
         (book_id,),
     )
     questions = store.one(
-        "SELECT count(*) AS total FROM questions WHERE book_id=?", (book_id,)
+        "SELECT count(*) AS total FROM questions WHERE book_id=? AND review!='excluded'", (book_id,)
     )
     answered = store.one(
         "SELECT count(*) AS total, count(DISTINCT question_id) AS unique_total, sum(CASE WHEN status='correct' THEN 1 ELSE 0 END) AS ok"
         " FROM quiz_answers WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)",
         (book_id,),
     )
+    extraction = store.one("SELECT data FROM learning_book_extractions WHERE book_id=?", (book_id,))
+    if not extraction:
+        extraction = store.one("SELECT data FROM file_extractions WHERE file_id=?", (row["file_id"],))
+    metadata = json.loads(extraction["data"]) if extraction else {}
+    metadata.pop("page_spans", None)
     return {
         "id": row["id"],
         "file_id": row["file_id"],
@@ -214,6 +225,7 @@ def get_book(store, book_id: str) -> dict:
         "status": row["status"],
         "created": row["created"],
         "updated": row["updated"],
+        "extraction": metadata,
         "chapters": [dict(item) for item in chapters],
         "chapter_count": len(chapters),
         "question_count": int(questions["total"] or 0),
@@ -245,6 +257,10 @@ def delete_book(store, book_id: str) -> dict:
             db.execute(f"DELETE FROM {table} WHERE question_id IN (SELECT id FROM questions WHERE book_id=?)", (book_id,))
         db.execute("DELETE FROM quiz_answers WHERE session_id IN (SELECT id FROM quiz_sessions WHERE book_id=?)", (book_id,))
         db.execute("DELETE FROM learning_generation_items WHERE job_id IN (SELECT id FROM learning_generations WHERE book_id=?)", (book_id,))
+        db.execute("DELETE FROM learning_source_analysis WHERE source_id IN (SELECT id FROM learning_sources WHERE book_id=?)", (book_id,))
+        db.execute("DELETE FROM learning_source_edits WHERE source_id IN (SELECT id FROM learning_sources WHERE book_id=?)", (book_id,))
+        db.execute("DELETE FROM learning_book_extractions WHERE book_id=?", (book_id,))
+        db.execute("UPDATE learning_imports SET book_id=NULL WHERE book_id=?", (book_id,))
         for table in ("quiz_sessions", "questions", "learning_generations", "learning_sources", "book_chapters"):
             db.execute(f"DELETE FROM {table} WHERE book_id=?", (book_id,))
         db.execute("DELETE FROM books WHERE id=?", (book_id,))
@@ -269,129 +285,14 @@ def _clean_stem(text: str) -> str:
     return re.sub(r"\s+", " ", clean_text(str(text or ""))).strip()
 
 
-def _hash(stem: str, kind: str) -> str:
-    return hashlib.sha256((kind + "|" + _clean_stem(stem)).encode("utf-8")).hexdigest()
+def _hash(stem: str, kind: str, book_id: str = "") -> str:
+    return hashlib.sha256((book_id + "|" + kind + "|" + _clean_stem(stem)).encode("utf-8")).hexdigest()
 
 
 def _normalize_answer(value: str) -> str:
     text = str(value or "").strip().lower()
     text = re.sub(r"[\s,，。；;：:、．.“”\"'（）()《》\[\]]", "", text)
     return text
-
-
-async def generate_questions(
-    store, gateway, book: dict, chapter_row: dict, count: int = 5
-) -> dict:
-    if gateway is None:
-        raise ValueError("还没有配置模型，先在设置里填模型密钥")
-    title = chapter_row.get("title") or "正文"
-    content = (chapter_row.get("content") or "")[:12000]
-    if len(content) < 80:
-        raise ValueError("这一章太短，出不出题来")
-    message = await gateway.apredict(
-        [
-            {"role": "system", "content": QUESTION_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "subject": book.get("subject") or book.get("title"),
-                        "chapter": title,
-                        "count": count,
-                        "text": content,
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ],
-        stream=False,
-        temperature=0.4,
-    )
-    rows = _json_array(str(message.get("content") or ""))
-    if not rows:
-        raise ValueError("模型这次没返回可解析的题目，再点一次试试")
-    created, skipped = [], 0
-    for row in rows[: max(1, count) * 2]:
-        kind = str(row.get("kind") or "").strip()
-        stem = _clean_stem(row.get("stem"))
-        if kind not in KINDS or len(stem) < 4:
-            skipped += 1
-            continue
-        answer = row.get("answer")
-        if kind == "single":
-            options = row.get("options") or []
-            if not isinstance(options, list) or len(options) != 4 or not all(isinstance(item, dict) for item in options):
-                skipped += 1
-                continue
-            options = [
-                {
-                    "key": str(item.get("key") or "ABCD"[index]).upper()[:1],
-                    "text": _clean_stem(item.get("text"))[:400],
-                }
-                for index, item in enumerate(options)
-            ]
-            answer = str(answer or "").strip().upper()[:1]
-            if answer not in {"A", "B", "C", "D"}:
-                skipped += 1
-                continue
-            stored_answer = answer
-        elif kind == "fill":
-            if isinstance(answer, list):
-                blanks = [_clean_stem(item) for item in answer if _clean_stem(item)]
-            else:
-                blanks = [part for part in re.split(r"[;；]", str(answer or "")) if part.strip()]
-            if not blanks:
-                skipped += 1
-                continue
-            stored_answer = json.dumps(blanks, ensure_ascii=False)
-            options = []
-        else:
-            stored_answer = str(answer or "").strip()[:2000]
-            if len(stored_answer) < 2:
-                skipped += 1
-                continue
-            options = []
-
-        digest = _hash(stem, kind)
-        if store.one("SELECT id FROM questions WHERE hash=?", (digest,)):
-            skipped += 1
-            continue
-        ident = uid()
-        tags = row.get("tags") if isinstance(row.get("tags"), list) else []
-        tags = [str(tag)[:24] for tag in tags[:3] if str(tag).strip()]
-        difficulty = row.get("difficulty")
-        difficulty = 2 if difficulty not in (1, 2, 3) else int(difficulty)
-        with store.connect(write=True) as db:
-            if not db.execute("SELECT id FROM books WHERE id=?", (book["id"],)).fetchone():
-                raise ValueError("书本已被删除，停止出题")
-            inserted = db.execute(
-                "INSERT OR IGNORE INTO questions(id,book_id,chapter_id,hash,kind,stem,options,answer,"
-                "explanation,tags,difficulty,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    ident,
-                    book["id"],
-                    chapter_row["id"],
-                    digest,
-                    kind,
-                    stem[:4000],
-                    clean_text(json.dumps(options, ensure_ascii=False)),
-                    clean_text(stored_answer),
-                    clean_text(str(row.get("explanation") or ""))[:6000],
-                    clean_text(json.dumps(tags, ensure_ascii=False)),
-                    difficulty,
-                    int(time.time()),
-                ),
-            )
-            if not inserted.rowcount:
-                skipped += 1
-                continue
-        created.append(question_row(store, ident))
-        if len(created) >= count:
-            break
-    store.execute(
-        "UPDATE books SET updated=? WHERE id=?", (int(time.time()), book["id"])
-    )
-    return {"created": created, "skipped": skipped}
 
 
 def question_row(store, question_id: str) -> dict:
@@ -412,6 +313,8 @@ def format_question(row: dict, reveal: bool = True) -> dict:
         "tags": json.loads(row["tags"] or "[]"),
         "difficulty": row["difficulty"],
         "source_id": row.get("source_id"),
+        "origin": row.get("origin", "legacy"),
+        "review": row.get("review", "legacy"),
         "source_quote": row.get("source_quote", "") if reveal else "",
         "created": row["created"],
     }
@@ -433,7 +336,7 @@ def list_questions(store, book_id: str = "", chapter_id: str = "") -> list[dict]
         )
     else:
         rows = store.all("SELECT * FROM questions ORDER BY created DESC LIMIT 200")
-    return [format_question(row) for row in rows]
+    return [format_question(row) for row in rows if row.get("review") != "excluded"]
 
 
 # ----------------------------------------------------------------------
@@ -454,6 +357,7 @@ def start_quiz(
         )
     else:
         rows = store.all("SELECT * FROM questions ORDER BY created DESC LIMIT 100")
+    rows = [row for row in rows if row.get("review") != "excluded"]
     if difficulty in (1, 2, 3):
         rows = [row for row in rows if row["difficulty"] == difficulty]
     if mode == "mistakes":
@@ -773,7 +677,7 @@ def stats(store) -> dict:
     ok = int(totals["ok"] or 0)
     return {
         "books": len(books),
-        "questions": int(store.one("SELECT count(*) AS c FROM questions")["c"] or 0),
+        "questions": int(store.one("SELECT count(*) AS c FROM questions WHERE review!='excluded'")["c"] or 0),
         "answered": total,
         "correct": ok,
         "accuracy": round(ok / total, 4) if total else 0,

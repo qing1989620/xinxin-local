@@ -169,9 +169,9 @@ describe("skill sphere page", () => {
     expect(html).toContain("能力星图");
     expect(html).toContain("SkillNet 语料 1881 · 种子 76 · 社区 1769 · 演化 36");
     expect(html).toContain("4 个能力 · 2 项关系");
-    expect(html).toContain("（依赖 · 相似）");
-    // SSR 下渲染器未创建，页脚如实显示节点视图；关系计数来自目录声明
-    expect(html).toContain("技能节点视图 / 2 项关系");
+    // SSR has a usable directory even before the canvas renderer is mounted.
+    expect(html).toContain("技能目录");
+    expect(html).toContain('aria-label="筛选技能领域"');
     // 目录列出全部节点与领域筛选，含演化代际标记
     expect(html).toContain("演化 · G3");
     expect(html).toContain("<kbd>4</kbd>");

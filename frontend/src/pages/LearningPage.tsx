@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowDown,
@@ -12,7 +12,15 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { post, remove, upload, type FileItem } from "../api";
+import {
+  acknowledgeRequest,
+  api,
+  post,
+  remove,
+  stableRequestKey,
+  upload,
+  type FileItem,
+} from "../api";
 import {
   Dialog,
   Empty,
@@ -23,7 +31,7 @@ import {
   date,
 } from "../ui";
 import { FunctionPlot } from "../components/FunctionPlot";
-import { wordCount, type StudyBook } from "../learning";
+import { wordCount, type StudyBook, type ImportJob } from "../learning";
 
 type Stats = {
   books: number;
@@ -54,6 +62,13 @@ export default function LearningPage() {
   const books = useResource<{ books: StudyBook[] }>("/learning/books");
   const stats = useResource<Stats>("/learning/stats");
   const files = useResource<FileItem[]>("/files");
+  const lastImport = useResource<{ job: ImportJob | null }>(
+    "/learning/imports",
+  );
+  const [importJob, setImportJob] = useState<ImportJob | null>(null);
+  const initiatedImport = useRef("");
+  const [importError, setImportError] = useState("");
+  const [uploadPercent, setUploadPercent] = useState(0);
   const [adding, setAdding] = useState(false);
   const [fileId, setFileId] = useState("");
   const [subject, setSubject] = useState("");
@@ -63,6 +78,52 @@ export default function LearningPage() {
   const [expr, setExpr] = useState("y = sin(x)\ny = 0.5x + 1");
   const fileInput = useRef<HTMLInputElement>(null);
   const submitBusy = useRef(false);
+  const preparing = Boolean(
+    importJob && ["queued", "running", "cancelling"].includes(importJob.status),
+  );
+  useEffect(() => {
+    if (lastImport.data) setImportJob(lastImport.data.job);
+  }, [lastImport.data]);
+  useEffect(() => {
+    if (!importJob || !preparing) return;
+    const controller = new AbortController();
+    let pending = false;
+    const sync = async () => {
+      if (pending || controller.signal.aborted) return;
+      pending = true;
+      try {
+        const value = await api<{ job: ImportJob }>(
+          `/learning/imports/${importJob.id}`,
+          { signal: controller.signal },
+        );
+        if (!controller.signal.aborted) {
+          setImportJob(value.job);
+          setImportError("");
+        }
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setImportError((error as Error).message);
+      } finally {
+        pending = false;
+      }
+    };
+    void sync();
+    const timer = setInterval(() => void sync(), 1200);
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+    };
+  }, [importJob?.id, preparing]);
+  useEffect(() => {
+    if (
+      importJob?.status === "completed" &&
+      importJob.book_id &&
+      initiatedImport.current === importJob.id
+    ) {
+      initiatedImport.current = "";
+      navigate(`/learning/books/${importJob.book_id}`);
+    }
+  }, [importJob, navigate]);
   const candidates = useMemo(() => {
     const items = (files.data || []).filter((file) =>
       BOOK_EXT.some((ext) => file.name.toLowerCase().endsWith(ext)),
@@ -97,15 +158,23 @@ export default function LearningPage() {
     submitBusy.current = true;
     setBusy(true);
     try {
-      const created = await post<{ book: StudyBook }>("/learning/books", {
+      const payload = {
         file_id: fileId,
+        title: "",
         subject,
+      };
+      const requestKey = await stableRequestKey("study-import", payload);
+      const created = await post<{ job: ImportJob }>("/learning/imports", {
+        ...payload,
+        request_key: requestKey,
       });
+      acknowledgeRequest("study-import");
+      initiatedImport.current = created.job.id;
+      setImportJob(created.job);
       setAdding(false);
       setFileId("");
       setSubject("");
-      toast(`《${created.book.title}》已加入书架`);
-      navigate(`/learning/books/${created.book.id}`);
+      toast("资料识别已开始，可在下方查看逐页进度");
     } catch (error) {
       toast((error as Error).message, true);
     } finally {
@@ -120,8 +189,12 @@ export default function LearningPage() {
       return;
     }
     setUploading(true);
+    setUploadPercent(0);
     try {
-      const result = await upload(file);
+      const result = await upload(file, {
+        onProgress: (sent, total) =>
+          setUploadPercent(Math.round((sent / total) * 100)),
+      });
       setUploaded(result);
       setFileId(result.id);
       files.reload();
@@ -233,6 +306,66 @@ export default function LearningPage() {
         ))}
       </div>
       {stats.error && <ErrorState message={stats.error} retry={stats.reload} />}
+      {lastImport.error && (
+        <ErrorState message={lastImport.error} retry={lastImport.reload} />
+      )}
+      {importJob && (
+        <section
+          className="study-import-progress"
+          aria-label="资料识别进度"
+          aria-busy={preparing}
+        >
+          <div>
+            <p className="eyebrow">MATERIAL PREPARATION</p>
+            <h2>
+              {preparing
+                ? "正在读懂这份资料。"
+                : importJob.status === "completed"
+                  ? "资料已准备好。"
+                  : "资料识别尚未完成。"}
+            </h2>
+            <p role="status">
+              {importJob.progress
+                ? `已处理 ${importJob.progress.page} / ${importJob.progress.total} 页 · ${importJob.progress.method === "ocr" ? "本地 OCR" : "文字提取"}`
+                : preparing
+                  ? "正在检查正文与扫描页面…"
+                  : "可重新选择资料开始识别"}
+            </p>
+            {(importError || importJob.error) && (
+              <p className="study-import-error" role="alert">
+                {importError || importJob.error}
+              </p>
+            )}
+          </div>
+          <div className="study-header-actions">
+            {preparing && (
+              <button
+                className="button secondary"
+                disabled={importJob.status === "cancelling"}
+                onClick={() =>
+                  void post(`/runs/${importJob.run_id}/cancel`, {})
+                    .then(() =>
+                      setImportJob((value) =>
+                        value ? { ...value, status: "cancelling" } : null,
+                      ),
+                    )
+                    .catch((error) => toast(error.message, true))
+                }
+              >
+                停止识别
+              </button>
+            )}
+            {importJob.book_id && (
+              <Link
+                className="button primary"
+                to={`/learning/books/${importJob.book_id}`}
+              >
+                打开资料 <ArrowRight size={15} />
+              </Link>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="study-shelf" id="study-shelf">
         <div className="study-section-heading">
@@ -446,6 +579,7 @@ export default function LearningPage() {
       {adding && (
         <Dialog
           title="加入书架"
+          busy={busy || uploading}
           onClose={() => {
             if (!busy && !uploading) setAdding(false);
           }}
@@ -475,8 +609,12 @@ export default function LearningPage() {
             >
               <FileUp size={19} />
               <span>
-                {uploading ? "正在上传并提取正文…" : "上传新的学习资料"}
-                <small>PDF / Word / 文本 · 单个最多 64 MB</small>
+                {uploading
+                  ? uploadPercent < 100
+                    ? `正在上传 ${uploadPercent}%…`
+                    : "上传完成，正在检查正文…"
+                  : "上传新的学习资料"}
+                <small>PDF / Word / 文本 · 单个最多 256 MB</small>
               </span>
               <Plus size={16} />
             </button>
@@ -511,7 +649,8 @@ export default function LearningPage() {
               />
             </label>
             <p className="hint">
-              扫描版 PDF 需要先做 OCR；没有可提取正文时会提示更换资料。
+              扫描页面会在本机进行
+              OCR。识别过程可查看进度并停止；公式和图示仍需对照原文件核对。
             </p>
             <div className="dialog-actions">
               <button
@@ -524,9 +663,15 @@ export default function LearningPage() {
               </button>
               <button
                 className="button primary"
-                disabled={busy || uploading || !fileId}
+                disabled={
+                  busy || uploading || preparing || !fileId || !lastImport.data
+                }
               >
-                {busy ? "正在分章…" : "加入并开始学习"}
+                {busy
+                  ? "正在开始识别…"
+                  : preparing
+                    ? "请等待当前资料识别"
+                    : "加入并开始学习"}
                 <ArrowRight size={15} />
               </button>
             </div>

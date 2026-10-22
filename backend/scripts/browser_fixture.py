@@ -36,12 +36,23 @@ def create_fixture():
     async def respond(_request):
         body = json.loads(_request.content)
         messages = body.get("messages", [])
-        if messages and "学习工作室协议 v1" in str(messages[0].get("content")):
+        if messages and "学习材料分析协议 v2" in str(messages[0].get("content")):
+            payload = json.loads(messages[1]["content"])
+            value = {"type": "knowledge", "summary": "本段材料说明导数刻画瞬时变化率，并以切线斜率解释其几何意义。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
+            return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
+        if messages and "学习出题复核协议 v2" in str(messages[0].get("content")):
+            payload = json.loads(messages[1]["content"])
+            value = {"reviews": [{"index": index, "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
+            if any("合成审题缺失" in row.get("stem", "") for row in payload["questions"]):
+                value = {"reviews": []}
+            return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
+        if messages and "学习工作室协议 v2" in str(messages[0].get("content")):
             payload = json.loads(messages[1]["content"])
             await asyncio.sleep(2 if "合成延迟" in payload["focus"] else .15)
             rows = []
             signature = hashlib.sha256(payload["text"].encode()).hexdigest()[:8]
-            for index in range(payload["count"]):
+            offset = len(payload["avoid_stems"])
+            for index in range(offset, offset + payload["count"]):
                 kind = payload["kinds"][index % len(payload["kinds"])]
                 row = {"kind": kind, "stem": f"合成练习 {signature}-{index + 1}：导数的几何意义是什么？",
                        "answer": "A", "options": [{"key": key, "text": text} for key, text in zip("ABCD", ["切线斜率", "面积", "弧长", "周长"])],
@@ -53,6 +64,12 @@ def create_fixture():
                     row["answer"] = "导数的几何意义为切线斜率。"
                 if "合成无效" in payload["focus"]:
                     row["source_quote"] = "这段话没有出现在原文，不能作为来源依据。"
+                if "合成目录题" in payload["focus"]:
+                    row["stem"] = "第三章在第几页？"
+                if "合成审题拒绝" in payload["focus"]:
+                    row["answer"] = "B"
+                if "合成审题缺失" in payload["focus"]:
+                    row["stem"] = "合成审题缺失：" + row["stem"]
                 rows.append(row)
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(rows, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
         latest_user = next((index for index in range(len(messages) - 1, -1, -1) if messages[index].get("role") == "user"), -1)

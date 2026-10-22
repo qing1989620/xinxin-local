@@ -168,7 +168,7 @@ export default function FilesPage() {
         <UploadCloud size={24} strokeWidth={1.3} />
         <div>
           <strong>把文件放在这里</strong>
-          <p>支持文档、图片、表格、压缩包等原文件 · 单个最多 64 MB</p>
+          <p>支持文档、图片、表格、压缩包等原文件 · 单个最多 256 MB</p>
         </div>
         <button className="text-button" onClick={() => picker.current?.click()}>
           选择文件 <ArrowUpRight size={16} />

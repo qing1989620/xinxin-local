@@ -21,15 +21,6 @@ export type SphereEdge = { source: string; target: string; type: string };
 export type NodeState = "running" | "done" | "failed";
 
 const TAU = Math.PI * 2;
-const PALETTE = [
-  "#98e6cf",
-  "#8bc9ee",
-  "#dfc18c",
-  "#b7a9e7",
-  "#79d1d4",
-  "#deab99",
-  "#b8d494",
-];
 const EDGE_STYLE: Record<
   string,
   { stroke: string; width: number; dash: number[]; far: boolean }
@@ -38,19 +29,6 @@ const EDGE_STYLE: Record<
   compose_with: { stroke: "#8bbce5", width: 0.7, dash: [4, 4], far: false },
   similar_to: { stroke: "#8bbce5", width: 0.55, dash: [1, 5], far: true },
 };
-const STATE_COLOR: Record<NodeState, string> = {
-  running: "#ffe0a0",
-  done: "#c8efd2",
-  failed: "#ffab91",
-};
-
-const hash = (value: string) => {
-  let h = 2166136261;
-  for (const char of String(value)) h = Math.imul(h ^ char.charCodeAt(0), 16777619) >>> 0;
-  return h;
-};
-export const domainColor = (domain: string) => PALETTE[hash(domain) % PALETTE.length];
-
 const ARC_STEPS = 16;
 
 function layout(nodes: SphereNode[]) {
@@ -63,7 +41,7 @@ function layout(nodes: SphereNode[]) {
   );
   return sorted.map((node, index) => {
     const point = position(index, sorted.length);
-    return { ...node, point, color: domainColor(node.domain) };
+    return { ...node, point };
   });
 }
 
@@ -74,15 +52,25 @@ function arcPoints(a: Point3, b: Point3): Point3[] {
   return Array.from({ length: ARC_STEPS + 1 }, (_, i) => {
     const t = i / ARC_STEPS;
     if (Math.abs(sine) < 1e-5) {
-      return { x: a.x * (1 - t) + b.x * t, y: a.y * (1 - t) + b.y * t, z: a.z * (1 - t) + b.z * t };
+      return {
+        x: a.x * (1 - t) + b.x * t,
+        y: a.y * (1 - t) + b.y * t,
+        z: a.z * (1 - t) + b.z * t,
+      };
     }
     const left = Math.sin((1 - t) * theta) / sine;
     const right = Math.sin(t * theta) / sine;
-    return { x: a.x * left + b.x * right, y: a.y * left + b.y * right, z: a.z * left + b.z * right };
+    return {
+      x: a.x * left + b.x * right,
+      y: a.y * left + b.y * right,
+      z: a.z * left + b.z * right,
+    };
   });
 }
 
-type Positioned = ReturnType<typeof layout>[number] & { screen?: { x: number; y: number; z: number } };
+type Positioned = ReturnType<typeof layout>[number] & {
+  screen?: { x: number; y: number; z: number };
+};
 
 export function createSphereRenderer(canvas: HTMLCanvasElement) {
   const ctx2d = canvas.getContext("2d", { alpha: true });
@@ -92,7 +80,12 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
   let disposed = false;
   let nodes: Positioned[] = [];
   const byId = new Map<string, Positioned>();
-  let edges: { source: string; target: string; type: string; path: Point3[] }[] = [];
+  let edges: {
+    source: string;
+    target: string;
+    type: string;
+    path: Point3[];
+  }[] = [];
   let filter: (node: SphereNode) => boolean = () => true;
   let focusId: string | null = null;
   let states = new Map<string, NodeState>();
@@ -100,12 +93,18 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
   let showRelations = true;
   let width = 0;
   let height = 0;
+  let palette = { accent: "#366e64", ink: "#292e2b", paper: "#f7f5ef" };
 
   const project = (point: Point3, camera: Camera) => {
     const p = rotate(point, camera);
     const radius = Math.min(width, height) * 0.36 * camera.zoom;
     const k = 3.4 / (3.4 - p.z);
-    return { x: width / 2 + p.x * radius * k, y: height / 2 + p.y * radius * k, z: p.z, k };
+    return {
+      x: width / 2 + p.x * radius * k,
+      y: height / 2 + p.y * radius * k,
+      z: p.z,
+      k,
+    };
   };
 
   function resize() {
@@ -114,8 +113,10 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
     width = rect.width;
     height = rect.height;
     if (!width || !height) return;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
+    const nextWidth = Math.round(width * dpr),
+      nextHeight = Math.round(height * dpr);
+    if (canvas.width !== nextWidth) canvas.width = nextWidth;
+    if (canvas.height !== nextHeight) canvas.height = nextHeight;
   }
 
   function draw(camera: Camera) {
@@ -125,17 +126,6 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
     const scale = canvas.width / width;
     context.setTransform(scale, 0, 0, scale, 0, 0);
     context.clearRect(0, 0, width, height);
-    const radius = Math.min(width, height) * 0.36 * camera.zoom;
-    const cx = width / 2;
-    const cy = height / 2;
-
-    // 球体辉光
-    const glow = context.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius * 1.5);
-    glow.addColorStop(0, "rgba(103,203,181,0.05)");
-    glow.addColorStop(0.65, "rgba(126,213,206,0.09)");
-    glow.addColorStop(1, "rgba(103,203,181,0)");
-    context.fillStyle = glow;
-    context.fillRect(0, 0, width, height);
 
     // 经纬线：4 条纬线 + 3 条经线，稀疏视图下也提供深度
     context.lineWidth = 0.7;
@@ -150,15 +140,21 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
           p = { x: r * Math.cos(a), y: lat, z: r * Math.sin(a) };
         } else {
           const b = ((ring - 4) * Math.PI) / 3;
-          p = { x: Math.cos(a) * Math.cos(b), y: Math.sin(a), z: Math.cos(a) * Math.sin(b) };
+          p = {
+            x: Math.cos(a) * Math.cos(b),
+            y: Math.sin(a),
+            z: Math.cos(a) * Math.sin(b),
+          };
         }
         const q = project(p, camera);
         if (i) context.lineTo(q.x, q.y);
         else context.moveTo(q.x, q.y);
       }
-      context.strokeStyle = "rgba(136,201,197,0.11)";
+      context.globalAlpha = 0.12;
+      context.strokeStyle = palette.accent;
       context.stroke();
     }
+    context.globalAlpha = 1;
 
     // 焦点邻域
     const focus = focusId ? byId.get(focusId) : undefined;
@@ -177,11 +173,18 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
     if (showRelations) {
       const visible = nodes.filter((node) => filter(node));
       const visibleIds = new Set(visible.map((node) => node.id));
-      for (const edge of edges) {
+      for (const [edgeIndex, edge] of edges.entries()) {
         const style = EDGE_STYLE[edge.type];
         if (!style) continue;
-        if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
+        if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target))
+          continue;
         const hot = neighbors.has(edge.source) && neighbors.has(edge.target);
+        // A quiet overview; selecting a skill reveals its actual neighborhood.
+        if (
+          !hot &&
+          (focus || edgeIndex % Math.max(1, Math.ceil(edges.length / 60)) !== 0)
+        )
+          continue;
         if (style.far && !hot) continue;
         context.beginPath();
         let previous: { x: number; y: number } | null = null;
@@ -197,14 +200,12 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
         }
         context.setLineDash(style.dash);
         context.lineWidth = hot ? style.width + 0.6 : style.width;
-        context.strokeStyle = hot
-          ? "rgba(185,239,205,0.68)"
-          : edge.type === "depend_on"
-            ? "rgba(134,216,187,0.16)"
-            : "rgba(139,188,229,0.12)";
+        context.globalAlpha = hot ? 0.62 : 0.12;
+        context.strokeStyle = palette.accent;
         context.stroke();
         context.setLineDash([]);
       }
+      context.globalAlpha = 1;
     }
 
     // 节点（按深度排序绘制）
@@ -217,12 +218,16 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
       const hot = active(node);
       const dim = dimming && !hot;
       const state = states.get(node.id);
-      const color = state ? STATE_COLOR[state] : node.color;
+      const color = state
+        ? state === "failed"
+          ? "#994b3f"
+          : palette.accent
+        : palette.accent;
       const depth = (screen.z + 1) / 2;
-      context.globalAlpha = (0.16 + 0.84 * depth) * (dim ? 0.16 : 1);
-      const r = (hot ? 4.2 : 1.65) * screen.k;
+      context.globalAlpha = (0.12 + 0.7 * depth) * (dim ? 0.24 : 1);
+      const r = (hot ? 3.8 : 1.4) * screen.k;
       if (hot) {
-        context.shadowBlur = 15;
+        context.shadowBlur = 8;
         context.shadowColor = color;
       }
       context.fillStyle = color;
@@ -232,7 +237,7 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
       context.shadowBlur = 0;
       if (node.generation || state || node.id === focusId) {
         context.lineWidth = node.id === focusId ? 1.5 : 1;
-        context.strokeStyle = state ? color : "#ddbc87";
+        context.strokeStyle = color;
         context.beginPath();
         context.arc(screen.x, screen.y, r + 3, 0, TAU);
         context.stroke();
@@ -248,23 +253,31 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
         .filter((p) => p.screen.z > 0 && (active(p.node) || camera.zoom > 1.5))
         .sort(
           (a, b) =>
-            Number(active(b.node)) - Number(active(a.node)) || b.screen.z - a.screen.z,
+            Number(active(b.node)) - Number(active(a.node)) ||
+            b.screen.z - a.screen.z,
         );
       if (!focusId && !states.size && camera.zoom < 1.5) {
         const domains = new Map<string, (typeof points)[number]>();
         for (const p of points) {
-          if (p.screen.z > 0.2 && (!domains.has(p.node.domain) || p.screen.z > domains.get(p.node.domain)!.screen.z)) {
+          if (
+            p.screen.z > 0.2 &&
+            (!domains.has(p.node.domain) ||
+              p.screen.z > domains.get(p.node.domain)!.screen.z)
+          ) {
             domains.set(p.node.domain, p);
           }
         }
-        for (const p of domains.values()) candidates.push({ ...p, domainLabel: true } as never);
+        for (const p of domains.values())
+          candidates.push({ ...p, domainLabel: true } as never);
       }
       for (const entry of candidates) {
-        if (count >= 14) break;
+        if (count >= (focusId ? 8 : 5)) break;
         const p = entry as (typeof points)[number] & { domainLabel?: boolean };
         const label = p.domainLabel
           ? p.node.domain
-          : String(p.node.name || p.node.id).replace(/^gh-/, "").slice(0, 38);
+          : String(p.node.name || p.node.id)
+              .replace(/^gh-/, "")
+              .slice(0, 38);
         const x = p.screen.x + 8;
         const y = p.screen.y - 8;
         context.font = "11px 'Microsoft YaHei', sans-serif";
@@ -287,15 +300,18 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
         }
         occupied.push(rect);
         count++;
-        context.fillStyle = "rgba(9,35,48,0.87)";
+        context.fillStyle = palette.paper;
         context.fillRect(rect.x, rect.y, rect.w, rect.h);
-        context.fillStyle = p.domainLabel ? "#a4c7c5" : "#e0f5e8";
+        context.fillStyle = p.domainLabel ? palette.accent : palette.ink;
         context.fillText(label, x, y);
       }
     }
   }
 
   return {
+    setPalette(next: typeof palette) {
+      palette = next;
+    },
     setData(nextNodes: SphereNode[], nextEdges: SphereEdge[]) {
       nodes = layout(nextNodes);
       byId.clear();
@@ -304,7 +320,10 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
         .filter((edge) => byId.has(edge.source) && byId.has(edge.target))
         .map((edge) => ({
           ...edge,
-          path: arcPoints(byId.get(edge.source)!.point, byId.get(edge.target)!.point),
+          path: arcPoints(
+            byId.get(edge.source)!.point,
+            byId.get(edge.target)!.point,
+          ),
         }));
     },
     setFilter(next: (node: SphereNode) => boolean) {
@@ -333,7 +352,8 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
         const p = project(node.point, camera);
         if (p.z < -0.15) continue;
         const d = Math.hypot(p.x - x, p.y - y);
-        const radius = (focusId === node.id || neighborsOf(node.id).has(node.id) ? 4.2 : 1.65) * p.k;
+        const radius =
+          (focusId === node.id || states.has(node.id) ? 3.8 : 1.4) * p.k;
         if (d < Math.max(9, radius + 4)) hits.push({ node, z: p.z, d });
       }
       if (!hits.length) return null;
@@ -345,15 +365,6 @@ export function createSphereRenderer(canvas: HTMLCanvasElement) {
       disposed = true;
     },
   };
-
-  function neighborsOf(id: string) {
-    const set = new Set<string>([id]);
-    for (const edge of edges) {
-      if (edge.source === id) set.add(edge.target);
-      if (edge.target === id) set.add(edge.source);
-    }
-    return set;
-  }
 }
 
 export type SphereRenderer = ReturnType<typeof createSphereRenderer>;

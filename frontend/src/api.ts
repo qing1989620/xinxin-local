@@ -270,7 +270,7 @@ export const put = <T = any>(path: string, data: any) =>
   api<T>(path, { method: "PUT", body: JSON.stringify(data) });
 export const remove = <T = any>(path: string) =>
   api<T>(path, { method: "DELETE" });
-export const MAX_UPLOAD_BYTES = 64 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
 export async function upload(
   file: File,
   options: {
@@ -280,7 +280,7 @@ export async function upload(
   } = {},
 ): Promise<FileItem> {
   if (!file.size) throw new Error("文件为空");
-  if (file.size > MAX_UPLOAD_BYTES) throw new Error("单个文件最多 64 MB");
+  if (file.size > MAX_UPLOAD_BYTES) throw new Error("单个文件最多 256 MB");
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     const abort = () => request.abort();

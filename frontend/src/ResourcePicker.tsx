@@ -78,7 +78,7 @@ export default function ResourcePicker({
         <div>
           <strong>从手机或电脑上传</strong>
           <p>
-            照片、文档、表格、压缩包都可保存，单个最多 64
+            照片、文档、表格、压缩包都可保存，单个最多 256
             MB。上传后留在资源库，后续对话也能使用。
           </p>
         </div>

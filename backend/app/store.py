@@ -81,6 +81,12 @@ class Store:
                 CREATE INDEX IF NOT EXISTS questions_chapter ON questions(chapter_id);
                 CREATE TABLE IF NOT EXISTS learning_sources(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,chapter_id TEXT NOT NULL,idx INTEGER NOT NULL,label TEXT NOT NULL,content TEXT NOT NULL,page_from INTEGER,page_to INTEGER,UNIQUE(chapter_id,idx));
                 CREATE INDEX IF NOT EXISTS learning_sources_book ON learning_sources(book_id);
+                CREATE TABLE IF NOT EXISTS learning_source_analysis(source_id TEXT PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS learning_source_edits(source_id TEXT PRIMARY KEY,edited INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS learning_book_extractions(book_id TEXT PRIMARY KEY,data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS file_extractions(file_id TEXT PRIMARY KEY,data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS file_ocr_pages(file_id TEXT NOT NULL,page INTEGER NOT NULL,text TEXT NOT NULL,uncertain INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL,PRIMARY KEY(file_id,page));
+                CREATE TABLE IF NOT EXISTS learning_imports(id TEXT PRIMARY KEY,run_id TEXT,file_id TEXT NOT NULL,book_id TEXT,request_key TEXT NOT NULL UNIQUE,signature TEXT NOT NULL,created INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS learning_generations(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,run_id TEXT,request_key TEXT NOT NULL UNIQUE,signature TEXT NOT NULL,options TEXT NOT NULL,created INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS learning_generation_items(job_id TEXT NOT NULL,source_id TEXT NOT NULL,target INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_count INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,error TEXT NOT NULL DEFAULT '',PRIMARY KEY(job_id,source_id));
                 CREATE TABLE IF NOT EXISTS quiz_sessions(id TEXT PRIMARY KEY,book_id TEXT,chapter_id TEXT,title TEXT NOT NULL DEFAULT '',total INTEGER NOT NULL DEFAULT 0,status TEXT NOT NULL DEFAULT 'active',created INTEGER NOT NULL,finished INTEGER);
@@ -119,6 +125,9 @@ class Store:
             for column, declaration in {
                 "source_id": "TEXT",
                 "source_quote": "TEXT NOT NULL DEFAULT ''",
+                "origin": "TEXT NOT NULL DEFAULT 'legacy'",
+                "review": "TEXT NOT NULL DEFAULT 'legacy'",
+                "generation_id": "TEXT",
             }.items():
                 if column not in {row["name"] for row in db.execute("PRAGMA table_info(questions)")}:
                     db.execute(f"ALTER TABLE questions ADD COLUMN {column} {declaration}")

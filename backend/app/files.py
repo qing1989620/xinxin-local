@@ -10,7 +10,7 @@ from pathlib import Path
 from .skillnet.index import BM25Index
 from .store import clean_text, now, uid
 
-MAX_UPLOAD = 64 * 1024 * 1024
+MAX_UPLOAD = 256 * 1024 * 1024
 MAX_EXTRACT = 16 * 1024 * 1024
 
 
@@ -94,23 +94,38 @@ class FileLibrary:
                 while chunk := source.read(1024 * 1024):
                     total += len(chunk)
                     if total > MAX_UPLOAD:
-                        raise FileTooLarge("文件超过 64 MB 上限")
+                        raise FileTooLarge("文件超过 256 MB 上限")
                     output.write(chunk)
                     digest.update(chunk)
             if not total:
                 raise ValueError("文件为空")
             checksum = digest.hexdigest()
             signature = json.dumps([name, mime, checksum], ensure_ascii=False)
-            text, parse_error = "", ""
-            if extract and total <= MAX_EXTRACT:
+            text, parse_error, extraction = "", "", {}
+            if extract and suffix in {".pdf", ".docx"}:
+                from .document_text import extract_document
                 try:
-                    text = clean_text(
-                        self.extract(name, staging.read_bytes())[:2_000_000]
-                    )
+                    text, extraction = extract_document(staging, suffix=suffix)
+                    parse_error = extraction.get("warning", "")
+                except Exception:  # optional parsers cannot discard the uploaded original
+                    parse_error = "原文件已保存，正文提取失败；可在学习中重新识别"
+                    extraction = {"complete": False, "warning": parse_error}
+            elif extract and total <= MAX_EXTRACT:
+                try:
+                    from .document_text import MAX_TEXT_CHARS
+                    text = self.extract(name, staging.read_bytes())
+                    if len(text) > MAX_TEXT_CHARS:
+                        text = ""
+                        parse_error = "原文件已保存；正文超过识别上限，请拆分资料后学习"
+                    extraction = {"complete": not bool(parse_error), "warning": parse_error}
                 except Exception:  # noqa: BLE001 -- optional document parsers may raise format-specific errors; retain the original.
                     parse_error = "已保存原文件，暂时无法提取文本"
             elif extract:
-                parse_error = "原文件已保存；超过 16 MB 的文件不自动提取正文，可交给 Agent 按需处理"
+                parse_error = "原文件已保存；大文本可在学习中按需识别，其他格式可交给 Agent 处理"
+                extraction = {"complete": False, "warning": parse_error}
+            if parse_error:
+                extraction["warning"] = parse_error
+                extraction.setdefault("complete", False)
             with self.store.connect(write=True) as db:
                 previous = (
                     db.execute(
@@ -145,8 +160,9 @@ class FileLibrary:
                             "INSERT INTO uploads VALUES(?,?,?)",
                             (request_id, ident, signature),
                         )
+                    db.execute("INSERT INTO file_extractions VALUES(?,?)", (ident, json.dumps(extraction, ensure_ascii=False)))
             committed = True
-            return {**self.get(ident), "parse_error": parse_error}
+            return self.get(ident)
         finally:
             staging.unlink(missing_ok=True)
             if not committed:
@@ -186,9 +202,12 @@ class FileLibrary:
         row = self.store.one("SELECT * FROM files WHERE id=?", (ident,))
         if not row:
             raise ValueError("文件不存在")
+        extraction = self.store.one("SELECT data FROM file_extractions WHERE file_id=?", (ident,))
+        metadata = json.loads(extraction["data"]) if extraction else {}
+        metadata.pop("page_spans", None)
         return {
             key: value for key, value in row.items() if key not in {"path", "text"}
-        } | {"indexed": bool(row["text"])}
+        } | {"indexed": bool(row["text"]), "extraction": metadata, "parse_error": metadata.get("warning", "")}
 
     def path(self, ident):
         row = self.store.one("SELECT * FROM files WHERE id=?", (ident,))
@@ -293,6 +312,8 @@ class FileLibrary:
         target = self.path(ident)
         with self.store.connect(write=True) as db:
             db.execute("DELETE FROM uploads WHERE file_id=?", (ident,))
+            db.execute("DELETE FROM file_extractions WHERE file_id=?", (ident,))
+            db.execute("DELETE FROM file_ocr_pages WHERE file_id=?", (ident,))
             db.execute("DELETE FROM files WHERE id=?", (ident,))
         target.unlink(missing_ok=True)
         self.drop_previews(ident)
