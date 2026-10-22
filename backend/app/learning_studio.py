@@ -140,7 +140,7 @@ def validate(row: dict, unit: dict, options: dict) -> tuple[dict | None, str]:
         blanks = len(re.findall(r"_{3,}", stem))
         if not isinstance(answer, list) or not 1 <= blanks <= 8 or len(answer) != blanks or not all(isinstance(value, str) and 1 <= len(value.strip()) <= 500 for value in answer):
             return None, "填空数量与答案不匹配"
-        answer = json.dumps(answer, ensure_ascii=False)
+        answer = encode(answer)
     elif not isinstance(answer, str) or not 2 <= len(answer.strip()) <= 2000:
         return None, "简答题缺少参考要点"
     tags = row.get("tags")

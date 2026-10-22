@@ -313,3 +313,14 @@ def test_surrogate_model_and_user_strings_are_safe_in_transactions(studio):
     next_session = learning.start_quiz(app.state.store, book_id=book["id"])
     direct = asyncio.run(learning.submit_answer(app.state.store, None, next_session["id"], quiz["questions"][0]["id"], "切线斜率\ud800"))
     assert "\ufffd" in direct["state"]["questions"][0]["answered"]
+
+
+def test_nested_fill_answers_with_surrogates_are_cleaned(studio):
+    app, client, book = studio
+    unit = source_list(client, book)[0]
+    row = question(TEXT, "导数的几何意义为 ___ 。", kind="fill") | {"answer": ["切线斜率\ud800"], "source_quote": TEXT.split("\n\n")[1][:40]}
+    model(app, lambda payload: [row])
+    job = wait(client, start(client, book, [unit], kinds=["fill"]).json()["job"])
+    assert job["status"] == "completed" and job["created_count"] == 1
+    saved = client.get(f"/api/v1/learning/questions?book_id={book['id']}").json()["questions"][0]
+    assert json.loads(saved["answer"]) == ["切线斜率\ufffd"]
