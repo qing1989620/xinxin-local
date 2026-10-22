@@ -23,7 +23,7 @@ METADATA_QUESTION = re.compile(
     r"|(?:\b(?:which|what)\s+page\s+(?:number|does|do|contains|has|is\s+(?:the\s+)?(?:chapter|section|topic))\b)"
     r"|(?:\b(?:which|what)\s+chapter\s+(?:does|is|contains|covers)\b)"
     r"|(?:\b(?:which|what).{0,20}\b(?:publisher|isbn)\b)", re.I)
-MISSING_FIGURE = re.compile(r"如[下右左]?图(?=所示|中|[\d一二三四五六七八九十，,。:：、\s])|下图|见图(?=所示|中|[\d一二三四五六七八九十，,。:：、\s])|图\s*\d+[—.-]\d+|根据.{0,8}图示|as shown in (?:the )?(?:figure|diagram)", re.I)
+MISSING_FIGURE = re.compile(r"(?:如[下右左]?图|下图|见图)(?=所示|中|[\d一二三四五六七八九十，,。:：、\s]|$)|图\s*\d+[—.-]\d+|根据.{0,8}图示|as shown in (?:the )?(?:figure|diagram)", re.I)
 
 
 def compact(value):
