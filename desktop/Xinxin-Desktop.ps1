@@ -55,7 +55,7 @@ function Trim-Log {
   try {
     $item = Get-Item -LiteralPath $logPath -ErrorAction Stop
     if ($item.Length -gt 262144) {
-      $tail = Get-Content -LiteralPath $logPath -Tail 150
+      $tail = Get-Content -LiteralPath $logPath -Encoding UTF8 -Tail 150
       [System.IO.File]::WriteAllLines($logPath, $tail, (New-Object System.Text.UTF8Encoding($false)))
     }
   } catch {}

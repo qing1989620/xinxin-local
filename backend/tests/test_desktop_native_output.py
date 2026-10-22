@@ -54,3 +54,22 @@ Show-ErrorWindow '合成启动失败'
     assert response.returncode == 0, response.stdout + response.stderr
     html = (tmp_path / "runtime/desktop-error.html").read_text(encoding="utf-8")
     assert "这次没能启动" in html and "合成启动失败" in html and "中文诊断日志" in html
+
+
+def test_repeated_log_rotation_preserves_bomless_chinese(tmp_path):
+    lines = [f"中文轮转诊断 {index} " + "。" * 1000 for index in range(300)]
+    log = tmp_path / "desktop.log"
+    log.write_text("\n".join(lines), encoding="utf-8")
+    script = tmp_path / "rotate.ps1"
+    script.write_text('''param([string]$Source,[string]$Log)
+$tokens=$null;$errors=$null
+$ast=[System.Management.Automation.Language.Parser]::ParseFile($Source,[ref]$tokens,[ref]$errors)
+$definition=$ast.FindAll({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Trim-Log'},$true)[0]
+. ([scriptblock]::Create($definition.Extent.Text))
+$logPath=$Log
+Trim-Log
+Trim-Log
+''', encoding="utf-8-sig")
+    response = subprocess.run([POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), str(ROOT / "desktop/Xinxin-Desktop.ps1"), str(log)], capture_output=True, timeout=20)
+    assert response.returncode == 0, response.stdout + response.stderr
+    assert log.read_text(encoding="utf-8").splitlines() == lines[-150:]
