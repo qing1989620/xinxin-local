@@ -112,6 +112,7 @@ source_quote 是溯源证据，并不代替题目的解释；不要返回自造�
 
 
 def validate(row: dict, unit: dict, options: dict) -> tuple[dict | None, str]:
+    row = {key: clean_text(value) for key, value in row.items()}
     kind = row.get("kind")
     stem = row.get("stem")
     if kind not in options["kinds"] or not isinstance(stem, str) or not 4 <= len(stem.strip()) <= 4000:

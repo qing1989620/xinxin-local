@@ -151,7 +151,7 @@ def split_chapters(text: str) -> list[dict]:
 
 
 def create_book(store, library, file_row: dict, title: str = "", subject: str = "") -> dict:
-    content = _normalize(file_row.get("text") or "")
+    content = _normalize(clean_text(file_row.get("text") or ""))
     if len(content) < 200:
         raise ValueError("这份资料抽不出足够正文，换一个 PDF / Word / 文本试试")
     chapters = split_chapters(content)
@@ -159,7 +159,7 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
         raise ValueError("没有识别到可用的章节内容")
     ident = uid()
     now = int(time.time())
-    book_title = (title or Path(file_row["name"]).stem or "未命名书本")[:120]
+    book_title = clean_text(title or Path(file_row["name"]).stem or "未命名书本")[:120]
     with store.connect(write=True) as db:
         db.execute(
             "INSERT INTO books(id,file_id,title,author,subject,pages,char_count,status,created,updated)"
@@ -169,7 +169,7 @@ def create_book(store, library, file_row: dict, title: str = "", subject: str = 
                 file_row.get("id"),
                 book_title,
                 "",
-                subject[:40],
+                clean_text(subject[:40]),
                 int(file_row.get("pages") or 0),
                 len(content),
                 "ready",
@@ -374,10 +374,10 @@ async def generate_questions(
                     digest,
                     kind,
                     stem[:4000],
-                    json.dumps(options, ensure_ascii=False),
-                    stored_answer,
-                    str(row.get("explanation") or "")[:6000],
-                    json.dumps(tags, ensure_ascii=False),
+                    clean_text(json.dumps(options, ensure_ascii=False)),
+                    clean_text(stored_answer),
+                    clean_text(str(row.get("explanation") or ""))[:6000],
+                    clean_text(json.dumps(tags, ensure_ascii=False)),
                     difficulty,
                     int(time.time()),
                 ),
@@ -596,12 +596,13 @@ async def grade_short(gateway, question: dict, answer: str) -> dict:
         return {"status": "unknown", "reason": "判分结果解析失败，请自己对照参考答案"}
     verdict = str(payload.get("verdict") or "").strip()
     status = {"correct": "correct", "partial": "partial", "wrong": "wrong"}.get(verdict, "unknown")
-    return {"status": status, "reason": str(payload.get("reason") or "")[:400]}
+    return {"status": status, "reason": clean_text(str(payload.get("reason") or ""))[:400]}
 
 
 async def submit_answer(
     store, gateway, session_id: str, question_id: str, answer: str
 ) -> dict:
+    answer = clean_text(str(answer or ""))
     session = store.one("SELECT * FROM quiz_sessions WHERE id=?", (session_id,))
     if not session:
         raise ValueError("练习不存在")

@@ -175,6 +175,144 @@ test("目录键盘操作与原文预览，不误选出题范围", async ({ page,
   ).toBeDisabled();
 });
 
+test("学习首页直接上传资料并进入出题台", async ({ page, request }) => {
+  await fixture(page, request);
+  await page.goto("/learning");
+  await page.getByRole("button", { name: "加入书架", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "加入书架" });
+  await dialog
+    .getByLabel("上传学习资料")
+    .setInputFiles({
+      name: "新的学习资料.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from(
+        "第一章 理解概率\n\n" +
+          "概率是衡量随机事件发生可能性大小的数值，取值在零与一之间。\n".repeat(
+            20,
+          ),
+      ),
+    });
+  await expect(
+    dialog.getByRole("button", { name: "加入并开始学习" }),
+  ).toBeEnabled();
+  await dialog.getByLabel(/学科/).fill("数学");
+  await dialog.getByRole("button", { name: "加入并开始学习" }).click();
+  await expect(
+    page.getByRole("heading", { name: "新的学习资料", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".study-unit input").first()).toBeVisible();
+});
+
+test("恢复终态任务时校正先返回的旧题库快照", async ({ page, request }) => {
+  const { book, headers } = await fixture(page, request);
+  const url = `/api/v1/learning/books/${book.id}`;
+  const units = (
+    await (await request.get(`${url}/sources`, { headers })).json()
+  ).sources;
+  const generated = await request.post(`${url}/generations`, {
+    headers,
+    data: {
+      source_ids: [units[0].id],
+      count: 1,
+      kinds: ["single"],
+      request_key: crypto.randomUUID(),
+    },
+  });
+  expect(generated.ok()).toBeTruthy();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get(`${url}/generation`, { headers })).json()).job
+          .status,
+    )
+    .toBe("completed");
+  let bankCalls = 0,
+    bookCalls = 0;
+  await page.route(
+    `**/api/v1/learning/questions?book_id=${book.id}`,
+    (route) =>
+      ++bankCalls === 1
+        ? route.fulfill({ json: { questions: [] } })
+        : route.continue(),
+  );
+  await page.route(`**/api/v1/learning/books/${book.id}`, (route) =>
+    ++bookCalls === 1 ? route.fulfill({ json: { book } }) : route.continue(),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "本次出题完成", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".study-question-bank li")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "全书练习", exact: true }),
+  ).toBeEnabled();
+  expect(bankCalls).toBeGreaterThan(1);
+});
+
+test("原文相邻导航丢弃迟到响应，保留最后一次选择", async ({
+  page,
+  request,
+}) => {
+  const { book, headers } = await fixture(page, request);
+  const url = `/api/v1/learning/books/${book.id}`;
+  const units = (
+    await (await request.get(`${url}/sources`, { headers })).json()
+  ).sources;
+  const generated = await request.post(`${url}/generations`, {
+    headers,
+    data: {
+      source_ids: [units[1].id],
+      count: 1,
+      kinds: ["single"],
+      request_key: crypto.randomUUID(),
+    },
+  });
+  expect(generated.ok()).toBeTruthy();
+  await expect
+    .poll(
+      async () =>
+        (await (await request.get(`${url}/generation`, { headers })).json()).job
+          .status,
+    )
+    .toBe("completed");
+  await page.reload();
+  await page.getByRole("button", { name: "核对原文依据" }).click();
+  const dialog = page.getByRole("dialog", { name: "回到原文" });
+  await expect(dialog.locator(".study-source-nav > span")).toHaveText(
+    "片段 02",
+  );
+  let release!: () => void;
+  const late = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/learning/sources/*?offset=1", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    try {
+      await route.fulfill({
+        json: {
+          source: {
+            ...units[2],
+            content: "旧的下一段",
+            has_previous: true,
+            has_next: false,
+          },
+        },
+      });
+    } finally {
+      release();
+    }
+  });
+  await dialog.getByRole("button", { name: "下一个片段" }).click();
+  await dialog.getByRole("button", { name: "上一个片段" }).click();
+  await expect(dialog.locator(".study-source-nav > span")).toHaveText(
+    "片段 01",
+  );
+  await late;
+  await expect(dialog.locator(".study-source-nav > span")).toHaveText(
+    "片段 01",
+  );
+});
+
 test("响应式、减少动效及视觉记录", async ({ page, request }, info) => {
   test.skip(info.project.name !== "desktop", "由桌面项目覆盖四档视口");
   test.setTimeout(60_000);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { api } from "../api";
 import { Dialog, ErrorState, Loading } from "../ui";
@@ -18,6 +18,8 @@ export function StudySource({
   const [source, setSource] = useState<SourceText | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const navigationRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => navigationRequest.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController();
     setSource(null);
@@ -35,13 +37,20 @@ export function StudySource({
   }, [current, retry]);
   async function adjacent(offset: number) {
     if (!source) return;
+    navigationRequest.current?.abort();
+    const controller = new AbortController();
+    navigationRequest.current = controller;
     try {
       const value = await api<{ source: SourceText }>(
         `/learning/sources/${source.id}?offset=${offset}`,
+        { signal: controller.signal },
       );
-      setCurrent(value.source.id);
+      if (!controller.signal.aborted) setCurrent(value.source.id);
     } catch (err) {
-      setError((err as Error).message);
+      if (!controller.signal.aborted) setError((err as Error).message);
+    } finally {
+      if (navigationRequest.current === controller)
+        navigationRequest.current = null;
     }
   }
   return (

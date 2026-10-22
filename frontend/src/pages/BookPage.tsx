@@ -121,6 +121,9 @@ function BookPage() {
     if (initialJob.data) {
       const previous = initialJob.data.job;
       setJob(previous);
+      // The other requests may have completed before the last source committed.
+      // A terminal snapshot must reconcile the bank even without an SSE stream.
+      if (previous && !isGenerating(previous)) refresh.current();
       if (previous?.options) {
         setCount(previous.options.count);
         setKinds(previous.options.kinds);
@@ -414,19 +417,21 @@ function BookPage() {
                       key={unit.id}
                       className={`study-unit${previewId === unit.id ? " previewing" : ""}`}
                     >
-                      <input
-                        type="checkbox"
-                        aria-label={`选择 ${chapter.title} ${unit.label}`}
-                        checked={selected.includes(unit.id)}
-                        disabled={
-                          active ||
-                          busy ||
-                          unit.chars < 80 ||
-                          (!selected.includes(unit.id) &&
-                            selected.length >= limit)
-                        }
-                        onChange={() => toggle(unit)}
-                      />
+                      <label className="study-unit-check">
+                        <input
+                          type="checkbox"
+                          aria-label={`选择 ${chapter.title} ${unit.label}`}
+                          checked={selected.includes(unit.id)}
+                          disabled={
+                            active ||
+                            busy ||
+                            unit.chars < 80 ||
+                            (!selected.includes(unit.id) &&
+                              selected.length >= limit)
+                          }
+                          onChange={() => toggle(unit)}
+                        />
+                      </label>
                       <button
                         aria-current={
                           previewId === unit.id ? "true" : undefined

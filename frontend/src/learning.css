@@ -749,6 +749,21 @@
   padding-left: 7px;
   transition: background 0.18s;
 }
+.study-unit-check {
+  display: grid;
+  align-self: stretch;
+  place-items: center;
+  min-width: 44px;
+  cursor: pointer;
+}
+.study-unit-check input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 .study-unit.previewing {
   border-left-color: var(--accent);
   background: var(--accent-soft);
@@ -1437,10 +1452,10 @@
     font-size: 38px;
   }
   .study-book-remove {
-    width: 28px;
-    height: 32px;
-    top: 7px;
-    right: 2px;
+    width: 44px;
+    height: 44px;
+    top: 0;
+    right: 0;
   }
   .study-book-meta p,
   .study-book-meta p:first-child {
