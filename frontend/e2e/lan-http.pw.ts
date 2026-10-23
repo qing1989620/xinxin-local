@@ -3,6 +3,10 @@ import { test, expect } from "@playwright/test";
 // Route the isolated app through a non-trustworthy HTTP origin. This keeps the
 // browser's real secure-context restrictions; it never opens a LAN listener.
 const origin = "http://xinxin.invalid";
+test.afterEach(async ({ page }) => {
+  // Import navigation starts background reads; drain the proxy before teardown.
+  await page.unrouteAll({ behavior: "wait" });
+});
 test("局域网 HTTP：上传、Agent 连续提交及学习导入可用", async ({
   page,
   request,
@@ -43,18 +47,14 @@ test("局域网 HTTP：上传、Agent 连续提交及学习导入可用", async 
       response.url().endsWith("/api/v1/files") &&
       response.request().method() === "POST",
   );
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: filename,
-      mimeType: "text/plain",
-      buffer: Buffer.from(
-        "第一章 导数\n" +
-          "导数刻画瞬时变化率，几何意义是函数图像在该点的切线斜率。\n".repeat(
-            12,
-          ),
-      ),
-    });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: filename,
+    mimeType: "text/plain",
+    buffer: Buffer.from(
+      "第一章 导数\n" +
+        "导数刻画瞬时变化率，几何意义是函数图像在该点的切线斜率。\n".repeat(12),
+    ),
+  });
   const fileResponse = await uploaded;
   expect(fileResponse.ok()).toBe(true);
   const file = await fileResponse.json();
