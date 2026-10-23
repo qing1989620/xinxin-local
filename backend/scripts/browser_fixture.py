@@ -36,17 +36,24 @@ def create_fixture():
     async def respond(_request):
         body = json.loads(_request.content)
         messages = body.get("messages", [])
-        if messages and "学习材料分析协议 v2" in str(messages[0].get("content")):
+        if messages and "PDF 原页读取协议" in str(messages[0].get("content")):
+            payload = json.loads(messages[1]["content"][0]["text"])
+            value = {"pages": [{"page": page, "readable": True, "text": "1. 已知函数 f(x)=x^2，求 x=3 处的导数，并解释该点切线斜率。\nA. 6 B. 3 C. 9 D. 2", "reason": ""} for page in payload["physical_pages"]]}
+            return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
+        if messages and "学习材料分析协议" in str(messages[0].get("content")):
             payload = json.loads(messages[1]["content"])
             value = {"type": "knowledge", "summary": "本段材料说明导数刻画瞬时变化率，并以切线斜率解释其几何意义。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
+            if payload["text"].startswith("PDF 物理"):
+                value = {"type": "exercises", "summary": "合成原页包含导数计算原题，代入自变量求导数，并解释切线斜率。", "knowledge_points": [{"name": "导数", "source_ref": "L2-L3"}, {"name": "无效条目", "source_ref": "L999"}], "exercises": [{"label": "原题 1", "source_ref": "L2-L3", "solvable": True}]}
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
         if messages and "学习出题复核协议 v2" in str(messages[0].get("content")):
-            payload = json.loads(messages[1]["content"])
+            content = messages[1]["content"]
+            payload = json.loads(content[0]["text"] if isinstance(content, list) else content)
             value = {"reviews": [{"index": index, "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
             if any("合成审题缺失" in row.get("stem", "") for row in payload["questions"]):
                 value = {"reviews": []}
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
-        if messages and "学习工作室协议 v2" in str(messages[0].get("content")):
+        if messages and "学习工作室协议" in str(messages[0].get("content")):
             payload = json.loads(messages[1]["content"])
             await asyncio.sleep(2 if "合成延迟" in payload["focus"] else .15)
             rows = []
@@ -70,6 +77,8 @@ def create_fixture():
                     row["answer"] = "B"
                 if "合成审题缺失" in payload["focus"]:
                     row["stem"] = "合成审题缺失：" + row["stem"]
+                if payload["analysis"].get("source_method") == "pdf_images":
+                    row["source_ref"] = "L2-L3"
                 rows.append(row)
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(rows, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
         latest_user = next((index for index in range(len(messages) - 1, -1, -1) if messages[index].get("role") == "user"), -1)

@@ -32,6 +32,7 @@ type Question = {
   position: number;
   source_id?: string;
   source_quote?: string;
+  source_pages?: number[];
   origin?: string;
 };
 
@@ -545,7 +546,11 @@ export default function QuizPage() {
                     ? "填空"
                     : "简答"}
               </span>
-              {question.origin && question.origin !== "legacy" && <span className="quiz-tag">{question.origin === "original" ? "原题整理" : "知识拓展"}</span>}
+              {question.origin && question.origin !== "legacy" && (
+                <span className="quiz-tag">
+                  {question.origin === "original" ? "原题整理" : "知识拓展"}
+                </span>
+              )}
               <span className="quiz-difficulty">
                 {"★".repeat(question.difficulty)}
               </span>
@@ -842,6 +847,7 @@ export default function QuizPage() {
           key={question.source_id}
           id={question.source_id}
           quote={question.source_quote}
+          pages={question.source_pages}
           onClose={() => setReadingSource(false)}
         />
       )}

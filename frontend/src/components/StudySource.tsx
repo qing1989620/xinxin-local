@@ -4,14 +4,17 @@ import { api } from "../api";
 import { Dialog, ErrorState, Loading } from "../ui";
 import type { SourceText } from "../learning";
 import { MathText } from "./MathText";
+import { StudyPdfPages } from "./StudyPdfPages";
 
 export function StudySource({
   id,
   quote = "",
+  pages = [],
   onClose,
 }: {
   id: string;
   quote?: string;
+  pages?: number[];
   onClose: () => void;
 }) {
   const [current, setCurrent] = useState(id);
@@ -88,12 +91,16 @@ export function StudySource({
           {current === id && quote && (
             <blockquote className="study-quote">
               <span>出题依据</span>
-              {quote}
+              <MathText text={quote} />
             </blockquote>
           )}
-          <div className="study-source-text">
-            <MathText text={source.content} />
-          </div>
+          {current === id && pages.length > 0 ? (
+            <StudyPdfPages key={current} id={current} pages={pages} />
+          ) : (
+            <div className="study-source-text">
+              <MathText text={source.analysis?.source_text ?? source.content} />
+            </div>
+          )}
         </>
       )}
     </Dialog>

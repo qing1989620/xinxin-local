@@ -18,6 +18,7 @@ export type StudyBook = {
     pages?: number;
     ocr_pages?: number;
     missing_pages?: number[];
+    uncertain_pages?: number[];
     warning?: string;
   };
 };
@@ -27,6 +28,12 @@ export type MaterialAnalysis = {
   eligible: boolean;
   reason: string;
   summary: string;
+  warnings?: string[];
+  reading_warnings?: string[];
+  skipped_entries?: number;
+  source_method?: "text" | "pdf_images";
+  source_text?: string;
+  read_pages?: number[];
   knowledge_points: Array<{ name: string; quote: string }>;
   exercises: Array<{ label: string; quote: string; solvable: boolean }>;
 };
@@ -40,6 +47,7 @@ export type SourceUnit = {
   page_from: number | null;
   page_to: number | null;
   eligible?: boolean;
+  text_eligible?: boolean;
   type_label?: string;
   reason?: string;
   analysis?:
@@ -53,6 +61,12 @@ export type SourceListing = {
   sources: SourceUnit[];
   max_sources: number;
   max_questions: number;
+  image_reading?: {
+    pdf: boolean;
+    available: boolean;
+    max_pages: number;
+    reason: string;
+  };
   coverage: {
     analyzed: number;
     total: number;
@@ -94,6 +108,7 @@ export type Generation = {
     focus: string;
     mode?: "auto" | "original" | "practice";
     analyze_only?: boolean;
+    read_mode?: "text" | "pdf";
   };
   items: Array<{
     source_id: string;

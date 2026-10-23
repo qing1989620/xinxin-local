@@ -51,7 +51,7 @@ def model(app, responder):
     async def transport(request):
         messages = json.loads(request.content)["messages"]
         payload = json.loads(messages[1]["content"])
-        if "学习材料分析协议 v2" in messages[0]["content"]:
+        if "学习材料分析协议" in messages[0]["content"]:
             result = {"type": "knowledge", "summary": "本段解释导数表示瞬时变化率，几何意义为切线斜率。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
         elif "学习出题复核协议 v2" in messages[0]["content"]:
             result = {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}

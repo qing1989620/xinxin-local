@@ -158,7 +158,7 @@ def split_chapters(text: str) -> list[dict]:
 
 def create_book(store, library, file_row: dict, title: str = "", subject: str = "") -> dict:
     content = _normalize(clean_text(file_row.get("text") or ""))
-    if len(content) < 200:
+    if len(content) < 24:
         raise ValueError("这份资料抽不出足够正文，换一个 PDF / Word / 文本试试")
     chapters = split_chapters(content)
     if not chapters:
@@ -266,7 +266,7 @@ def delete_book(store, book_id: str) -> dict:
         db.execute("DELETE FROM learning_source_edits WHERE source_id IN (SELECT id FROM learning_sources WHERE book_id=?)", (book_id,))
         db.execute("DELETE FROM learning_book_extractions WHERE book_id=?", (book_id,))
         db.execute("UPDATE learning_imports SET book_id=NULL WHERE book_id=?", (book_id,))
-        for table in ("quiz_sessions", "questions", "learning_generations", "learning_sources", "book_chapters"):
+        for table in ("quiz_sessions", "questions", "learning_generations", "learning_sources", "learning_visual_pages", "book_chapters"):
             db.execute(f"DELETE FROM {table} WHERE book_id=?", (book_id,))
         db.execute("DELETE FROM books WHERE id=?", (book_id,))
     return {"ok": True, "book_id": book_id}
@@ -321,6 +321,8 @@ def format_question(row: dict, reveal: bool = True) -> dict:
         "origin": row.get("origin", "legacy"),
         "review": row.get("review", "legacy"),
         "source_quote": row.get("source_quote", "") if reveal else "",
+        "source_pages": json.loads(row.get("source_pages", "[]")) if reveal else [],
+        "source_method": row.get("source_method", "text"),
         "created": row["created"],
     }
     if reveal:

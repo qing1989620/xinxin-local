@@ -61,13 +61,13 @@ def mock_model(content, sink=None):
             sink.append(json.loads(request.content))
         messages = json.loads(request.content)["messages"]
         response_content = content
-        if "学习材料分析协议 v2" in messages[0]["content"]:
+        if "学习材料分析协议" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
             response_content = json.dumps({"type": "knowledge", "summary": "本段说明导数刻画瞬时变化率，几何意义为切线斜率。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}, ensure_ascii=False)
         elif "学习出题复核协议 v2" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
             response_content = json.dumps({"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：题干完整，答案与解析一致。"} for index in range(len(payload["questions"]))]})
-        elif "学习工作室协议 v2" in messages[0]["content"]:
+        elif "学习工作室协议" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
             try:
                 rows = json.loads(content)

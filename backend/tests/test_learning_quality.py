@@ -110,9 +110,9 @@ def test_default_twelve_and_twenty_four_questions_are_batched_and_reviewed(studi
     job = wait(client, start(client, book, units[:1], count=24).json()["job"])
     assert job["status"] == "completed" and job["created_count"] == 24
     assert [kind for kind, _ in calls].count("analysis") == 1
-    assert [kind for kind, _ in calls].count("generation") == 4
-    assert [kind for kind, _ in calls].count("review") == 4
-    assert max(value["count"] for kind, value in calls if kind == "generation") == 6
+    assert [kind for kind, _ in calls].count("generation") == 8
+    assert [kind for kind, _ in calls].count("review") == 8
+    assert max(value["count"] for kind, value in calls if kind == "generation") == 3
     saved = client.get(f"/api/v1/learning/questions?book_id={book['id']}").json()["questions"]
     assert len(saved) == 24 and all(row["review"] == "model_checked" and row["origin"] == "practice" for row in saved)
     large = add_book(client, "第一章 导数\n" + "导数表示瞬时变化率，在几何上表示切线斜率。\n" * 5000)

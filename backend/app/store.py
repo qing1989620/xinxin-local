@@ -82,6 +82,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS learning_sources(id TEXT PRIMARY KEY,book_id TEXT NOT NULL,chapter_id TEXT NOT NULL,idx INTEGER NOT NULL,label TEXT NOT NULL,content TEXT NOT NULL,page_from INTEGER,page_to INTEGER,UNIQUE(chapter_id,idx));
                 CREATE INDEX IF NOT EXISTS learning_sources_book ON learning_sources(book_id);
                 CREATE TABLE IF NOT EXISTS learning_source_analysis(source_id TEXT PRIMARY KEY,version INTEGER NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS learning_visual_pages(book_id TEXT NOT NULL,page INTEGER NOT NULL,version INTEGER NOT NULL,model TEXT NOT NULL,data TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(book_id,page,version,model));
                 CREATE TABLE IF NOT EXISTS learning_source_edits(source_id TEXT PRIMARY KEY,edited INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS learning_book_extractions(book_id TEXT PRIMARY KEY,data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS file_extractions(file_id TEXT PRIMARY KEY,data TEXT NOT NULL);
@@ -128,6 +129,8 @@ class Store:
                 "origin": "TEXT NOT NULL DEFAULT 'legacy'",
                 "review": "TEXT NOT NULL DEFAULT 'legacy'",
                 "generation_id": "TEXT",
+                "source_pages": "TEXT NOT NULL DEFAULT '[]'",
+                "source_method": "TEXT NOT NULL DEFAULT 'text'",
             }.items():
                 if column not in {row["name"] for row in db.execute("PRAGMA table_info(questions)")}:
                     db.execute(f"ALTER TABLE questions ADD COLUMN {column} {declaration}")

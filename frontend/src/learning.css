@@ -1151,6 +1151,45 @@
   overflow-wrap: anywhere;
   padding: 20px 0;
 }
+
+.study-reading-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.study-reading-switch button {
+  padding: 0.6rem 0;
+  border-bottom: 2px solid transparent;
+}
+.study-reading-switch button[aria-pressed="true"] {
+  color: var(--accent);
+  border-bottom-color: currentColor;
+}
+.study-pdf-pages {
+  min-width: 0;
+  margin: 1rem 0;
+}
+.study-pdf-pages img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.study-pdf-pages .study-source-nav > div {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.study-analysis-notes {
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+  border-left: 2px solid var(--accent);
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
 .study-quote {
   margin: 18px 0 0;
   padding: 18px 20px;

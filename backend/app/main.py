@@ -21,7 +21,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .agent import TaskManager
@@ -34,7 +34,7 @@ from .creative import gallery, plot_csv, transform_image
 from .conversations import deletion_preview, purge_conversation, batch_deletion_preview, purge_conversations
 from .files import FileLibrary, FileTooLarge, UploadConflict
 from . import imagegen
-from . import learning, learning_studio, learning_imports, learning_quality, music
+from . import learning, learning_studio, learning_imports, learning_quality, learning_visual, music
 from .model import ModelGateway, endpoint
 from .network import local_addresses
 from .mail import MailCodes
@@ -131,7 +131,7 @@ class LearningImport(BookCreate):
 
 
 class SourceCorrection(Input):
-    content: str = Field(min_length=80, max_length=8000)
+    content: str = Field(min_length=24, max_length=8000)
 
 
 class LearningGeneration(Input):
@@ -144,6 +144,7 @@ class LearningGeneration(Input):
     resume_job_id: str = Field(default="", max_length=64)
     mode: Literal["auto", "original", "practice"] = "auto"
     analyze_only: bool = False
+    read_mode: Literal["text", "pdf"] = "text"
 
 
 class QuizStart(Input):
@@ -1509,7 +1510,17 @@ def create_app(config=None):
     @app.get("/api/v1/learning/books/{book_id}/sources", dependencies=[Depends(owner)])
     def learning_sources(book_id: str):
         try:
-            return learning_studio.sources(store, library, book_id)
+            result = learning_studio.sources(store, library, book_id)
+            book = learning.get_book(store, book_id)
+            try:
+                pdf = bool(book["file_id"] and library.path(book["file_id"]).suffix.lower() == ".pdf")
+            except ValueError:
+                pdf = False
+            model_url, model_name, _ = manager.model_config()
+            supported = ModelGateway(model_url, model_name, "", lambda _: None, asyncio.Event()).supports_learning_images()
+            result["image_reading"] = {"pdf": pdf, "available": pdf and supported, "max_pages": learning_visual.MAX_JOB_PAGES,
+                "reason": "" if pdf and supported else "当前模型尚未接入图片读取，需要 DeepSeek Flash 官方接口" if pdf else "原页读取适用于 PDF 资料"}
+            return result
         except ValueError as error:
             raise HTTPException(404, str(error))
 
@@ -1528,6 +1539,18 @@ def create_app(config=None):
         except ValueError as error:
             raise HTTPException(409, str(error))
 
+    @app.get("/api/v1/learning/sources/{source_id}/pages/{page}", dependencies=[Depends(owner)])
+    def learning_source_page(source_id: str, page: int):
+        try:
+            unit = learning_studio.source(store, source_id)
+            if page not in learning_visual.page_range(unit):
+                raise ValueError("此页不在当前片段的来源范围")
+            path = learning_visual.pdf_path(store, library, unit)
+            content = learning_visual.render_page(path, page, size=1600)
+            return Response(content, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+        except (ValueError, OSError):
+            raise HTTPException(404, "无法打开此 PDF 原页，请核对原文件和页码")
+
     @app.get("/api/v1/learning/books/{book_id}/generation", dependencies=[Depends(owner)])
     def learning_generation_latest(book_id: str):
         return {"job": learning_studio.latest(store, book_id)}
@@ -1542,8 +1565,11 @@ def create_app(config=None):
     @app.post("/api/v1/learning/books/{book_id}/generations", dependencies=[Depends(owner)])
     async def learning_generation_start(book_id: str, body: LearningGeneration):
         try:
+            payload = body.model_dump()
+            if "read_mode" not in body.model_fields_set:
+                payload.pop("read_mode")
             async with learning_lock:
-                return {"job": await learning_studio.start(store, library, manager, book_id, body.model_dump())}
+                return {"job": await learning_studio.start(store, library, manager, book_id, payload)}
         except ValueError as error:
             raise HTTPException(409, str(error))
 

@@ -81,7 +81,24 @@ class ModelGateway:
         }
         if tools:
             payload["tools"] = tools
-        self.context_tokens = token_count(encode(payload)) + 1024
+        # Inline JPEG base64 is transport data, not text tokens. Counting it as
+        # prose falsely exhausts context before the provider sees a single page.
+        counted, images = [], 0
+        for message in messages:
+            content = message.get("content")
+            if isinstance(content, list):
+                blocks = []
+                for block in content:
+                    if block.get("type") == "image_url":
+                        images += 1
+                        blocks.append({"type": "text", "text": "[image]"})
+                    else:
+                        blocks.append(block)
+                counted.append(message | {"content": blocks})
+            else:
+                counted.append(message)
+        image_tokens = 2048 if self.supports_learning_images() else 8192
+        self.context_tokens = token_count(encode(payload | {"messages": counted})) + images * image_tokens + 1024
         if self.context_tokens + payload["max_tokens"] > self.context_window_tokens:
             raise RuntimeError("本次请求超过当前会话的上下文档位；完整历史仍保存在对话，请提高档位、压缩或分批处理。")
         self.record_usage(self.usage())
@@ -97,7 +114,14 @@ class ModelGateway:
             self._check(response)
             data = response.json()
             self._usage(data)
+            if data["choices"][0].get("finish_reason") in {"length", "content_filter"}:
+                raise RuntimeError("模型输出被截断或中止，请缩小材料范围后重试")
             return data["choices"][0]["message"]
+
+    def supports_learning_images(self):
+        return urlsplit(self.url).hostname == "api.deepseek.com" and self.model in {
+            "deepseek-flash", "deepseek-v4-flash-vision-exp",
+        }
 
     @staticmethod
     def _check(response):

@@ -37,6 +37,7 @@ import {
 } from "../ui";
 import { MathText } from "../components/MathText";
 import { StudySource } from "../components/StudySource";
+import { StudyPdfPages } from "../components/StudyPdfPages";
 import {
   isGenerating,
   KIND_LABEL,
@@ -58,6 +59,7 @@ type Question = {
   difficulty: number;
   source_id?: string;
   source_quote?: string;
+  source_pages?: number[];
   origin?: string;
 };
 const STATES: Record<string, string> = {
@@ -70,9 +72,37 @@ const STATES: Record<string, string> = {
   partial: "部分完成",
   completed: "本次出题完成",
   analyzing: "分析材料",
+  reading: "读取 PDF 原页",
   generating: "分批出题",
   reviewing: "复核答案",
 };
+
+function pageCount(scope: SourceUnit[]) {
+  return scope.reduce(
+    (sum, unit) =>
+      sum +
+      (unit.page_from && unit.page_to ? unit.page_to - unit.page_from + 1 : 0),
+    0,
+  );
+}
+
+function imageReadingIssue(
+  scope: SourceUnit[],
+  capability: SourceListing["image_reading"],
+) {
+  if (!capability?.available)
+    return capability?.reason || "此资料暂不支持原页读取";
+  if (
+    scope.some(
+      (unit) =>
+        !unit.page_from || !unit.page_to || unit.page_to - unit.page_from >= 24,
+    )
+  )
+    return "有片段缺少可靠页码或超过 24 页，请缩小选择范围。";
+  return pageCount(scope) > capability.max_pages
+    ? `一次最多读取 ${capability.max_pages} 个 PDF 原页，请减少选择范围。`
+    : "";
+}
 
 export default function BookRoute() {
   const { id = "" } = useParams();
@@ -99,6 +129,8 @@ function BookPage() {
   const [previewError, setPreviewError] = useState("");
   const [previewRetry, setPreviewRetry] = useState(0);
   const [count, setCount] = useState(12);
+  const [readMode, setReadMode] = useState<"text" | "pdf">("text");
+  const [showPdf, setShowPdf] = useState(false);
   const [generationMode, setGenerationMode] = useState<
     "auto" | "original" | "practice"
   >("auto");
@@ -155,6 +187,7 @@ function BookPage() {
         setDifficulty(previous.options.difficulty);
         setFocus(previous.options.focus);
         setGenerationMode(previous.options.mode ?? "auto");
+        setReadMode(previous.options.read_mode ?? "text");
         if (isGenerating(previous))
           setSelected(previous.items.map((item) => item.source_id));
       }
@@ -165,7 +198,7 @@ function BookPage() {
       setPreviewId(units.data.sources[0].id);
   }, [units.data, previewId]);
   useEffect(() => {
-    setPreview(current => current?.id === previewId ? current : null);
+    setPreview((current) => (current?.id === previewId ? current : null));
     setPreviewError("");
     if (!previewId) return;
     const controller = new AbortController();
@@ -233,6 +266,25 @@ function BookPage() {
       (map[unit.chapter_id] ||= []).push(unit);
     return map;
   }, [units.data]);
+  const selectedScope = (units.data?.sources ?? []).filter((unit) =>
+    selected.includes(unit.id),
+  );
+  const selectedPages = pageCount(selectedScope);
+  const remainingItems =
+    job?.items.filter((item) => item.target > item.created_count) ?? [];
+  const resumeScope = (units.data?.sources ?? []).filter((unit) =>
+    remainingItems.some((item) => item.source_id === unit.id),
+  );
+  const readingError =
+    readMode === "pdf"
+      ? imageReadingIssue(selectedScope, units.data?.image_reading)
+      : "";
+  const resumeReadingError =
+    readMode === "pdf"
+      ? resumeScope.length !== remainingItems.length
+        ? "缺题来源尚未加载，请稍后重试。"
+        : imageReadingIssue(resumeScope, units.data?.image_reading)
+      : "";
   const bank = useMemo(
     () =>
       (questions.data?.questions ?? []).filter(
@@ -241,8 +293,13 @@ function BookPage() {
     [questions.data, filter],
   );
 
-  function toggle(unit: { id: string; eligible?: boolean }) {
-    if (unit.eligible === false) return;
+  function toggle(unit: {
+    id: string;
+    eligible?: boolean;
+    text_eligible?: boolean;
+  }) {
+    if ((unit.text_eligible ?? unit.eligible) === false && readMode !== "pdf")
+      return;
     if (selected.includes(unit.id))
       setSelected((value) => value.filter((ident) => ident !== unit.id));
     else if (selected.length < limit)
@@ -265,6 +322,7 @@ function BookPage() {
         resume_job_id: resume ? (job?.id ?? "") : "",
         mode: generationMode,
         analyze_only: analyzeOnly,
+        read_mode: readMode,
       };
       const key = await stableRequestKey(namespace, payload);
       const value = await post<{ job: Generation }>(
@@ -286,8 +344,13 @@ function BookPage() {
   function selectScope(onlyUnanalyzed = false) {
     const eligible = (units.data?.sources ?? []).filter(
       (unit) =>
-        unit.eligible !== false &&
-        unit.chars >= 80 &&
+        (readMode === "pdf"
+          ? Boolean(
+              unit.page_from &&
+              unit.page_to &&
+              unit.page_to - unit.page_from < 24,
+            )
+          : (unit.text_eligible ?? unit.eligible) !== false) &&
         (!onlyUnanalyzed || !unit.analysis),
     );
     setSelected(eligible.slice(0, limit).map((unit) => unit.id));
@@ -522,7 +585,9 @@ function BookPage() {
         <div className="study-understanding-actions">
           <button
             className="text-button"
-            disabled={active || busy || !coverage?.eligible}
+            disabled={
+              active || busy || (readMode !== "pdf" && !coverage?.eligible)
+            }
             onClick={() => selectScope(true)}
           >
             选择尚未分析的正文 <ArrowRight size={14} />
@@ -614,8 +679,12 @@ function BookPage() {
                           disabled={
                             active ||
                             busy ||
-                            unit.chars < 80 ||
-                            unit.eligible === false ||
+                            (readMode === "pdf"
+                              ? !unit.page_from ||
+                                !unit.page_to ||
+                                unit.page_to - unit.page_from >= 24
+                              : (unit.text_eligible ?? unit.eligible) ===
+                                false) ||
                             (!selected.includes(unit.id) &&
                               selected.length >= limit)
                           }
@@ -634,7 +703,6 @@ function BookPage() {
                         <span>{unit.label}</span>
                         <small>
                           {wordCount(unit.chars)} · {unit.question_count} 题
-                          {unit.chars < 80 ? " · 正文过短" : ""}
                           {unit.type_label ? ` · ${unit.type_label}` : ""}
                           {unit.eligible === false ? " · 已排除" : ""}
                         </small>
@@ -694,9 +762,48 @@ function BookPage() {
                   SOURCE MATERIAL / {String(preview.idx + 1).padStart(2, "0")}
                 </p>
                 <h2>{chapterTitle}</h2>
-                <div className="study-paper-text">
-                  <MathText text={preview.content} />
-                </div>
+                {units.data?.image_reading?.pdf &&
+                  preview.page_from &&
+                  preview.page_to &&
+                  preview.page_to - preview.page_from < 24 && (
+                    <div
+                      className="study-reading-switch"
+                      role="group"
+                      aria-label="资料预览方式"
+                    >
+                      <button
+                        className="text-button"
+                        aria-pressed={!showPdf}
+                        onClick={() => setShowPdf(false)}
+                      >
+                        识别文字
+                      </button>
+                      <button
+                        className="text-button"
+                        aria-pressed={showPdf}
+                        onClick={() => setShowPdf(true)}
+                      >
+                        对照 PDF 原页
+                      </button>
+                    </div>
+                  )}
+                {showPdf &&
+                preview.page_from &&
+                preview.page_to &&
+                preview.page_to - preview.page_from < 24 ? (
+                  <StudyPdfPages
+                    key={preview.id}
+                    id={preview.id}
+                    pages={Array.from(
+                      { length: preview.page_to - preview.page_from + 1 },
+                      (_, index) => preview.page_from! + index,
+                    )}
+                  />
+                ) : (
+                  <div className="study-paper-text">
+                    <MathText text={analysis?.source_text ?? preview.content} />
+                  </div>
+                )}
                 {analysis && (
                   <section
                     className="study-source-analysis"
@@ -707,6 +814,27 @@ function BookPage() {
                     </p>
                     <h3>这段材料讲了什么</h3>
                     <p>{analysis.summary}</p>
+                    {analysis.source_method === "pdf_images" && (
+                      <p className="hint">
+                        依据 PDF 原页读取；公式仍需对照原图核对。
+                      </p>
+                    )}
+                    {Boolean(
+                      analysis.warnings?.length ||
+                      analysis.reading_warnings?.length,
+                    ) && (
+                      <details className="study-analysis-notes">
+                        <summary>已保留有效内容 · 查看跳过与待核对项</summary>
+                        <ul>
+                          {[
+                            ...(analysis.warnings ?? []),
+                            ...(analysis.reading_warnings ?? []),
+                          ].map((warning, index) => (
+                            <li key={index}>{warning}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
                     {analysis.knowledge_points.length > 0 && (
                       <ul>
                         {analysis.knowledge_points.map((point, index) => (
@@ -772,8 +900,8 @@ function BookPage() {
                   disabled={
                     active ||
                     busy ||
-                    preview.content.trim().length < 80 ||
-                    preview.eligible === false ||
+                    (readMode !== "pdf" &&
+                      (preview.text_eligible ?? preview.eligible) === false) ||
                     (!selected.includes(preview.id) && selected.length >= limit)
                   }
                   onClick={() => toggle(preview)}
@@ -813,6 +941,34 @@ function BookPage() {
             <small>02</small>
           </div>
           <fieldset disabled={active || busy} className="study-config">
+            <div>
+              <label className="study-label" htmlFor="study-reading">
+                材料读取方式
+              </label>
+              <select
+                id="study-reading"
+                value={readMode}
+                onChange={(event) =>
+                  setReadMode(event.target.value as "text" | "pdf")
+                }
+              >
+                <option value="text">识别文字 · 适合清晰文本资料</option>
+                <option
+                  value="pdf"
+                  disabled={!units.data?.image_reading?.available}
+                >
+                  PDF 原页 · 看清公式与上下标
+                </option>
+              </select>
+              <p className="hint">
+                {readMode === "pdf"
+                  ? `将选中范围的 ${selectedPages} 个 PDF 原页图片发送给当前模型，另行核对原图；逐页缓存，提高模型用量。`
+                  : "仅发送选中片段的识别文字。练习册若有分式或上下标缺失，请选择 PDF 原页。"}
+              </p>
+              {!units.data?.image_reading?.available && (
+                <p className="hint">{units.data?.image_reading?.reason}</p>
+              )}
+            </div>
             <div className="study-config-row">
               <label htmlFor="study-count">每个片段</label>
               <select
@@ -923,7 +1079,8 @@ function BookPage() {
               !selected.length ||
               selected.length * count > questionLimit ||
               !initialJob.data ||
-              Boolean(initialJob.error)
+              Boolean(initialJob.error) ||
+              Boolean(readingError)
             }
             onClick={() => void generate()}
           >
@@ -940,6 +1097,11 @@ function BookPage() {
               单批最多 {questionLimit} 道题，请减少范围或每片段题量。
             </p>
           )}
+          {readingError && (
+            <p className="study-extraction-warning" role="alert">
+              {readingError}
+            </p>
+          )}
           <button
             className="button secondary study-analyze"
             disabled={
@@ -947,7 +1109,8 @@ function BookPage() {
               busy ||
               !selected.length ||
               !initialJob.data ||
-              Boolean(initialJob.error)
+              Boolean(initialJob.error) ||
+              Boolean(readingError)
             }
             onClick={() => void generate(false, true)}
           >
@@ -958,7 +1121,7 @@ function BookPage() {
             <ErrorState message={initialJob.error} retry={initialJob.reload} />
           )}
           <p className="study-model-note">
-            选中正文会发送给已配置的模型，按每批最多 6
+            选中材料会发送给已配置的模型，按每批最多 3
             题生成并另行审题。提高题量会增加时间与模型用量；未通过复核的题不入库，AI
             结论仍需核对。
           </p>
@@ -1019,11 +1182,14 @@ function BookPage() {
               ) : job.created_count < job.target ? (
                 <button
                   className="button secondary small"
-                  disabled={busy}
+                  disabled={busy || Boolean(resumeReadingError)}
                   onClick={() => void generate(true)}
                 >
                   <RotateCcw size={14} />
                   补出缺少的题
+                  {readMode === "pdf"
+                    ? ` · 原页 ${pageCount(resumeScope)} 页`
+                    : ""}
                 </button>
               ) : (
                 <button
@@ -1037,6 +1203,11 @@ function BookPage() {
               )}
             </div>
           </div>
+          {remainingItems.length > 0 && resumeReadingError && (
+            <p className="study-extraction-warning" role="alert">
+              {resumeReadingError}
+            </p>
+          )}
           <div
             className="study-generation-bar"
             role="progressbar"
@@ -1067,6 +1238,7 @@ function BookPage() {
                 ) : [
                     "running",
                     "analyzing",
+                    "reading",
                     "generating",
                     "reviewing",
                   ].includes(item.status) && active ? (
@@ -1079,7 +1251,9 @@ function BookPage() {
                 </span>
                 <small>
                   {active &&
-                  ["analyzing", "generating", "reviewing"].includes(item.status)
+                  ["reading", "analyzing", "generating", "reviewing"].includes(
+                    item.status,
+                  )
                     ? STATES[item.status]
                     : job.options.analyze_only
                       ? item.status === "completed"
@@ -1204,7 +1378,7 @@ function BookPage() {
               <textarea
                 aria-label="片段正文"
                 rows={16}
-                minLength={80}
+                minLength={24}
                 maxLength={8000}
                 disabled={savingCorrection}
                 value={correction.text}
@@ -1231,7 +1405,7 @@ function BookPage() {
               <button
                 className="button primary"
                 disabled={
-                  savingCorrection || correction.text.trim().length < 80
+                  savingCorrection || correction.text.trim().length < 24
                 }
               >
                 {savingCorrection ? "正在保存…" : "保存校对"}
@@ -1245,6 +1419,7 @@ function BookPage() {
           key={sourceDialog.source_id}
           id={sourceDialog.source_id}
           quote={sourceDialog.source_quote}
+          pages={sourceDialog.source_pages}
           onClose={() => setSourceDialog(null)}
         />
       )}
