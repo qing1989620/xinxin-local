@@ -479,7 +479,7 @@ def create_app(config=None):
         with auth.lock:
             if len(body.password) < 10:
                 raise HTTPException(422, "密码至少 10 个字符")
-            if not hmac.compare_digest(body.setup_code, config.setup_token):
+            if not hmac.compare_digest(body.setup_code.encode("utf-8"), config.setup_token.encode("utf-8")):
                 raise HTTPException(403, "初始化码不正确，请查看后端 data/bootstrap.code")
             try:
                 store.execute(

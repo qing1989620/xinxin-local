@@ -39,17 +39,18 @@ def test_initialization_is_private_and_single_owner(tmp_path):
             "email_enabled": False,
         }
         assert client.get("/api/v1/files").status_code == 401
-        assert (
-            client.post(
-                "/api/v1/auth/setup",
-                json={
-                    "name": "me",
-                    "password": "long-password-123",
-                    "setup_code": "wrong",
-                },
-            ).status_code
-            == 403
-        )
+        for invalid_code in ("wrong", "中文初始化码"):
+            assert (
+                client.post(
+                    "/api/v1/auth/setup",
+                    json={
+                        "name": "me",
+                        "password": "long-password-123",
+                        "setup_code": invalid_code,
+                    },
+                ).status_code
+                == 403
+            )
         good = {
             "name": "me",
             "password": "long-password-123",
