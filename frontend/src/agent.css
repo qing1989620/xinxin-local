@@ -331,6 +331,16 @@
   color: var(--accent);
   white-space: nowrap;
 }
+.agent-configuration-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .agent-v2 .message {
   max-width: 790px;
   margin-left: auto;

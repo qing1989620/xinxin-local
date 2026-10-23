@@ -722,7 +722,9 @@ export default function AgentPage() {
                 />
                 <span className="agent-model-name">
                   {!settings.data
-                    ? "正在读取模型配置"
+                    ? settings.error
+                      ? "模型配置读取失败"
+                      : "正在读取模型配置"
                     : settings.data.model_configured
                       ? settings.data.model === "deepseek-flash"
                         ? "DeepSeek Flash"
@@ -745,7 +747,13 @@ export default function AgentPage() {
                 <span className="agent-model-divider" aria-hidden="true">
                   ·
                 </span>
-                <span>{active ? "任务正在执行" : "准备好，与你一起工作"}</span>
+                <span>
+                  {active
+                    ? "任务正在执行"
+                    : !settings.data
+                      ? "配置就绪后即可发送"
+                      : "准备好，与你一起工作"}
+                </span>
               </p>
             </div>
           </div>
@@ -1184,7 +1192,14 @@ export default function AgentPage() {
                 <button
                   className="send-button"
                   aria-label="发送任务"
-                  disabled={!draft.trim() || busy || archived || contextSaving}
+                  aria-busy={!settings.data && !settings.error}
+                  disabled={
+                    !settings.data ||
+                    !draft.trim() ||
+                    busy ||
+                    archived ||
+                    contextSaving
+                  }
                   onClick={() => void send()}
                 >
                   <ArrowUp size={20} />
@@ -1192,6 +1207,23 @@ export default function AgentPage() {
               )}
             </div>
           </div>
+          {!settings.data && (
+            <p
+              className="agent-configuration-state"
+              role={settings.error ? "alert" : "status"}
+            >
+              <span>
+                {settings.error
+                  ? "暂时没能读取任务配置，你的草稿已保留。"
+                  : "正在读取任务配置，完成后即可发送。"}
+              </span>
+              {settings.error && (
+                <button className="text-button" onClick={settings.reload}>
+                  重新读取任务配置
+                </button>
+              )}
+            </p>
+          )}
           <p className="composer-hint">
             <span>
               <Shield size={11} />
