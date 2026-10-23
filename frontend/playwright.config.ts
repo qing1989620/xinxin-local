@@ -39,7 +39,8 @@ export default defineConfig({
     {
       command:
         "node node_modules/vite/bin/vite.js preview --outDir .qa-data/preview-dist --host 127.0.0.1 --port 5187",
-      env: { XINXIN_BACKEND_PORT: "8017" },
+      // The test server is non-interactive; stdin closure must not stop Vite.
+      env: { XINXIN_BACKEND_PORT: "8017", CI: "true" },
       url: "http://127.0.0.1:5187",
       reuseExistingServer: false,
     },
