@@ -4,8 +4,9 @@ import { test, expect } from "@playwright/test";
 // browser's real secure-context restrictions; it never opens a LAN listener.
 const origin = "http://xinxin.invalid";
 test.afterEach(async ({ page }) => {
-  // Import navigation starts background reads; drain the proxy before teardown.
-  await page.unrouteAll({ behavior: "wait" });
+  // Product assertions have finished. Cancelled navigation requests can still
+  // settle here; Playwright's teardown mode owns only these remaining routes.
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 test("局域网 HTTP：上传、Agent 连续提交及学习导入可用", async ({
   page,
@@ -102,5 +103,8 @@ test("局域网 HTTP：上传、Agent 连续提交及学习导入可用", async 
     .click();
   expect((await imported).ok()).toBe(true);
   await expect(page).toHaveURL(/\/learning\/books\//);
+  await expect(page.locator(".study-book-header h1")).toBeVisible();
+  await expect(page.locator(".study-workspace")).toBeVisible();
+  await page.waitForLoadState("networkidle");
   expect(errors).toEqual([]);
 });
