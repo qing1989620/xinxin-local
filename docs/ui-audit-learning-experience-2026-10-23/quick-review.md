@@ -1,5 +1,7 @@
 # 学习旅程专项审计
 
+本文件保留此前 16 次真实调用阶段的历史结果；随后追加 30 次调用的最终真实链路、回归及网关环境阻塞见 [最新专项审计](../ui-audit-learning-live-2026-10-23/quick-review.md)。
+
 固定基线：`6bbb6f0969050f920ea1bfd17ed3e0ab5f0d20ca`。按 BadGoods `review-frontend-production` quick 工作流检查学习首页、出题工作室、练习页，以及它们共享的原页预览、请求和桌面构建边界。这是学习旅程专项审计，不是重新宣称全站逐组件 full 审计。
 
 需求：[学习体验合同](../specs/2026-10-23-learning-experience.md)。使用效果和模型验证边界：[体验总结](../learning-experience-2026-10-23.md)。
