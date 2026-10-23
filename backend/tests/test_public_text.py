@@ -25,18 +25,24 @@ def test_overlapping_hold_ranges_never_split_a_known_credential(label):
             assert "syntheticBeta" not in public, (first, second, public)
 
 
-@pytest.mark.parametrize("value", [
-    "Bearer syntheticAlpha", "password: syntheticAlpha",
-    'Bearer synthetic\\"Alpha', 'password: synthetic\\"Alpha',
+@pytest.mark.parametrize("ascii_json", [False, True])
+@pytest.mark.parametrize("value, expected", [
+    ("Bearer syntheticAlpha", "[redacted]"),
+    ("password: syntheticAlpha", "password: [redacted]"),
+    ('Bearer synthetic\\"Alpha', "[redacted]"),
+    ('password: synthetic\\"Alpha', "password: [redacted]"),
+    ("中文 Bearer syntheticAlpha", "中文 [redacted]"),
+    ("前缀\nBearer syntheticAlpha", "前缀\n[redacted]"),
+    ("前缀\tpassword: syntheticAlpha", "前缀\tpassword: [redacted]"),
 ])
-def test_streaming_json_values_keep_their_structure_and_escapes(value):
-    text = json.dumps({"output": value, "safe": "Done."})
+def test_streaming_json_values_keep_their_structure_and_escapes(value, expected, ascii_json):
+    text = json.dumps({"output": value, "safe": "Done."}, ensure_ascii=ascii_json)
     for first in range(len(text) + 1):
         for second in range(first, len(text) + 1):
             stream = PublicText(redact, [])
             public = (stream.feed(text[:first]) + stream.feed(text[first:second])
                       + stream.feed(text[second:]) + stream.finish())
-            assert json.loads(public) == {"output": "[redacted]" if value.startswith("Bearer") else "password: [redacted]", "safe": "Done."}, (first, second, public)
+            assert json.loads(public) == {"output": expected, "safe": "Done."}, (first, second, public)
 
 
 def test_current_credentials_join_the_snapshot_before_any_delta_is_published():

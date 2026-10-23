@@ -36,16 +36,18 @@ def quoted_strings(text):
     cursor = 0
     while (start := text.find('"', cursor)) >= 0:
         end = start + 1
+        complete = False
         while end < len(text):
             if text[end] == "\\":
                 end += 2
             elif text[end] == '"':
                 end += 1
+                complete = True
                 break
             else:
                 end += 1
         end = min(end, len(text))
-        yield start, end
+        yield start, end, complete
         cursor = end
 
 
@@ -58,30 +60,39 @@ def redact_text(text, forms=(), limit=None):
     """
     spans = [(start, end, '"[redacted]"')
              for _, start, end in credential_fields(text)]
+    quotes = [(start, end) for start, end, complete in quoted_strings(text) if complete]
+    for start, end in quotes:
+        try:
+            decoded = json.loads(text[start:end])
+        except ValueError:
+            continue
+        # JSON escaping can hide whitespace and word boundaries from a regex.
+        # Decode a complete string first, then encode its cleaned value once.
+        cleaned = redact_text(decoded, forms)
+        if cleaned != decoded:
+            spans.append((start, end, json.dumps(cleaned, ensure_ascii=False)))
+
+    def in_string(position):
+        return any(start < position < end for start, end in quotes)
+
     for match in re.finditer(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
         text, flags=re.S,
     ):
-        spans.append((match.start(), match.end(), "[redacted private key]"))
-    quotes = list(quoted_strings(text))
+        if not in_string(match.start()):
+            spans.append((match.start(), match.end(), "[redacted private key]"))
     for pattern, group in ((_BEARER + r"[^\s,;]+", 0),
                            (_ASSIGNMENT + r"([^\s,;]+)", 3)):
         for match in re.finditer(pattern, text):
-            start, end = match.start(group), match.end(group)
-            # A token inside a JSON string must not consume its closing quote
-            # or the surrounding object. Escaped quotes stay within the unit.
-            for left, right in quotes:
-                if left < match.start() < right and text[right - 1] == '"':
-                    end = min(end, right - 1)
-                    break
-            if start < end:
-                spans.append((start, end, "[redacted]"))
+            if not in_string(match.start()):
+                spans.append((match.start(group), match.end(group), "[redacted]"))
     for form in forms:
         if form:
             spans.extend((match.start(), match.end(), "[redacted]")
                          for match in re.finditer(re.escape(form), text))
     spans.extend((match.start(), match.end(), "[redacted]")
-                 for match in re.finditer(r"sk-[A-Za-z0-9_-]{12,}", text))
+                 for match in re.finditer(r"sk-[A-Za-z0-9_-]{12,}", text)
+                 if not in_string(match.start()))
     merged = []
     for start, end, replacement in sorted(spans, key=lambda span: (span[0], -span[1])):
         if merged and start < merged[-1][1]:
@@ -141,7 +152,8 @@ class PublicText:
             holds.append((start, end + 1))
         # Keep every quoted value intact, including non-secret JSON envelopes.
         # Otherwise the next fragment loses the context of escaped characters.
-        holds.extend(quoted_strings(self.pending))
+        holds.extend((start, end if complete else end + 1)
+                     for start, end, complete in quoted_strings(self.pending))
         for match in re.finditer(r'("(?:\\.|[^"\\])*")\s*$', self.pending):
             if _secret_field(match.group(1)):
                 holds.append((match.start(), len(self.pending) + 1))
