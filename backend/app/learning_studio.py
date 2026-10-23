@@ -352,7 +352,10 @@ async def analyze(store, gateway, unit, flag, *, read_mode="text", library=None,
     cached = store.one("SELECT data FROM learning_source_analysis WHERE source_id=? AND version=?", (unit["id"], quality.VERSION))
     if cached:
         value = json.loads(cached["data"])
-        if (value.get("source_method", "text") == "pdf_images") == (read_mode == "pdf"):
+        matches_mode = (value.get("source_method", "text") == "pdf_images") == (read_mode == "pdf")
+        complete_reading = read_mode != "pdf" or (not value.get("reading_warnings") and
+            set(value.get("read_pages", [])) == set(visual.page_range(unit)))
+        if matches_mode and complete_reading:
             return value
     material = await visual.read_source(store, library, gateway, unit, flag, progress) if read_mode == "pdf" else {"content": unit["content"], "source_method": "text"}
     effective = unit | material

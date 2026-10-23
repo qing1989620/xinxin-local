@@ -9,10 +9,11 @@ from .document_text import MATH_UNCERTAIN
 from . import learning_evidence as evidence
 
 VERSION = 3
+MIN_MATERIAL_CHARS = 24
 MATERIAL_TYPES = {"knowledge", "exercises", "mixed", "contents", "answers", "frontmatter", "insufficient"}
 TYPE_LABELS = {"knowledge": "知识正文", "exercises": "练习题", "mixed": "讲练结合", "contents": "目录", "answers": "答案表", "frontmatter": "前置说明", "insufficient": "正文不足"}
 TOC_ROW = re.compile(r"^(?:.{2,90}?(?:[.．·…‧]{2,}|\s{2,}|\t)\s*\d{1,4}|(?:第[一二三四五六七八九十百零〇\d]+[章节篇]|\d{1,2}(?:\.\d{1,2}){1,2})[^=？！?]{1,70}?\s*\d{1,4})\s*$")
-EXERCISE = re.compile(r"^\s*(?:(?:例题?|习题|练习|题目)\s*[一二三四五六七八九十\d]*|\d{1,3}[.．、)）])\s*\S", re.M)
+EXERCISE = re.compile(r"^\s*(?:(?:例题?|习题|练习|题目)\s*[一二三四五六七八九十\d]*|[（(]\s*\d{1,3}\s*[)）]|\d{1,3}[.．、)）])\s*\S", re.M)
 ANSWER_ROW = re.compile(r"^\s*\d{1,3}[.．、)）]?\s*[A-D](?:[\s,，、;；]+\d{1,3}[.．、)）]?\s*[A-D])*\s*$", re.I)
 METADATA_QUESTION = re.compile(
     r"(?:第[几多少]+页|哪[一几]?页|页码.{0,10}(?:多少|什么|几|___|[?？]))"
@@ -39,7 +40,7 @@ def material_profile(content, title=""):
     kind, reason = "knowledge", ""
     if MATH_UNCERTAIN in content:
         kind, reason = "insufficient", "包含尚未可靠转换的公式，请先校对标记处再出题"
-    elif len(compact(content)) < (24 if numbered else 80):
+    elif len(compact(content)) < (MIN_MATERIAL_CHARS if numbered else 80):
         kind, reason = "insufficient", "正文过短，缺少足够知识内容或完整题干"
     elif toc >= 3 and toc / max(1, len(lines)) >= .5:
         kind, reason = "contents", "目录只提供章节位置，未提供可考查知识"
@@ -65,7 +66,7 @@ ANALYSIS_PROMPT = """学习材料分析协议 v3。你是严谨的学科教研�
 type 只能是 knowledge/exercises/mixed/contents/answers/frontmatter/insufficient。
 目录、页码索引、版权说明、仅有答案而无题干必须标为不可出题的相应类型。
 summary 用 2～4 句总结实际知识、题型、方法与易错点；不能虚称总结了未给出的全书。
-numbered_text 提供服务器编好的 L行号；引用用 source_ref:"L3-L8"（包含起止行），不要重抄 quote，不要把行号写进题干。
+numbered_text 提供服务器编好的 L行号（长段落每 400 字拆为连续片段）；引用用 source_ref:"L3-L8"（包含起止行），不要重抄 quote，不要把行号写进题干。连续片段由服务器按原始文字无损拼接。
 knowledge_points: [{name,source_ref}]，最多 16 个，引用实际概念/方法的 8～800 字证据。
 exercises: [{label,source_ref,solvable}]，最多 30 个，引用完整题干及选项的 8～4000 字证据。
 保留题号、条件、公式、单位和选项；没有题干的答案不能算原题；缺图无法确定条件的 solvable=false。
@@ -118,11 +119,13 @@ def parse_analysis(value, unit):
         if not isinstance(values, list):
             raise ValueError("材料分析清单格式不正确")
         limit = 16 if field == "knowledge_points" else 30
-        if len(values) > limit:
-            skipped += len(values) - limit
-            warnings.append(f"{'知识点' if field == 'knowledge_points' else '原题'}超出单次分析上限，保留前 {limit} 条继续校验")
         seen = set()
-        for index, item in enumerate(values[:limit], 1):
+        for index, item in enumerate(values, 1):
+            if len(target) == limit:
+                remaining = len(values) - index + 1
+                skipped += remaining
+                warnings.append(f"{'知识点' if field == 'knowledge_points' else '原题'}已保留 {limit} 条有效证据，超出上限的 {remaining} 条未纳入")
+                break
             try:
                 if not isinstance(item, dict):
                     raise ValueError("条目格式无效")

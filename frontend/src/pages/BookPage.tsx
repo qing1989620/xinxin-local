@@ -824,7 +824,13 @@ function BookPage() {
                       analysis.reading_warnings?.length,
                     ) && (
                       <details className="study-analysis-notes">
-                        <summary>已保留有效内容 · 查看跳过与待核对项</summary>
+                        <summary>
+                          已保留有效内容
+                          {analysis.skipped_entries
+                            ? ` · 跳过 ${analysis.skipped_entries} 条分析项`
+                            : ""}
+                          {" · 查看跳过与待核对项"}
+                        </summary>
                         <ul>
                           {[
                             ...(analysis.warnings ?? []),

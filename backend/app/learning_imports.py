@@ -58,7 +58,7 @@ async def start(store, library, manager, body):
         if flag.is_set():
             raise asyncio.CancelledError()
         # Never replace saved text with a failed/empty OCR result.
-        if len(text.strip()) < 200:
+        if len(text.strip()) < learning.MIN_MATERIAL_CHARS:
             raise ValueError("未识别出足够正文；可能是空白或图像质量过低，请核对原文件")
         with store.connect(write=True) as db:
             if not db.execute("SELECT id FROM files WHERE id=?", (file["id"],)).fetchone():

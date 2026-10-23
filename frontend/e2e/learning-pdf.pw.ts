@@ -106,7 +106,7 @@ test("PDF 原页预览、明确选择图片读取、部分证据恢复与题目�
     page.getByRole("region", { name: "当前片段总结" }),
   ).toContainText("合成原页");
   await page
-    .getByText("已保留有效内容 · 查看跳过与待核对项", { exact: true })
+    .getByText("已保留有效内容 · 跳过 1 条分析项 · 查看跳过与待核对项", { exact: true })
     .click();
   await expect(
     page.getByRole("region", { name: "当前片段总结" }),

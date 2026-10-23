@@ -11,10 +11,11 @@ from pypdf import PdfWriter
 from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 
 from app import learning_evidence as evidence, learning_quality as quality, learning_visual as visual
-from app.learning_studio import analyze, validate
+from app.learning_studio import validate
 from app.model import ModelGateway
-from test_learning_studio import studio, add_book, source_list, start, wait, question, model
+from test_learning_studio import studio, add_book, source_list, start, wait, question
 from test_learning_quality import script
+from test_learning_imports import start as import_start, wait_import
 
 
 TEXT = "推导与练习\n1. 已知 f(x)=x^2，求 x=3 处的导数。\nA. 6 B. 3 C. 9 D. 2\n2. 求函数 y=x+9/x (x>0) 的最小值，并说明取等条件。\n"
@@ -34,6 +35,21 @@ def test_position_citations_keep_math_verbatim_and_ignore_model_rewording():
     assert "x^2" in entry["quote"] and "x^3" not in entry["quote"]
 
 
+def test_long_paragraph_has_bounded_verbatim_evidence_and_exact_page_mapping():
+    content = "导数表示函数的瞬时变化率，f(x)=x^2 的导函数为2x。" * 40 + "\r\n第二段完整说明。"
+    assert len(content.splitlines()[0]) > 800
+    numbered = evidence.numbered_text(content)
+    assert "L2:" in numbered
+    citation = evidence.resolve(content, "L1-L2", maximum=800)
+    assert citation["quote"] == content[:800]
+    spans = [{"page": 4, "start": 0, "end": 500}, {"page": 5, "start": 500, "end": len(content)}]
+    assert evidence.line_pages(content, "L2", spans) == [4, 5]
+    count = len(numbered.splitlines())
+    assert evidence.resolve(content, f"L1-L{count}")["quote"] == content
+    value = quality.parse_analysis(analysis(type="knowledge", knowledge_points=[{"name": "导数定义", "source_ref": "L1"}], exercises=[]), {"content": content})
+    assert value["eligible"] and value["knowledge_points"][0]["quote"] == content[:400]
+
+
 @pytest.mark.parametrize("reference", ["L0-L2", "L3-L2", "L2-L9999", "P1", 2, None, "L1-L2; ignore", "L1-L1000000000000000000000"])
 def test_invalid_or_outside_positions_never_become_evidence(reference):
     with pytest.raises(ValueError):
@@ -45,8 +61,24 @@ def test_a_bad_quote_and_oversized_list_do_not_discard_good_evidence():
     entries[0] = {"label": "错误改写", "quote": "这个知识点和公式并不存在于原材料之中。", "solvable": True}
     result = quality.parse_analysis(analysis(exercises=entries), UNIT)
     assert result["eligible"] and len(result["exercises"]) == 1
-    assert result["skipped_entries"] == 8
-    assert len(result["warnings"]) == 2
+    assert result["skipped_entries"] == 1
+    assert len(result["warnings"]) == 1
+
+
+def test_valid_evidence_after_many_bad_entries_is_still_recovered():
+    entries = [{"label": "坏引用", "source_ref": "L999", "solvable": True} for _ in range(30)]
+    entries.append({"label": "完整原题", "source_ref": "L2-L3", "solvable": True})
+    value = quality.parse_analysis(analysis(exercises=entries), UNIT)
+    assert value["eligible"] and len(value["exercises"]) == 1
+    assert value["skipped_entries"] == 30
+
+
+def test_analysis_limit_applies_to_valid_entries_and_reports_remaining_count():
+    content = "\n".join(f"{index}. 已知 f(x)=x^2，求 x={index} 处的导数。" for index in range(1, 38))
+    entries = [{"label": f"第{index}题", "source_ref": f"L{index}", "solvable": True} for index in range(1, 38)]
+    value = quality.parse_analysis(analysis(exercises=entries), {"content": content})
+    assert value["eligible"] and len(value["exercises"]) == 30
+    assert value["skipped_entries"] == 7 and "7 条未纳入" in value["warnings"][0]
 
 
 def test_unsolvable_formula_is_not_an_approved_question_source():
@@ -98,6 +130,23 @@ def test_short_but_complete_math_exercises_are_not_blocked_by_word_count(studio)
     assert unit["eligible"] and unit["chars"] < 200
     done = wait(client, start(client, book, [unit], analyze_only=True).json()["job"])
     assert done["status"] == "completed" and len(calls) == 1
+
+
+@pytest.mark.parametrize("number", ["(1)", "（1）"])
+def test_parenthesized_short_exercise_reaches_generation_and_review(studio, number):
+    app, client, _ = studio
+    content = number + " 设函数 f(x)=x^2+3x，求 f'(2) 的值。"
+    assert 24 <= len(quality.compact(content)) < 80
+    file = client.post("/api/v1/files", files={"file": ("synthetic-short-exercise.txt", content.encode())}).json()
+    imported = wait_import(client, import_start(client, file["id"]).json()["job"])
+    assert imported["status"] == "completed", imported
+    book = client.get(f"/api/v1/learning/books/{imported['book_id']}").json()["book"]
+    calls = script(app, analyze=lambda _: analysis(exercises=[{"label": "第1题", "source_ref": "L1", "solvable": True}]),
+        generate=lambda _: [question(content, "求函数 f(x)=x^2+3x 在 x=2 处的导数：___。", kind="fill") |
+            {"source_ref": "L1", "options": [], "answer": ["7"], "explanation": "先求导得到 f'(x)=2x+3，代入 x=2 得到7。"}])
+    done = wait(client, start(client, book, source_list(client, book)[:1], kinds=["fill"]).json()["job"])
+    assert done["status"] == "completed" and done["created_count"] == 1
+    assert [stage for stage, _ in calls] == ["analysis", "generation", "review"]
 
 
 def add_pdf(client, pages=2):
@@ -211,6 +260,28 @@ def test_visual_reading_cancellation_keeps_completed_pages_and_reuses_them(studi
     material = asyncio.run(visual.read_source(app.state.store, app.state.library, gateway, unit, flag))
     assert material["read_pages"] == [1, 2, 3, 4, 5]
     assert [payload["physical_pages"] for stage, payload, _ in calls if stage == "reading"] == [[1, 2, 3], [4, 5]]
+
+
+def test_partial_visual_analysis_retries_only_unread_pages_then_reuses_complete_result(studio):
+    app, client, _ = studio
+    book, unit = add_pdf(client)
+    batches = []
+    def reading(payload):
+        batches.append(payload["physical_pages"])
+        return {"pages": [{"page": page, "readable": len(batches) > 1 or page == 1,
+            "text": "1. 已知函数 f(x)=x^2，求 x=3 处的导数。\nA. 6 B. 3 C. 9 D. 2" if len(batches) > 1 or page == 1 else "",
+            "reason": "本次未能辨认" if len(batches) == 1 and page == 2 else ""} for page in payload["physical_pages"]]}
+    calls = visual_transport(app, reading=reading)
+    first = wait(client, start(client, book, [unit], analyze_only=True, read_mode="pdf").json()["job"])
+    assert first["status"] == "completed"
+    value = json.loads(app.state.store.one("SELECT data FROM learning_source_analysis WHERE source_id=?", (unit["id"],))["data"])
+    assert value["reading_warnings"] and value["read_pages"] == [1]
+    second = wait(client, start(client, book, [unit], analyze_only=True, read_mode="pdf").json()["job"])
+    assert second["status"] == "completed" and batches == [[1, 2], [2]]
+    assert app.state.store.one("SELECT count(*) n FROM learning_visual_pages")["n"] == 2
+    count = len(calls)
+    third = wait(client, start(client, book, [unit], analyze_only=True, read_mode="pdf").json()["job"])
+    assert third["status"] == "completed" and len(calls) == count
 
 
 def test_visual_critic_rejection_never_enters_question_bank(studio):

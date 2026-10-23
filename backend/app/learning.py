@@ -17,7 +17,7 @@ from pathlib import Path
 from .music import atmosphere
 from .persona import IDENTITY
 from .store import clean_text, uid
-from .learning_quality import TOC_ROW
+from .learning_quality import MIN_MATERIAL_CHARS, TOC_ROW
 
 MAX_CHAPTER_CHARS = 24_000
 MAX_CHAPTERS = 500
@@ -158,7 +158,7 @@ def split_chapters(text: str) -> list[dict]:
 
 def create_book(store, library, file_row: dict, title: str = "", subject: str = "") -> dict:
     content = _normalize(clean_text(file_row.get("text") or ""))
-    if len(content) < 24:
+    if len(content) < MIN_MATERIAL_CHARS:
         raise ValueError("这份资料抽不出足够正文，换一个 PDF / Word / 文本试试")
     chapters = split_chapters(content)
     if not chapters:

@@ -152,4 +152,4 @@ async def read_source(store, library, gateway, unit, flag, progress=None):
     if not parts:
         raise ValueError("选中原页未识别出可读正文；请核对原文件或改用清晰版本")
     return {"content": "".join(parts), "source_method": "pdf_images", "page_spans": spans,
-            "reading_warnings": warnings, "read_pages": pages}
+            "reading_warnings": warnings, "read_pages": [span["page"] for span in spans]}
