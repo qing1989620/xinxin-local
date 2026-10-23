@@ -32,6 +32,11 @@ function Test-XinxinApplicationBlocked([System.Exception]$Failure) {
   # opening. Do not suppress port/configuration errors or change OS policy.
   for ($depth = 0; $Failure -and $depth -lt 16; $depth++) {
     if ($Failure -is [System.ComponentModel.Win32Exception] -and $Failure.NativeErrorCode -eq 4551) { return $true }
+    # Windows PowerShell 5.1 Start-Process replaces this Win32Exception with
+    # an InvalidOperationException and drops NativeErrorCode/InnerException.
+    # Match only its observed full application-control message, never a generic
+    # access-denied/configuration failure.
+    if ($Failure -is [System.InvalidOperationException] -and $Failure.Message.Trim() -eq 'This command cannot be run due to the error: An Application Control policy has blocked this file.') { return $true }
     $Failure = $Failure.InnerException
   }
   return $false

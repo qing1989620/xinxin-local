@@ -48,9 +48,12 @@ $blocked=New-Object System.ComponentModel.Win32Exception(4551)
 if(-not(Test-XinxinApplicationBlocked $blocked)){throw 'Blocked gateway was not recognized'}
 $wrapped=New-Object System.InvalidOperationException('wrapper',$blocked)
 if(-not(Test-XinxinApplicationBlocked $wrapped)){throw 'Wrapped application control failure was not recognized'}
+$legacy=New-Object System.InvalidOperationException('This command cannot be run due to the error: An Application Control policy has blocked this file.')
+if(-not(Test-XinxinApplicationBlocked $legacy)){throw 'PowerShell 5.1 flattened application control failure was not recognized'}
 $denied=New-Object System.ComponentModel.Win32Exception(5)
 if(Test-XinxinApplicationBlocked $denied){throw 'Unrelated access error was hidden'}
 if(Test-XinxinApplicationBlocked (New-Object System.Exception('Bad gateway configuration'))){throw 'Configuration error was hidden'}
+if(Test-XinxinApplicationBlocked (New-Object System.InvalidOperationException('This command cannot be run due to the error: Access is denied.'))){throw 'Generic launch failure was hidden'}
 ''', encoding="utf-8-sig")
     result = subprocess.run([shutil.which("powershell.exe"), "-NoProfile", "-File", str(script), str(helper)], capture_output=True, timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
