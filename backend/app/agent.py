@@ -191,13 +191,11 @@ class TaskManager:
             )
         }, key=len, reverse=True)
 
-    def redact(self, value, limit=16000):
+    def redact(self, value, limit=16000, *, known_forms=()):
         text = str(value)
-        forms = self.secret_forms()
+        forms = sorted(set(self.secret_forms()) | set(known_forms), key=len, reverse=True)
 
         def redact_text(text):
-            for form in forms:
-                text = text.replace(form, "[redacted]")
             text = re.sub(
                 r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
                 "[redacted private key]",
@@ -208,7 +206,12 @@ class TaskManager:
                 r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
                 "[redacted private key]", text, flags=re.S,
             )
-            return safe_summary(text, limit=limit)
+            # Literal credentials can also be labels (e.g. "password"). Hide
+            # fields/assignments before replacing literals or truncating them.
+            text = safe_summary(text, limit=None)
+            for form in forms:
+                text = text.replace(form, "[redacted]")
+            return text if limit is None else text[:limit]
 
         def redact_data(data):
             if isinstance(data, str):

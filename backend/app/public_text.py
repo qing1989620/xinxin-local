@@ -49,10 +49,8 @@ class PublicText:
         self.pending = ""
 
     def sanitize(self, value, limit=None):
-        text = str(value)
-        for form in self.forms:
-            text = text.replace(form, "[redacted]")
-        return self.redact(text, limit=limit)
+        # Preserve the original field names until semantic redaction finishes.
+        return self.redact(value, limit=limit, known_forms=self.forms)
 
     def feed(self, delta):
         self.pending += delta

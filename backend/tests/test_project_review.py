@@ -174,6 +174,41 @@ def test_new_json_credentials_are_redacted_even_when_not_in_the_vault(client, te
         assert "[redacted]" in public
 
 
+@pytest.mark.parametrize("known", ["password", "pass", "token"])
+@pytest.mark.parametrize("text", [
+    '{"password":"syntheticAlpha syntheticBeta"}',
+    'JSON: {"password":"syntheticAlpha syntheticBeta"} Done.',
+    'password: syntheticAlpha; token: syntheticBeta; Done.',
+])
+def test_credential_labels_are_removed_before_overlapping_known_values(client, known, text):
+    manager, auth = client.app.state.manager, client.app.state.auth
+    auth.set_secret("audit_sentinel", known)
+    snapshot = manager.secret_forms()
+    assert "syntheticAlpha" not in manager.redact(text, limit=None)
+    assert "syntheticBeta" not in manager.redact(text, limit=None)
+    # A running task must keep the same protection when the setting rotates.
+    auth.set_secret("audit_sentinel", "replacement-private-key")
+    for split in range(len(text) + 1):
+        stream = PublicText(manager.redact, snapshot)
+        public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
+        assert "syntheticAlpha" not in public and "syntheticBeta" not in public
+        assert "syntheticAlpha" not in stream.sanitize(text)
+        assert "syntheticBeta" not in stream.sanitize(text)
+
+
+def test_snapshot_redaction_preserves_json_and_redacts_before_truncating(client):
+    manager = client.app.state.manager
+    known = 'synthetic "quoted" key\\with spaces'
+    snapshot = (known, json.dumps(known)[1:-1])
+    text = json.dumps({"safe": known, "offset": 6000})
+    for split in range(len(text) + 1):
+        stream = PublicText(manager.redact, snapshot)
+        public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
+        assert json.loads(public) == {"safe": "[redacted]", "offset": 6000}
+    stream = PublicText(manager.redact, ["syntheticLongCredential"])
+    assert stream.sanitize("safe syntheticLongCredential end", limit=12) == "safe [redact"
+
+
 def test_old_password_login_cannot_issue_after_completed_password_change(client, monkeypatch):
     auth = client.app.state.auth
     entered, release, blocked = threading.Event(), threading.Event(), threading.Event()
