@@ -79,6 +79,42 @@ describe("practice drafts", () => {
     expect(drafts.read("answer:q")).toBe("继续写下步骤");
   });
 
+  it("an old request cannot erase newer drafts from a remounted page", () => {
+    const saved = storage();
+    const oldPage = createStudyDrafts("quiz", saved);
+    oldPage.write("tutor:q:teacher", "已发送的旧追问");
+    const newPage = createStudyDrafts("quiz", saved);
+    newPage.write("tutor:q:teacher", "刚写的新追问");
+    newPage.write("answer:another", "另一题的新草稿");
+    expect(oldPage.clearMatching("tutor:q:teacher", "已发送的旧追问")).toBe(
+      false,
+    );
+    oldPage.write("answer:old-question", "旧页面的其他写入");
+    const restored = createStudyDrafts("quiz", saved);
+    expect(restored.read("tutor:q:teacher")).toBe("刚写的新追问");
+    expect(restored.read("answer:another")).toBe("另一题的新草稿");
+    expect(restored.clearMatching("tutor:q:teacher", "刚写的新追问")).toBe(
+      true,
+    );
+    expect(restored.read("answer:another")).toBe("另一题的新草稿");
+    saved.clear();
+    expect(oldPage.read("answer:old-question")).toBe("");
+    expect(
+      oldPage.clearMatching("answer:old-question", "旧页面的其他写入"),
+    ).toBe(false);
+  });
+
+  it("keeps in-memory edits when reads work but storage quota prevents writing", () => {
+    const drafts = createStudyDrafts("quiz", {
+      ...storage(),
+      setItem() {
+        throw new Error("quota");
+      },
+    });
+    drafts.write("answer:q", "不丢失当前页作答");
+    expect(drafts.read("answer:q")).toBe("不丢失当前页作答");
+  });
+
   it("keeps commas, semicolons and empty positions inside distinct blanks", () => {
     expect(fillDraftValues('["(0,1)","A;B"]', 2)).toEqual(["(0,1)", "A;B"]);
     expect(fillDraftValues("(0,1)", 1)).toEqual(["(0,1)"]);

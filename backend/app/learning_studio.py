@@ -208,8 +208,14 @@ def validate(row: dict, unit: dict, options: dict, analysis=None) -> tuple[dict 
         return None, "原文依据无法核对，请使用已分析的来源编号"
     elif analysis is not None:
         allowed = (analysis.get("exercises", []) if row.get("origin") == "original" else analysis.get("exercises", []) + analysis.get("knowledge_points", []))
-        if not any(entry.get("solvable", True) and quote.strip() in entry["quote"] for entry in allowed):
+        matches = [entry for entry in allowed if entry.get("solvable", True) and quote.strip() in entry["quote"]]
+        if not matches:
             return None, "原文依据不属于已核对的知识点或完整原题"
+        if origin == "original":
+            identities = {entry["quote"] for entry in matches}
+            if len(identities) != 1:
+                return None, "原题依据对应多个练习，请提供完整原题位置"
+            quote = identities.pop()
     if not isinstance(explanation, str) or not 8 <= len(explanation.strip()) <= 6000:
         return None, "缺少有效讲解"
     difficulty = row.get("difficulty")
@@ -404,7 +410,23 @@ async def analyze(store, gateway, unit, flag, *, read_mode="text", library=None,
     return value
 
 
+def canonical_original_quotes(analysis, saved_quotes):
+    # Store the complete, server-resolved exercise as its evidence identity.
+    # Legacy excerpts may omit a number/prefix; map only unambiguous exact
+    # containment, never fuzzy/whitespace/symbol normalization.
+    exercises = {row["quote"] for row in analysis.get("exercises", []) if row["solvable"]}
+    used = set(saved_quotes)
+    for quote in saved_quotes:
+        if not quote:
+            continue
+        matches = {full for full in exercises if quote in full or full in quote}
+        if len(matches) == 1:
+            used.update(matches)
+    return used
+
+
 async def generate_batch(gateway, unit, analysis, options, count, previous_stems, reasons, neighbors, used_original_quotes=()):
+    used_original_quotes = canonical_original_quotes(analysis, used_original_quotes)
     available = [row for row in analysis.get("exercises", []) if row["solvable"] and row["quote"] not in used_original_quotes]
     fresh_analysis = {key: value for key, value in analysis.items() if key not in {"source_text", "page_spans"}} | {"exercises": available}
     payload = {**options, "count": count, "text": unit["content"], "analysis": fresh_analysis,
@@ -550,9 +572,9 @@ async def execute(store, gateway, job_id, run_id, flag, *, library=None):
             # Programmatic dedup covers the entire book. Only the model prompt
             # is bounded to its latest 100 stems to control context size.
             previous_stems = [row["stem"] for row in store.all("SELECT stem FROM questions WHERE book_id=? AND review!='excluded' ORDER BY created,rowid", (unit["book_id"],))]
-            used_original_quotes = {row["source_quote"] for row in store.all("SELECT source_quote FROM questions WHERE book_id=? AND origin='original' AND review!='excluded'", (unit["book_id"],))}
+            used_original_quotes = canonical_original_quotes(analysis, {row["source_quote"] for row in store.all("SELECT source_quote FROM questions WHERE book_id=? AND origin='original' AND review!='excluded'", (unit["book_id"],))})
             if not job["options"].get("analyze_only") and job["options"].get("mode") == "original":
-                available = sum(row["solvable"] and row["quote"] not in used_original_quotes for row in analysis["exercises"])
+                available = len({row["quote"] for row in analysis["exercises"] if row["solvable"] and row["quote"] not in used_original_quotes})
                 item["target"] = min(item["target"], available)
                 store.execute("UPDATE learning_generation_items SET target=? WHERE job_id=? AND source_id=?", (item["target"], job_id, unit["id"]))
                 store.event(run_id, "learning.source.planned", {"source_id": unit["id"], "target": item["target"], "reason": "按未入库的完整原题数量安排"})

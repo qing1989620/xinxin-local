@@ -334,6 +334,8 @@ export default function QuizPage() {
     setSubmitting(true);
     const targetSession = id;
     const targetQuestion = question.id;
+    const answerDraftKey = `answer:${targetQuestion}`;
+    const submittedAnswerDraft = drafts.read(answerDraftKey);
     try {
       const result = await post<{
         status: string;
@@ -349,8 +351,8 @@ export default function QuizPage() {
             ? { answers: fillValues }
             : { answer: draft }),
       });
+      drafts.clearMatching(answerDraftKey, submittedAnswerDraft);
       if (currentQuestion.current.sessionId === targetSession) {
-        drafts.write(`answer:${targetQuestion}`, "");
         setSession(result.state);
         if (currentQuestion.current.questionId === targetQuestion) {
           setFeedback({
@@ -387,8 +389,7 @@ export default function QuizPage() {
       const clearDraft =
         Boolean(text) &&
         text === submittedDraft.trim() &&
-        drafts.read(draftKey) === submittedDraft;
-      if (clearDraft) drafts.write(draftKey, "");
+        drafts.clearMatching(draftKey, submittedDraft);
       if (currentContext.current === key && request === tutorRequest.current) {
         setTutor(result.history);
         if (clearDraft)

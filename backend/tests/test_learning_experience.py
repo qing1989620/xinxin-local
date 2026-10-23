@@ -8,10 +8,10 @@ import pytest
 from app import learning
 from app import learning_quality as quality
 from app.learning_studio import validate
-from app.learning_studio import generate_batch, review_batch
+from app.learning_studio import generate_batch, review_batch, canonical_original_quotes
 from app.learning_answers import check_choice, check_fill
 from app.store import uid
-from test_learning_studio import studio, source_list, start, wait, question
+from test_learning_studio import studio, source_list, start, wait, question, add_book
 from test_learning_evidence import add_pdf, analysis, visual_transport
 from test_learning_quality import script
 
@@ -81,6 +81,28 @@ def test_new_original_batches_do_not_offer_previously_saved_exercises_again():
     rows, invalid, repeated = asyncio.run(generate_batch(Gateway(), material, analyzed,
         {"kinds": ["single"], "difficulty": 0, "mode": "original"}, 1, [], [], [], {old}))
     assert len(rows) == 1 and not invalid and not repeated and rows[0]["source_quote"] == fresh
+
+
+def test_original_excerpt_boundaries_use_the_complete_exercise_identity(studio):
+    app, client, _ = studio
+    complete = "1. 已知函数 f(x)=x^2，在 x=3 处求导数，并说明导数与切线斜率之间的联系。"
+    excerpt = complete[3:]
+    book = add_book(client, complete)
+    unit = source_list(client, book)[0]
+    analyzed = {"type": "exercises", "summary": "这段原题要求计算导数并解释切线斜率，需要完整保留函数条件。", "knowledge_points": [],
+                "exercises": [{"label": "第一题", "quote": complete, "solvable": True}]}
+    row, reason = validate(question(excerpt) | {"origin": "original", "source_quote": excerpt}, unit | {"content": complete}, {"kinds": ["single"], "difficulty": 0, "mode": "original"}, analyzed)
+    assert not reason and row["source_quote"] == complete
+    used = canonical_original_quotes(analyzed, {excerpt})
+    assert complete in used
+    changed = complete.replace("x=3", "x=4")
+    assert changed not in canonical_original_quotes({"exercises": [{"quote": changed, "solvable": True}]}, {excerpt})
+    ident = add_question(app, book, kind="single", answer="A")
+    app.state.store.execute("UPDATE questions SET origin='original',source_quote=?,source_id=? WHERE id=?", (excerpt, unit["id"], ident))
+    calls = script(app, analyze=lambda _: analyzed)
+    done = wait(client, start(client, book, [unit], mode="original", count=12).json()["job"])
+    assert done["status"] == "completed" and done["target"] == done["created_count"] == 0
+    assert [stage for stage, _ in calls] == ["analysis"]
 
 
 @pytest.mark.parametrize("independent_answer,independent_match,expected", [("A", True, True), ("B", True, False), ("A", False, False)])

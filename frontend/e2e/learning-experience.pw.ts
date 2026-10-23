@@ -211,6 +211,57 @@ test("主观判分故障保留作答，总结显示待核对并可对原作答�
   await screenshot(page, info, "grading-recovery");
 });
 
+test("离开练习再返回后，迟到辅导回复不覆盖新追问及另一题草稿", async ({
+  page,
+  request,
+}) => {
+  const { session } = await generatedQuiz(page, request, "合成逐空", "fill", 2);
+  let release = () => {};
+  let arrived = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const received = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const endpoint = `**/learning/questions/${session.questions[0].id}/explain`;
+  await page.route(endpoint, async (route) => {
+    const response = await route.fetch();
+    arrived();
+    await released;
+    await route.fulfill({ response });
+  });
+  const teacher = page.getByRole("textbox", { name: "向老师提问" });
+  await expect(teacher).toBeEnabled();
+  await teacher.fill("已发送的旧追问");
+  await page.getByRole("button", { name: "发送追问" }).click();
+  await received;
+  await page.getByRole("button", { name: "书架", exact: true }).click();
+  await page
+    .locator(`.study-recent a[href="/learning/quiz/${session.id}"]`)
+    .click();
+  await expect(teacher).toBeEnabled();
+  await teacher.fill("返回后新写的追问");
+  await page.getByRole("button", { name: "第 2 题", exact: true }).click();
+  await page.getByLabel("第 1 空答案", { exact: true }).fill("另一题的新草稿");
+  const late = page.waitForResponse((response) =>
+    response.url().endsWith(`/questions/${session.questions[0].id}/explain`),
+  );
+  release();
+  await (await late).finished();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+  );
+  await page.reload();
+  await expect(teacher).toBeEnabled();
+  await expect(teacher).toHaveValue("返回后新写的追问");
+  await page.getByRole("button", { name: "第 2 题", exact: true }).click();
+  await expect(page.getByLabel("第 1 空答案", { exact: true })).toHaveValue(
+    "另一题的新草稿",
+  );
+});
+
 test("精读起止页、无效范围提示、部分覆盖与原题数量上限", async ({
   page,
   request,
@@ -258,6 +309,12 @@ test("精读起止页、无效范围提示、部分覆盖与原题数量上限",
   await expect(page.locator(".study-generation-total strong")).toHaveText(
     /1\s*\/\s*1/,
   );
+  await page.getByRole("button", { name: "生成这一组题", exact: true }).click();
+  await expect(
+    page.getByText("所选范围的完整原题已经整理，本次没有新增。", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await panel(page, "原文");
   await expect(
     page.getByRole("region", { name: "当前片段总结" }),

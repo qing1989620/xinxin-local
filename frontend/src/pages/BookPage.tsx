@@ -1375,6 +1375,13 @@ function BookPage() {
               {resumeReadingError}
             </p>
           )}
+          {job.status === "completed" &&
+            !job.options.analyze_only &&
+            job.target === 0 && (
+              <p className="study-extraction-warning" role="status">
+                所选范围的完整原题已经整理，本次没有新增。可以开始练习，或扩大范围、切换知识拓展。
+              </p>
+            )}
           <div
             className="study-generation-bar"
             role="progressbar"
