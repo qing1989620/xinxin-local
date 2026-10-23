@@ -100,21 +100,39 @@ for (const failFirst of [false, true]) {
         });
         release();
         await expect(send).toBeEnabled();
+        const submitPath = original
+          ? `/api/v1/runs/${original.id}/continue`
+          : "/api/v1/runs";
+        const submittedRequests: string[] = [];
+        page.on("request", (outgoing) => {
+          if (
+            outgoing.method() === "POST" &&
+            outgoing.url().endsWith(submitPath)
+          )
+            submittedRequests.push(outgoing.url());
+        });
         const submitted = page.waitForResponse(
           (response) =>
-            response.url().endsWith("/api/v1/runs") &&
+            response.url().endsWith(submitPath) &&
             response.request().method() === "POST",
         );
         await send.click();
         const response = await submitted;
         expect(response.ok()).toBe(true);
-        expect(response.request().postDataJSON().resume_run_id).toBe(
-          original?.id,
-        );
+        if (original) {
+          expect((await response.json()).conversation_id).toBe(
+            original.conversation_id,
+          );
+          expect(response.request().postDataJSON().instruction).toBe(
+            "一句简短的合成问候",
+          );
+        }
         await expect(draft).toHaveValue("");
+        expect(submittedRequests).toHaveLength(1);
       } finally {
         release();
-        await page.unrouteAll({ behavior: "ignoreErrors" });
+        if (!page.isClosed())
+          await page.unrouteAll({ behavior: "ignoreErrors" });
       }
     });
   }
