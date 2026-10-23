@@ -22,7 +22,7 @@ from .context import context_manager_type, prior_messages, save_context
 from .persona import build_system_prompt
 from .music import atmosphere as music_atmosphere
 from .progress import ProgressNarrator
-from .public_text import PublicText, redact_fields
+from .public_text import PublicText, redact_text as redact_public_text
 from .store import clean_text, encode, now, uid
 from .creative import plot_csv, transform_image, gallery
 from .skill_trace import skill_evidence
@@ -145,16 +145,7 @@ class PlatformExecutor(ToolsExecutor):
 
 
 def safe_summary(value, limit=12000):
-    text = str(value) if limit is None else str(value)[:limit]
-    text = redact_fields(text)
-    text = re.sub(r"(?i)\bBearer\s+[^\s,;]+", "[redacted]", text)
-    text = re.sub(
-        r"(?i)(api[_-]?key|password|secret|authorization|token)([\s:=]+)[^\s,;]+",
-        r"\1\2[redacted]",
-        text,
-    )
-    text = re.sub(r"sk-[A-Za-z0-9_-]{12,}", "[redacted]", text)
-    return text
+    return redact_public_text(str(value), limit=limit)
 
 
 class TaskManager:
@@ -196,22 +187,7 @@ class TaskManager:
         forms = sorted(set(self.secret_forms()) | set(known_forms), key=len, reverse=True)
 
         def redact_text(text):
-            text = re.sub(
-                r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-                "[redacted private key]",
-                text,
-                flags=re.S,
-            )
-            text = re.sub(
-                r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
-                "[redacted private key]", text, flags=re.S,
-            )
-            # Literal credentials can also be labels (e.g. "password"). Hide
-            # fields/assignments before replacing literals or truncating them.
-            text = safe_summary(text, limit=None)
-            for form in forms:
-                text = text.replace(form, "[redacted]")
-            return text if limit is None else text[:limit]
+            return redact_public_text(text, forms, limit)
 
         def redact_data(data):
             if isinstance(data, str):

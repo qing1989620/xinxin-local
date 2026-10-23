@@ -259,6 +259,25 @@ def test_snapshot_redaction_preserves_json_and_redacts_before_truncating(client)
     assert stream.sanitize("safe syntheticLongCredential end", limit=12) == "safe [redact"
 
 
+@pytest.mark.parametrize("text", [
+    'password: syntheticAlpha syntheticBeta; Done.',
+    'Bearer syntheticAlpha syntheticBeta; Done.',
+    'authorization: Bearer syntheticAlpha syntheticBeta; Done.',
+    '{"output":"password: syntheticAlpha syntheticBeta; Done."}',
+])
+def test_semantic_redaction_does_not_expose_the_tail_of_known_multiword_credentials(client, text):
+    manager, auth = client.app.state.manager, client.app.state.auth
+    auth.set_secret("audit_sentinel", "syntheticAlpha syntheticBeta")
+    snapshot = manager.secret_forms()
+    sanitized = manager.redact(text, limit=None)
+    assert "syntheticAlpha" not in sanitized and "syntheticBeta" not in sanitized
+    auth.set_secret("audit_sentinel", "replacement-private-key")
+    for split in range(len(text) + 1):
+        stream = PublicText(manager.redact, snapshot)
+        public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
+        assert "syntheticAlpha" not in public and "syntheticBeta" not in public
+
+
 def test_old_password_login_cannot_issue_after_completed_password_change(client, monkeypatch):
     auth = client.app.state.auth
     entered, release, blocked = threading.Event(), threading.Event(), threading.Event()

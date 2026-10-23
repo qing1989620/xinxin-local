@@ -31,14 +31,43 @@ def credential_fields(text):
         yield match.start(), match.end(), end
 
 
-def redact_fields(text):
+def redact_text(text, forms=(), limit=None):
+    """Merge sensitive spans in the original text before replacing any bytes.
+
+    Replacing a label can hide another credential; replacing part of a known
+    multi-word value can expose its suffix. Neither rule may change the input
+    seen by the other rules. The outermost span keeps its output representation.
+    """
+    spans = [(start, end, '"[redacted]"')
+             for _, start, end in credential_fields(text)]
+    for match in re.finditer(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)",
+        text, flags=re.S,
+    ):
+        spans.append((match.start(), match.end(), "[redacted private key]"))
+    for match in re.finditer(_BEARER + r"[^\s,;]+", text):
+        spans.append((match.start(), match.end(), "[redacted]"))
+    for match in re.finditer(_ASSIGNMENT + r"([^\s,;]+)", text):
+        spans.append((match.start(3), match.end(3), "[redacted]"))
+    for form in forms:
+        if form:
+            spans.extend((match.start(), match.end(), "[redacted]")
+                         for match in re.finditer(re.escape(form), text))
+    spans.extend((match.start(), match.end(), "[redacted]")
+                 for match in re.finditer(r"sk-[A-Za-z0-9_-]{12,}", text))
+    merged = []
+    for start, end, replacement in sorted(spans, key=lambda span: (span[0], -span[1])):
+        if merged and start < merged[-1][1]:
+            previous = merged[-1]
+            merged[-1] = (previous[0], max(end, previous[1]), previous[2])
+        else:
+            merged.append((start, end, replacement))
     parts, cursor = [], 0
-    for _, start, end in credential_fields(text):
-        if start < cursor:
-            continue  # A sensitive outer object already covers nested values.
-        parts.extend((text[cursor:start], '"[redacted]"'))
+    for start, end, replacement in merged:
+        parts.extend((text[cursor:start], replacement))
         cursor = end
-    return "".join((*parts, text[cursor:]))
+    result = "".join((*parts, text[cursor:]))
+    return result if limit is None else result[:limit]
 
 
 class PublicText:
