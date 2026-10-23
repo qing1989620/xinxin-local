@@ -47,6 +47,25 @@ def test_lan_address_needs_no_server(client):
     assert data["server_required"] is False
 
 
+def test_disabled_gateway_does_not_advertise_a_detected_lan(client, monkeypatch):
+    api, runtime = client
+    (runtime / "addresses.json").write_text(
+        json.dumps({"local": "http://127.0.0.1:5180", "lan": "", "gateway_port": 8080}),
+        encoding="utf-8",
+    )
+    detected = []
+    monkeypatch.setattr("app.network._detect_lan", lambda port: detected.append(port) or "http://10.0.0.7:8080")
+    assert api.get("/api/v1/network").json()["lan"] == ""
+    assert detected == []
+
+
+def test_missing_address_book_preserves_discovery(client, monkeypatch):
+    api, runtime = client
+    (runtime / "addresses.json").unlink()
+    monkeypatch.setattr("app.network._detect_lan", lambda port: f"http://10.0.0.8:{port}")
+    assert api.get("/api/v1/network").json()["lan"] == "http://10.0.0.8:8080"
+
+
 def test_public_address_is_read_when_present(client):
     api, runtime = client
     (runtime / "public-url.txt").write_text(

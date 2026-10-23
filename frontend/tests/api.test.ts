@@ -126,6 +126,68 @@ describe("resource uploads", () => {
 });
 
 describe("private transport boundaries", () => {
+  it.each(["api", "blob", "stream"])(
+    "ignores an old session's delayed 401 for %s",
+    async (transport) => {
+      const api = await import("../src/api");
+      await api.setSession("synthetic-old-session");
+      let deliver!: (response: Response) => void;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              deliver = resolve;
+            }),
+        ),
+      );
+      const revoked = vi.fn();
+      window.addEventListener("xinxin-unauthorized", revoked);
+      const pending =
+        transport === "api"
+          ? api.api("/dashboard")
+          : transport === "blob"
+            ? api.getBlob("/files/synthetic/preview")
+            : api.watchRun(
+                "synthetic-run",
+                vi.fn(),
+                new AbortController().signal,
+              );
+      const checked =
+        transport === "stream"
+          ? pending
+          : expect(pending).rejects.toMatchObject({ status: 401 });
+      await api.setSession("synthetic-new-session");
+      deliver(
+        new Response('{"detail":"old session expired"}', { status: 401 }),
+      );
+      await checked;
+      expect(api.hasSession()).toBe(true);
+      expect(sessionStorage.getItem("xinxin-session")).toBe(
+        "synthetic-new-session",
+      );
+      expect(revoked).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ignores a delayed upload rejection after a new login", async () => {
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    const api = await import("../src/api");
+    await api.setSession("synthetic-old-upload-session");
+    const pending = api.upload(new File(["synthetic"], "a.txt"));
+    const checked = expect(pending).rejects.toMatchObject({ status: 401 });
+    const request = UploadRequest.instances.at(-1)!;
+    await api.setSession("synthetic-new-upload-session");
+    request.status = 401;
+    request.responseText = '{"detail":"expired old upload session"}';
+    request.onload?.();
+    await checked;
+    expect(api.hasSession()).toBe(true);
+    expect(sessionStorage.getItem("xinxin-session")).toBe(
+      "synthetic-new-upload-session",
+    );
+  });
+
   it("loads authenticated images on WebViews without AbortSignal.any or timeout", async () => {
     vi.spyOn(AbortSignal, "any").mockImplementation(() => {
       throw new Error("unsupported");
@@ -610,15 +672,16 @@ describe("private transport boundaries", () => {
       `id: ${seq}\ndata: ${JSON.stringify({ seq, kind: "delta", data: { text } })}\n\n`;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string) =>
-        new Response(
-          input.includes("/events")
-            ? event(1, "开始") +
-                'id: 2\ndata: {"seq":2,"kind":"delta","data":{"text":"截断\n\n' +
-                event(3, "继续") +
-                "event: end\ndata: {}\n\n"
-            : '{"status":"running"}',
-        ),
+      vi.fn(
+        async (input: string) =>
+          new Response(
+            input.includes("/events")
+              ? event(1, "开始") +
+                  'id: 2\ndata: {"seq":2,"kind":"delta","data":{"text":"截断\n\n' +
+                  event(3, "继续") +
+                  "event: end\ndata: {}\n\n"
+              : '{"status":"running"}',
+          ),
       ),
     );
     await watchRun(

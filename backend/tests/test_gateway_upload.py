@@ -21,6 +21,15 @@ def test_all_gateway_configurations_match_upload_body_budget():
     assert "Get-XinxinFileHash $caddyfilePath" in (ROOT / "Start-Xinxin-Local.ps1").read_text(encoding="utf-8-sig")
 
 
+def test_gateway_receives_both_upstream_ports_and_restarts_when_they_change():
+    config = (ROOT / "Caddyfile.local").read_text(encoding="utf-8")
+    launcher = (ROOT / "Start-Xinxin-Local.ps1").read_text(encoding="utf-8-sig")
+    for role, fallback in [("BACKEND", 8010), ("FRONTEND", 5180)]:
+        assert f"reverse_proxy 127.0.0.1:{{$XINXIN_{role}_PORT:{fallback}}}" in config
+        assert f'"XINXIN_{role}_PORT=${role.title()}Port"' in launcher
+    assert '":${GatewayPort}:${BackendPort}:${FrontendPort}"' in launcher
+
+
 def free_port():
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))
@@ -33,9 +42,9 @@ def test_real_gateway_accepts_256_mib_and_rejects_one_byte_more(tmp_path):
     if not caddy.exists():
         pytest.skip("Install the project's native Caddy to exercise the gateway process")
     api_port, gateway_port = free_port(), free_port()
-    env = os.environ | {"XINXIN_LOG_DIR": str(tmp_path / "logs"), "PYTHONUNBUFFERED": "1"}
+    env = os.environ | {"XINXIN_LOG_DIR": str(tmp_path / "logs"), "PYTHONUNBUFFERED": "1", "XINXIN_BACKEND_PORT": str(api_port)}
     config = (ROOT / "Caddyfile.local").read_text(encoding="utf-8")
-    config = "{\n admin off\n auto_https off\n}\n" + config.replace("http://:{$XINXIN_GATEWAY_PORT:8080}", f"http://127.0.0.1:{gateway_port}").replace("127.0.0.1:8010", f"127.0.0.1:{api_port}")
+    config = "{\n admin off\n auto_https off\n}\n" + config.replace("http://:{$XINXIN_GATEWAY_PORT:8080}", f"http://127.0.0.1:{gateway_port}")
     config_path = tmp_path / "Caddyfile"
     config_path.write_text(config, encoding="utf-8")
     script = "from pathlib import Path; import sys,uvicorn; from app.config import Config; from app.main import create_app; uvicorn.run(create_app(Config(Path(sys.argv[1]),'synthetic-gateway-bootstrap')),host='127.0.0.1',port=int(sys.argv[2]),log_level='error')"

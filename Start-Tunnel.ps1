@@ -16,12 +16,21 @@ param(
 $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
 $runtimePath=Join-Path $projectPath '.runtime'
+. (Join-Path $projectPath 'desktop/Local-ServiceState.ps1')
+. (Join-Path $projectPath 'desktop/Tunnel-State.ps1')
 New-Item -ItemType Directory -Force -Path $runtimePath | Out-Null
 
 # --- 1. the local gateway must already be running ---
-$listener=Get-NetTCPConnection -LocalPort $LocalPort -State Listen -ErrorAction SilentlyContinue
-if(-not $listener){
-  throw "Nothing is listening on port $LocalPort. Run ./Start-Xinxin-Local.ps1 first."
+if(-not(Test-XinxinHealth $LocalPort)){
+  throw "The Xinxin gateway is not healthy on port $LocalPort. Run ./Start-Xinxin-Local.ps1 first."
+}
+$manifestPath=Join-Path $runtimePath 'processes.json'
+if(-not(Test-Path -LiteralPath $manifestPath)){throw 'No managed Xinxin gateway identity; public access was not started.'}
+$services=Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$gateway=@($services.services | Where-Object {$_.role -eq 'gateway'}) | Select-Object -First 1
+$instance=if($gateway){Get-Process -Id $gateway.id -ErrorAction SilentlyContinue}else{$null}
+if(-not $instance -or $instance.StartTime.ToUniversalTime().Ticks -ne [long]$gateway.start_ticks -or -not(Test-XinxinManagedPort $instance.Id $LocalPort)){
+  throw 'The listener is not this project managed gateway; public access was not started.'
 }
 Write-Host "Local gateway is listening on 127.0.0.1:$LocalPort"
 
@@ -38,18 +47,12 @@ if(-not (Test-Path -LiteralPath $tunnelExe)){
   exit 1
 }
 
+$stopped = Stop-XinxinTunnel $runtimePath
+if($stopped){Write-Host 'Stopped the previously managed project tunnel.'}
+
 $outLog=Join-Path $runtimePath 'tunnel.out.log'
 $errLog=Join-Path $runtimePath 'tunnel.err.log'
 foreach($f in @($outLog,$errLog)){ if(Test-Path -LiteralPath $f){ Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
-
-# A previous quick tunnel would stay alive with its own (now stale) address and
-# keep consuming a connection. Only one public entry should exist at a time.
-$existing=Get-Process -Name cloudflared -ErrorAction SilentlyContinue
-if($existing){
-  $existing | Stop-Process -Force -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 2
-  Write-Host "Stopped $($existing.Count) previous tunnel process(es)."
-}
 
 # Windows PowerShell Start-Process fails when duplicate env vars differ only in
 # case (http_proxy vs HTTP_PROXY). Detect it and drop the lowercase variants.
@@ -62,7 +65,7 @@ if($shadowedProxies){
 }
 
 $proc=Start-Process -FilePath $tunnelExe -ArgumentList $tunnelArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog
-@{role='tunnel';id=$proc.Id;started=(Get-Date).ToString('s')} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimePath 'tunnel.json') -Encoding UTF8
+@{role='tunnel';id=$proc.Id;start_ticks=$proc.StartTime.ToUniversalTime().Ticks;executable=[System.IO.Path]::GetFullPath($tunnelExe);local_port=$LocalPort} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtimePath 'tunnel.json') -Encoding UTF8
 
 Write-Host "Tunnel started (PID=$($proc.Id)); waiting for a public address..."
 $publicUrl=''
@@ -86,40 +89,8 @@ if($publicUrl){
   # Write without a BOM: the backend reads this file as a strict URL.
   $urlFile=Join-Path $runtimePath 'public-url.txt'
   [System.IO.File]::WriteAllText($urlFile, $publicUrl, (New-Object System.Text.UTF8Encoding($false)))
-  # quick-tunnel origins change every run: drop the stale one, append the new one
-  $envFile=Join-Path $projectPath 'backend/.env'
-  if(Test-Path -LiteralPath $envFile){
-    $lines=Get-Content -LiteralPath $envFile
-    $updated=New-Object System.Collections.Generic.List[string]
-    $found=$false
-    foreach($line in $lines){
-      if($line -match '^\s*XINXIN_CORS_ORIGINS='){
-        $value=$line.Substring($line.IndexOf('=')+1)
-        $kept=@()
-        foreach($part in ($value -split ',')){
-          $p=$part.Trim()
-          if($p -and ($p -notmatch 'trycloudflare\.com')){ $kept+=$p }
-        }
-        $kept+=$publicUrl
-        $updated.Add('XINXIN_CORS_ORIGINS=' + ($kept -join ','))
-        $found=$true
-      }else{
-        $updated.Add($line)
-      }
-    }
-    if(-not $found){ $updated.Add('XINXIN_CORS_ORIGINS=' + $publicUrl) }
-    [System.IO.File]::WriteAllLines($envFile,$updated,(New-Object System.Text.UTF8Encoding($false)))
-    Write-Host '  backend/.env CORS allowlist updated.'
-
-    # restart managed services so the backend serves the new origin.
-    # Do NOT use *> here: the launcher sets $ErrorActionPreference='Stop', and
-    # merging a native command's stderr into the stream aborts it mid-way.
-    Write-Host '  Restarting local services so the new origin takes effect...'
-    & (Join-Path $projectPath 'Stop-Xinxin-Local.ps1')
-    Start-Sleep -Seconds 2
-    & (Join-Path $projectPath 'Start-Xinxin-Local.ps1') -NoBrowser
-    Start-Sleep -Seconds 6
-  }
+  # The website and API share the tunnel origin. Starting a tunnel does not
+  # require rewriting credentials/configuration or restarting active services.
 
   Write-Host 'Xinxin is reachable from the public internet:' -ForegroundColor Green
   Write-Host "  $publicUrl"
@@ -134,5 +105,6 @@ if($publicUrl){
   }
   Write-Host '  The quick-tunnel address changes on every restart; the LAN address does not.'
 }else{
-  Write-Host 'No tunnel address within 45s. Check .runtime/tunnel.out.log and tunnel.err.log' -ForegroundColor DarkYellow
+  $null = Stop-XinxinTunnel $runtimePath
+  throw 'No tunnel address within 45s; managed tunnel stopped. Check .runtime/tunnel.out.log and tunnel.err.log.'
 }

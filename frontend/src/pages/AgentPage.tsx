@@ -41,6 +41,7 @@ import {
   type ServerItem,
 } from "../api";
 import { nextAssistantText } from "../runText";
+import { newRequestId } from "../requestIdentity";
 import {
   Empty,
   Status,
@@ -461,7 +462,7 @@ export default function AgentPage() {
         setMessages((old) => [
           ...old,
           {
-            id: crypto.randomUUID(),
+            id: newRequestId(),
             role: "user",
             content: resumeRun
               ? "继续原任务。" + (text ? "\n补充：" + text : "")

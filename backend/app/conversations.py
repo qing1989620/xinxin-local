@@ -78,6 +78,8 @@ def shared_file(db, ident, conversations):
     pattern = "%" + ident + "%"
     placeholders = ",".join("?" for _ in conversations)
     return any((
+        db.execute("SELECT 1 FROM books WHERE file_id=? LIMIT 1", (ident,)).fetchone(),
+        db.execute("SELECT 1 FROM learning_imports i LEFT JOIN runs r ON r.id=i.run_id WHERE i.file_id=? AND (i.run_id IS NULL OR r.status IN ('queued','running','cancelling')) LIMIT 1", (ident,)).fetchone(),
         db.execute("SELECT 1 FROM records WHERE payload LIKE ? LIMIT 1", (pattern,)).fetchone(),
         db.execute(f"SELECT 1 FROM messages WHERE conversation_id NOT IN ({placeholders}) AND content LIKE ? LIMIT 1", (*conversations, pattern)).fetchone(),
         db.execute(f"SELECT 1 FROM run_context WHERE conversation_id NOT IN ({placeholders}) AND messages LIKE ? LIMIT 1", (*conversations, pattern)).fetchone(),
@@ -95,6 +97,7 @@ def purge_conversations(store, library, idents):
     workspaces = [(ident, workspace_path(store, ident)[1]) for ident in idents]
     trash_root = private_directory(store, ".deletion-trash")
     files_root = private_directory(store, "files")
+    previews_root = private_directory(store, "previews")
     if library.root.resolve() != files_root:
         raise ValueError("文件库路径异常，未删除")
     trash_root.mkdir(mode=0o700, exist_ok=True)
@@ -132,7 +135,16 @@ def purge_conversations(store, library, idents):
                 source.rename(destination)
                 moved.append((destination, source))
                 removed_bytes += file["size"]
+                for preview in previews_root.glob(file["id"] + "-*"):
+                    if preview.is_symlink() or preview.is_junction() or not preview.is_file():
+                        raise ValueError("预览缓存路径异常，未删除")
+                    destination = trash / ("preview-" + preview.name)
+                    removed_bytes += preview.stat().st_size
+                    preview.rename(destination)
+                    moved.append((destination, preview))
                 db.execute("DELETE FROM uploads WHERE file_id=?", (file["id"],))
+                db.execute("DELETE FROM file_extractions WHERE file_id=?", (file["id"],))
+                db.execute("DELETE FROM file_ocr_pages WHERE file_id=?", (file["id"],))
                 db.execute("DELETE FROM files WHERE id=?", (file["id"],))
             for table in ("events", "message_runs"):
                 db.execute(f"DELETE FROM {table} WHERE run_id IN (SELECT id FROM runs WHERE conversation_id IN ({placeholders}))", idents)

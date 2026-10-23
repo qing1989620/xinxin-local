@@ -3,22 +3,11 @@ $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
 $runtimePath=Join-Path $projectPath '.runtime'
 
-# Stop the public-access tunnel (cloudflared).
-$procs = Get-Process -Name cloudflared -ErrorAction SilentlyContinue
-if ($procs) {
-  $procs | Stop-Process -Force
-  Write-Host "已停止 $($procs.Count) 个 cloudflared 进程（公网入口已关闭）"
-} else {
-  Write-Host '没有正在运行的 cloudflared 进程'
-}
-
-$json = Join-Path $runtimePath 'tunnel.json'
-if (Test-Path -LiteralPath $json) {
-  Remove-Item -LiteralPath $json -Force -ErrorAction SilentlyContinue
-}
-$urlFile = Join-Path $runtimePath 'public-url.txt'
-if (Test-Path -LiteralPath $urlFile) {
-  Remove-Item -LiteralPath $urlFile -Force -ErrorAction SilentlyContinue
+. (Join-Path $projectPath 'desktop/Tunnel-State.ps1')
+if(Stop-XinxinTunnel $runtimePath){
+  Write-Host 'Stopped the managed Xinxin tunnel; the public entry is closed.'
+}else{
+  Write-Host 'No verified Xinxin tunnel was running; other processes were preserved.'
 }
 
 # -All also stops backend / frontend / gateway.

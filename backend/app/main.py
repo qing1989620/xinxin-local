@@ -476,19 +476,20 @@ def create_app(config=None):
 
     @app.post("/api/v1/auth/setup")
     def setup(body: Setup):
-        if len(body.password) < 10:
-            raise HTTPException(422, "密码至少 10 个字符")
-        if not hmac.compare_digest(body.setup_code, config.setup_token):
-            raise HTTPException(403, "初始化码不正确，请查看后端 data/bootstrap.code")
-        try:
-            store.execute(
-                "INSERT INTO owner VALUES(1,?,?)",
-                (body.name, password_hash(body.password)),
-            )
-        except sqlite3.IntegrityError:
-            raise HTTPException(409, "主人账号已初始化，不能公开注册") from None
-        store.audit("owner.created", {})
-        return {"token": auth.issue(), "name": body.name}
+        with auth.lock:
+            if len(body.password) < 10:
+                raise HTTPException(422, "密码至少 10 个字符")
+            if not hmac.compare_digest(body.setup_code, config.setup_token):
+                raise HTTPException(403, "初始化码不正确，请查看后端 data/bootstrap.code")
+            try:
+                store.execute(
+                    "INSERT INTO owner VALUES(1,?,?)",
+                    (body.name, password_hash(body.password)),
+                )
+            except sqlite3.IntegrityError:
+                raise HTTPException(409, "主人账号已初始化，不能公开注册") from None
+            store.audit("owner.created", {})
+            return {"token": auth.issue(), "name": body.name}
 
     @app.post("/api/v1/auth/login")
     def login(body: Login, request: Request):
@@ -507,29 +508,31 @@ def create_app(config=None):
 
     @app.post("/api/v1/auth/email/login")
     def email_login(body: EmailLogin):
-        mail.consume(body.email.strip().lower(), "login", body.code, lambda db: None)
-        store.audit("owner.email_login", {})
-        return {
-            "token": auth.issue(),
-            "name": store.one("SELECT name FROM owner WHERE id=1")["name"],
-        }
+        with auth.lock:
+            mail.consume(body.email.strip().lower(), "login", body.code, lambda db: None)
+            store.audit("owner.email_login", {})
+            return {
+                "token": auth.issue(),
+                "name": store.one("SELECT name FROM owner WHERE id=1")["name"],
+            }
 
     @app.post("/api/v1/auth/email/reset")
     def email_reset(body: EmailReset):
-        def update(db):
-            db.execute(
-                "UPDATE owner SET password=? WHERE id=1",
-                (password_hash(body.password),),
-            )
-            db.execute("DELETE FROM sessions")
-            db.execute("UPDATE email_codes SET used=1")
+        with auth.lock:
+            def update(db):
+                db.execute(
+                    "UPDATE owner SET password=? WHERE id=1",
+                    (password_hash(body.password),),
+                )
+                db.execute("DELETE FROM sessions")
+                db.execute("UPDATE email_codes SET used=1")
 
-        mail.consume(body.email.strip().lower(), "reset", body.code, update)
-        store.audit("owner.password_reset", {})
-        return {
-            "token": auth.issue(),
-            "name": store.one("SELECT name FROM owner WHERE id=1")["name"],
-        }
+            mail.consume(body.email.strip().lower(), "reset", body.code, update)
+            store.audit("owner.password_reset", {})
+            return {
+                "token": auth.issue(),
+                "name": store.one("SELECT name FROM owner WHERE id=1")["name"],
+            }
 
     @app.get("/api/v1/settings/email", dependencies=[Depends(owner)])
     def email_settings():
@@ -546,11 +549,13 @@ def create_app(config=None):
             "configured": mail.enabled(),
         }
 
-    @app.put("/api/v1/settings/email", dependencies=[Depends(owner)])
-    def save_email_settings(body: EmailSettings):
-        mail.configure(body.model_dump())
-        store.audit("email.configured", {"provider": body.provider})
-        return email_settings()
+    @app.put("/api/v1/settings/email")
+    def save_email_settings(body: EmailSettings, token=Depends(owner)):
+        with auth.lock:
+            auth.require(token)
+            mail.configure(body.model_dump())
+            store.audit("email.configured", {"provider": body.provider})
+            return email_settings()
 
     @app.post("/api/v1/settings/email/test", dependencies=[Depends(owner)])
     def test_email_settings():
@@ -709,18 +714,20 @@ def create_app(config=None):
         )
         return {"ok": True}
 
-    @app.put("/api/v1/auth/password", dependencies=[Depends(owner)])
-    def password(body: Password):
-        row = store.one("SELECT password FROM owner WHERE id=1")
-        if not password_matches(body.current, row["password"]):
-            raise HTTPException(400, "原密码不正确")
-        with store.connect(write=True) as db:
-            db.execute(
-                "UPDATE owner SET password=? WHERE id=1",
-                (password_hash(body.password),),
-            )
-            db.execute("DELETE FROM sessions")
-        return {"token": auth.issue()}
+    @app.put("/api/v1/auth/password")
+    def password(body: Password, token=Depends(owner)):
+        with auth.lock:
+            auth.require(token)
+            row = store.one("SELECT password FROM owner WHERE id=1")
+            if not password_matches(body.current, row["password"]):
+                raise HTTPException(400, "原密码不正确")
+            with store.connect(write=True) as db:
+                db.execute(
+                    "UPDATE owner SET password=? WHERE id=1",
+                    (password_hash(body.password),),
+                )
+                db.execute("DELETE FROM sessions")
+            return {"token": auth.issue()}
 
     @app.get("/api/v1/dashboard", dependencies=[Depends(owner)])
     def dashboard():

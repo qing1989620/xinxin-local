@@ -20,6 +20,7 @@
     "@capacitor/filesystem": "^8.1.5",
     "@capacitor/preferences": "8.0.0",
     "@capacitor/share": "^8.0.3",
+    "@noble/hashes": "2.4.0",
     "@tiptap/extension-image": "^3.31.3",
     "@tiptap/extension-placeholder": "^3.31.3",
     "@tiptap/react": "^3.31.3",

@@ -38,7 +38,7 @@ http://:{$XINXIN_GATEWAY_PORT:8080} {
 		request_body {
 			max_size 268697600
 		}
-		reverse_proxy 127.0.0.1:8010 {
+		reverse_proxy 127.0.0.1:{$XINXIN_BACKEND_PORT:8010} {
 			flush_interval -1
 		}
 		header Cache-Control "no-store"
@@ -46,7 +46,7 @@ http://:{$XINXIN_GATEWAY_PORT:8080} {
 
 	# ---- 前端（其余路径一律反代 vite preview）--------------------------------
 	handle {
-		reverse_proxy 127.0.0.1:5180
+		reverse_proxy 127.0.0.1:{$XINXIN_FRONTEND_PORT:5180}
 	}
 
 	# ---- 访问日志（自动滚动，单文件 10MiB、保留 5 个，防止写满磁盘）-----------

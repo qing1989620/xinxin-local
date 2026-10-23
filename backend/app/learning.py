@@ -290,7 +290,7 @@ def _json_array(text: str) -> list[dict]:
 
 
 def _clean_stem(text: str) -> str:
-    return re.sub(r"\s+", " ", clean_text(str(text or ""))).strip()
+    return clean_text(str(text or "")).strip()
 
 
 def _hash(stem: str, kind: str, book_id: str = "") -> str:

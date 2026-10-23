@@ -242,23 +242,27 @@ if($NoGateway){
   $envLines=@(
     "# Xinxin本地版 局域网网关配置（由 Start-Xinxin-Local.ps1 自动生成，请勿手改）",
     "XINXIN_GATEWAY_PORT=$GatewayPort",
+    "XINXIN_BACKEND_PORT=$BackendPort",
+    "XINXIN_FRONTEND_PORT=$FrontendPort",
     "XINXIN_LOG_DIR=$(Join-Path $projectPath 'logs')"
   )
   [System.IO.File]::WriteAllLines($gatewayEnvFile,$envLines,(New-Object System.Text.UTF8Encoding($false)))
   $oldLogDir=$env:XINXIN_LOG_DIR
   $oldPort=$env:XINXIN_GATEWAY_PORT
+  $oldFrontendPort=$env:XINXIN_FRONTEND_PORT
   try{
     # 访问日志收在项目 logs，不写系统目录
     $env:XINXIN_LOG_DIR=Join-Path $projectPath 'logs'
     $env:XINXIN_GATEWAY_PORT="$GatewayPort"
+    $env:XINXIN_FRONTEND_PORT="$FrontendPort"
     New-Item -ItemType Directory -Force -Path $env:XINXIN_LOG_DIR | Out-Null
-    Start-XinxinService 'gateway' $caddyExe @('run','--config',$caddyfilePath,'--adapter','caddyfile','--envfile',$gatewayEnvFile) $projectPath $GatewayPort $gatewayReady ((Get-XinxinFileHash $caddyfilePath) + ":$GatewayPort")
+    Start-XinxinService 'gateway' $caddyExe @('run','--config',('"' + $caddyfilePath + '"'),'--adapter','caddyfile','--envfile',('"' + $gatewayEnvFile + '"')) $projectPath $GatewayPort $gatewayReady ((Get-XinxinFileHash $caddyfilePath) + ":${GatewayPort}:${BackendPort}:${FrontendPort}")
     $gatewayStarted=$true
   }catch{
     if(-not(Test-XinxinApplicationBlocked $_.Exception)){throw}
     Write-Host '[!] Windows 应用控制策略阻止了 Caddy；本机服务已就绪，桌面仍可使用。' -ForegroundColor Yellow
     Write-Host '    手机/局域网网关暂不可用；请由系统管理员核对 Caddy 的运行许可。未修改安全策略。'
-  }finally{$env:XINXIN_LOG_DIR=$oldLogDir;$env:XINXIN_GATEWAY_PORT=$oldPort}
+  }finally{$env:XINXIN_LOG_DIR=$oldLogDir;$env:XINXIN_GATEWAY_PORT=$oldPort; $env:XINXIN_FRONTEND_PORT=$oldFrontendPort}
 }
 
 # 本机地址清单：供设置页与隧道脚本读取，不依赖任何外部服务

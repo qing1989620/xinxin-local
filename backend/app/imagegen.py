@@ -175,8 +175,10 @@ def _openrouter(prompt: str) -> tuple[bytes, str, str]:
     return content, kind, mime
 
 
-def generate(library, prompt: str, width=1024, height=1024, provider=None, seed=None):
+def generate(library, prompt: str, width=1024, height=1024, provider=None, seed=None, *, run_id=None, cancelled=None):
     """生成图片并登记到文件库。返回文件记录 + 生成信息。"""
+    if cancelled and cancelled.is_set():
+        raise ValueError("任务已取消，未启动生图")
     prompt = _validate_prompt(prompt)
     width = max(256, min(1440, int(width or 1024)))
     height = max(256, min(1440, int(height or 1024)))
@@ -198,8 +200,10 @@ def generate(library, prompt: str, width=1024, height=1024, provider=None, seed=
         content, kind, mime = _pollinations(prompt, width, height, seed)
         model = available["pollinations"]["model"]
 
+    if cancelled and cancelled.is_set():
+        raise ValueError("任务已取消，未保存返回的图片")
     name = f"xinxin-{_slug(prompt)}-{kind}.{'jpg' if kind == 'jpg' else kind}"
-    record = library.save(name, content, mime=mime, extract=False)
+    record = library.save(name, content, mime=mime, run_id=run_id, extract=False)
     return {
         **record,
         "image": {

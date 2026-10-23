@@ -81,8 +81,10 @@ def local_addresses() -> dict:
         except ValueError:
             gateway_port = 8080
     lan = saved.get("lan")
-    if not isinstance(lan, str) or not lan.startswith("http://"):
+    if "lan" not in saved:
         lan = _detect_lan(gateway_port)
+    elif not isinstance(lan, str) or (lan and not lan.startswith("http://")):
+        lan = ""
     local = saved.get("local")
     if not isinstance(local, str) or not local.startswith("http://"):
         local = f"http://127.0.0.1:{os.getenv('XINXIN_FRONTEND_PORT', '5180')}"

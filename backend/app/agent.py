@@ -22,6 +22,7 @@ from .context import context_manager_type, prior_messages, save_context
 from .persona import build_system_prompt
 from .music import atmosphere as music_atmosphere
 from .progress import ProgressNarrator
+from .public_text import PublicText, redact_fields
 from .store import clean_text, encode, now, uid
 from .creative import plot_csv, transform_image, gallery
 from .skill_trace import skill_evidence
@@ -145,6 +146,8 @@ class PlatformExecutor(ToolsExecutor):
 
 def safe_summary(value, limit=12000):
     text = str(value) if limit is None else str(value)[:limit]
+    text = redact_fields(text)
+    text = re.sub(r"(?i)\bBearer\s+[^\s,;]+", "[redacted]", text)
     text = re.sub(
         r"(?i)(api[_-]?key|password|secret|authorization|token)([\s:=]+)[^\s,;]+",
         r"\1\2[redacted]",
@@ -170,15 +173,14 @@ class TaskManager:
             self.auth.secret("model_api_key", self.config.api_key),
         )
 
-    def redact(self, value, limit=16000):
-        text = str(value)
+    def secret_forms(self):
         keys = [self.config.api_key]
         vault_key = self.store.directory / "vault.key"
         if vault_key.is_file():
             keys.append(vault_key.read_text(encoding="ascii").strip())
         for row in self.store.all("SELECT key FROM settings WHERE key LIKE 'secret:%'"):
             keys.append(self.auth.secret(row["key"][7:]))
-        forms = {
+        return sorted({
             form
             for key in keys
             if key
@@ -187,7 +189,11 @@ class TaskManager:
                 json.dumps(key, ensure_ascii=False)[1:-1],
                 json.dumps(key, ensure_ascii=True)[1:-1],
             )
-        }
+        }, key=len, reverse=True)
+
+    def redact(self, value, limit=16000):
+        text = str(value)
+        forms = self.secret_forms()
 
         def redact_text(text):
             for form in forms:
@@ -400,14 +406,15 @@ class TaskManager:
             )
         return self.store.one("SELECT * FROM runs WHERE id=?", (ident,))
 
-    def _tools(self, run, flag, progress=None):
+    def _tools(self, run, flag, progress=None, *, sanitize=None):
+        redact = sanitize or self.redact
         policy = Policy(
             run["permission"],
             self.store.directory / "workspaces" / run["conversation_id"],
             flag,
         )
         tools = Tools(tools_executor=PlatformExecutor(
-            self.redact, cancelled=flag,
+            redact, cancelled=flag,
             on_cancel_result=lambda name, result: self.store.event(run["id"], "tool.cancelled", {
                 "name": name, "result": result,
             }),
@@ -418,7 +425,7 @@ class TaskManager:
             command_id = uid()
 
             def emit(output, elapsed, byte_count):
-                sanitized = self.redact(output, limit=None)
+                sanitized = redact(output, limit=None)
                 self.store.event(run["id"], "command.progress", {
                     "command_id": command_id, "name": name,
                     "elapsed_seconds": elapsed, "output_bytes": byte_count,
@@ -438,7 +445,7 @@ class TaskManager:
             if progress:
                 progress.note(text, source="agent")
             else:
-                self.store.event(run["id"], "progress.note", {"text": self.redact(text), "source": "agent"})
+                self.store.event(run["id"], "progress.note", {"text": redact(text), "source": "agent"})
             return {"reported": True}
 
         @tools.register()
@@ -456,7 +463,7 @@ class TaskManager:
                 if step["status"] not in {"pending", "in_progress", "completed", "blocked", "cancelled"}:
                     raise ValueError("计划状态无效")
                 ids.add(step["id"])
-            cleaned = json.loads(self.redact(encode(steps), limit=None))
+            cleaned = json.loads(redact(encode(steps), limit=None))
             self.store.execute(
                 "INSERT INTO run_plan VALUES(?,?,?,?) ON CONFLICT(run_id) DO UPDATE SET "
                 "steps=excluded.steps,updated=excluded.updated",
@@ -683,20 +690,21 @@ class TaskManager:
             )
 
         @tools.register()
-        async def generate_image_tool(
+        def generate_image_tool(
             prompt: str, width: int = 1024, height: int = 1024, provider: str = ""
         ):
             """Generate a new image from a text description; requires workspace permission."""
             policy.require("workspace")
-            import imagegen
+            from . import imagegen
 
-            record = await asyncio.to_thread(
-                imagegen.generate,
+            record = imagegen.generate(
                 self.library,
                 prompt,
                 width,
                 height,
                 provider or None,
+                run_id=run["id"],
+                cancelled=flag,
             )
             return {
                 "file_id": record["id"],
@@ -782,8 +790,12 @@ class TaskManager:
     async def _execute_run(self, ident, flag, operation):
         text, status, error = "", "failed", ""
         tools, pending_operation, context, progress = None, None, None, None
+        public_text = PublicText(self.redact, [])
+        def sanitize(value, limit=16000):
+            return public_text.sanitize(value, limit=limit)
         try:
             run = self.store.one("SELECT * FROM runs WHERE id=?", (ident,))
+            public_text = PublicText(self.redact, self.secret_forms())
             if flag.is_set():
                 raise asyncio.CancelledError()
             self.store.execute(
@@ -818,8 +830,8 @@ class TaskManager:
                         transport=self.model_transport,
                         context_window_tokens=run["context_window_tokens"],
                     )
-                    progress = ProgressNarrator(lambda kind, data: self.store.event(ident, kind, data), self.redact)
-                    tools, events = self._tools(run, flag, progress), AgentEvents()
+                    progress = ProgressNarrator(lambda kind, data: self.store.event(ident, kind, data), sanitize)
+                    tools, events = self._tools(run, flag, progress, sanitize=sanitize), AgentEvents()
 
                     def before(name, arguments):
                         if flag.is_set():
@@ -829,7 +841,7 @@ class TaskManager:
                             "tool.started",
                             {
                                 "name": name,
-                                "arguments": self.redact(encode(arguments)),
+                                "arguments": sanitize(encode(arguments)),
                             },
                         )
                         return name, arguments
@@ -842,7 +854,7 @@ class TaskManager:
                             "tool.completed",
                             {
                                 "name": name,
-                                "result": self.redact(result),
+                                "result": sanitize(result),
                                 "ok": ok,
                                 "skill_evidence": skill_evidence(name, arguments, matches, ok),
                             },
@@ -909,7 +921,7 @@ class TaskManager:
                     context = TaskContext(
                         run["task"],
                         max_length=run["context_window_tokens"] - 32768,
-                        checkpoint=lambda messages: save_context(self.store, run, messages, self.redact),
+                        checkpoint=lambda messages: save_context(self.store, run, messages, public_text.sanitize),
                         on_compact=lambda details: self.store.event(ident, "context.compacted", details),
                     )
                     agent = Agent(
@@ -932,9 +944,12 @@ class TaskManager:
                     answered = False
                     async for chunk in agent.apredict(instruction=run["task"]):
                         if chunk.get("tool_calls"):
+                            tail = public_text.finish()
+                            if tail:
+                                self.store.event(ident, "delta", {"text": tail})
                             if text:
                                 self.store.event(
-                                    ident, "assistant.progress", {"text": text}
+                                    ident, "assistant.progress", {"text": public_text.sanitize(text)}
                                 )
                             text = ""
                             answered = False
@@ -945,7 +960,12 @@ class TaskManager:
                             delta = chunk["content"]
                             text += delta
                             answered = True
-                            self.store.event(ident, "delta", {"text": delta})
+                            visible = public_text.feed(delta)
+                            if visible:
+                                self.store.event(ident, "delta", {"text": visible})
+                    tail = public_text.finish()
+                    if tail:
+                        self.store.event(ident, "delta", {"text": tail})
                     if not answered:
                         gateway.check_budget()
                         raise RuntimeError(
@@ -973,6 +993,8 @@ class TaskManager:
         finally:
             async def finish():
                 nonlocal text, error
+                text = public_text.sanitize(text)
+                error = public_text.sanitize(error)
                 if flag.is_set():
                     if tools:
                         await tools.tools_executor.drain()
@@ -1001,7 +1023,7 @@ class TaskManager:
                         run_id=ident,
                     )
                 if context is not None:
-                    save_context(self.store, run, context.messages, self.redact)
+                    save_context(self.store, run, context.messages, public_text.sanitize)
                 if progress:
                     progress.finish_waits()
                 self.store.execute(

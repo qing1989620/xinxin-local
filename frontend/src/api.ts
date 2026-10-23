@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import type { SkillTrace } from "./skillTrace";
+import { newRequestId, requestFingerprint } from "./requestIdentity";
 
 export type FileItem = {
   id: string;
@@ -59,6 +60,7 @@ export type ServerItem = {
 };
 
 let token = sessionStorage.getItem("xinxin-session") || "";
+let sessionEpoch = 0;
 let base =
   localStorage.getItem("xinxin-server") || import.meta.env.VITE_API_BASE || "";
 
@@ -72,6 +74,7 @@ export async function restoreSession() {
   }
 }
 export async function setSession(value: string) {
+  sessionEpoch += 1;
   token = value;
   if (value) sessionStorage.setItem("xinxin-session", value);
   else sessionStorage.removeItem("xinxin-session");
@@ -127,13 +130,7 @@ export const url = (path: string) => `${base}/api/v1${path}`;
 
 // Retain the request identity after an uncertain network response, including reloads.
 export async function stableRequestKey(namespace: string, payload: unknown) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(JSON.stringify(payload)),
-  );
-  const fingerprint = Array.from(new Uint8Array(digest), (value) =>
-    value.toString(16).padStart(2, "0"),
-  ).join("");
+  const fingerprint = await requestFingerprint(payload);
   const storageKey = `xinxin-request:${namespace}`;
   let previous: { fingerprint: string; key: string } | null = null;
   try {
@@ -142,7 +139,7 @@ export async function stableRequestKey(namespace: string, payload: unknown) {
     /* Discard malformed local state. */
   }
   if (previous?.fingerprint === fingerprint) return previous.key;
-  const key = crypto.randomUUID();
+  const key = newRequestId();
   sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, key }));
   return key;
 }
@@ -189,10 +186,14 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
-async function responseError(response: Response): Promise<never> {
-  if (response.status === 401) {
-    await setSession("");
+async function responseError(
+  response: Response,
+  epoch: number,
+): Promise<never> {
+  if (response.status === 401 && epoch === sessionEpoch) {
+    const clearing = setSession("");
     window.dispatchEvent(new Event("xinxin-unauthorized"));
+    await clearing;
   }
   const data = await response.json().catch(() => null);
   const detail = data?.detail;
@@ -255,12 +256,13 @@ export async function api<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const epoch = sessionEpoch;
   const headers = new Headers(options.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (options.body && !(options.body instanceof FormData))
     headers.set("Content-Type", "application/json");
   return timedFetch<T>(url(path), { ...options, headers }, async (response) => {
-    if (!response.ok) return responseError(response);
+    if (!response.ok) return responseError(response, epoch);
     return response.json();
   });
 }
@@ -279,6 +281,7 @@ export async function upload(
     requestId?: string;
   } = {},
 ): Promise<FileItem> {
+  const epoch = sessionEpoch;
   if (!file.size) throw new Error("文件为空");
   if (file.size > MAX_UPLOAD_BYTES) throw new Error("单个文件最多 256 MB");
   return new Promise((resolve, reject) => {
@@ -290,7 +293,7 @@ export async function upload(
     if (token) request.setRequestHeader("Authorization", `Bearer ${token}`);
     request.setRequestHeader(
       "X-Upload-ID",
-      options.requestId || crypto.randomUUID(),
+      options.requestId || newRequestId(),
     );
     request.upload.onprogress = (event) => {
       if (event.lengthComputable)
@@ -315,7 +318,7 @@ export async function upload(
           status: request.status,
         });
         if (request.status < 200 || request.status >= 300)
-          await responseError(response);
+          await responseError(response, epoch);
         resolve(await response.json());
       } catch (error) {
         reject(error);
@@ -332,6 +335,7 @@ export async function upload(
   });
 }
 export async function getBlob(path: string, signal?: AbortSignal) {
+  const epoch = sessionEpoch;
   return timedFetch(
     url(path),
     {
@@ -339,7 +343,7 @@ export async function getBlob(path: string, signal?: AbortSignal) {
       signal,
     },
     async (response) => {
-      if (!response.ok) return responseError(response);
+      if (!response.ok) return responseError(response, epoch);
       return response.blob();
     },
   );
@@ -351,7 +355,7 @@ export async function download(file: FileItem) {
 export async function saveBlob(
   blob: Blob,
   filename: string,
-  id: string = crypto.randomUUID(),
+  id: string = newRequestId(),
 ) {
   if (Capacitor.isNativePlatform()) {
     const [{ Filesystem, Directory }, { Share }] = await Promise.all([
@@ -393,24 +397,26 @@ export async function watchRun(
   onConnection?: (state: string) => void,
   onSnapshot?: (run: Run) => void,
 ) {
+  const epoch = sessionEpoch;
   let cursor = 0,
     delay = 500,
     sawFinished = false;
-  while (!signal.aborted) {
+  while (!signal.aborted && epoch === sessionEpoch) {
     try {
       const response = await fetch(url(`/runs/${id}/events?after=${cursor}`), {
         headers: { Authorization: `Bearer ${token}` },
         signal,
       });
-      if (!response.ok) await responseError(response);
+      if (!response.ok) await responseError(response, epoch);
       if (!response.body) throw new Error("浏览器不支持事件流");
       onConnection?.("connected");
       delay = 500;
       const reader = response.body!.getReader(),
         decoder = new TextDecoder();
       let buffer = "";
-      while (!signal.aborted) {
+      while (!signal.aborted && epoch === sessionEpoch) {
         const { done, value } = await reader.read();
+        if (epoch !== sessionEpoch) return;
         if (done) break;
         buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
         let boundary;
@@ -418,8 +424,10 @@ export async function watchRun(
           const block = buffer.slice(0, boundary);
           buffer = buffer.slice(boundary + 2);
           if (block.includes("event: end")) {
-            if (!sawFinished && onSnapshot)
-              onSnapshot(await api<Run>(`/runs/${id}`));
+            if (!sawFinished && onSnapshot) {
+              const snapshot = await api<Run>(`/runs/${id}`);
+              if (epoch === sessionEpoch) onSnapshot(snapshot);
+            }
             return;
           }
           const text = block
@@ -444,11 +452,13 @@ export async function watchRun(
           }
         }
       }
+      if (epoch !== sessionEpoch) return;
       const run = await api<Run>(`/runs/${id}`);
+      if (epoch !== sessionEpoch) return;
       onSnapshot?.(run);
       if (!["queued", "running", "cancelling"].includes(run.status)) return;
     } catch (error) {
-      if (signal.aborted) return;
+      if (signal.aborted || epoch !== sessionEpoch) return;
       if (!hasSession()) throw error;
     }
     onConnection?.("reconnecting");

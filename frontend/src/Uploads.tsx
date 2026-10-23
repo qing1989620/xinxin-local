@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Check, FileUp, RotateCcw, X } from "lucide-react";
 import { getServer, upload, type FileItem } from "./api";
+import { newRequestId } from "./requestIdentity";
 import { size } from "./ui";
 import "./uploads.css";
 
@@ -105,7 +106,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       const added = files
         .slice(0, Math.max(0, 50 - current.current.length))
         .map((file): Entry => ({
-          id: crypto.randomUUID(),
+          id: newRequestId(),
           file,
           server: getServer(),
           state: "queued",

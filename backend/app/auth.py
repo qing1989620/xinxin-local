@@ -29,7 +29,7 @@ def password_matches(password, stored):
 class Auth:
     def __init__(self, store):
         self.store = store
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.failures = {}
         key_path = store.directory / "vault.key"
         if not key_path.exists():
@@ -50,13 +50,14 @@ class Auth:
         )
 
     def issue(self):
-        token = secrets.token_urlsafe(40)
-        self.store.execute("DELETE FROM sessions WHERE expires<?", (time.time(),))
-        self.store.execute(
-            "INSERT INTO sessions VALUES(?,?)",
-            (hashlib.sha256(token.encode()).hexdigest(), time.time() + 30 * 86400),
-        )
-        return token
+        with self.lock:
+            token = secrets.token_urlsafe(40)
+            self.store.execute("DELETE FROM sessions WHERE expires<?", (time.time(),))
+            self.store.execute(
+                "INSERT INTO sessions VALUES(?,?)",
+                (hashlib.sha256(token.encode()).hexdigest(), time.time() + 30 * 86400),
+            )
+            return token
 
     def require(self, authorization):
         token = (authorization or "").removeprefix("Bearer ")
@@ -82,4 +83,4 @@ class Auth:
                 self.failures[peer] = recent + [time.time()]
                 raise HTTPException(401, "账号或密码不正确")
             self.failures.pop(peer, None)
-        return self.issue()
+            return self.issue()
