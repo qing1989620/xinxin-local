@@ -27,6 +27,16 @@ function Test-XinxinManagedBuild($Entry, [string]$Fingerprint) {
   return ($Entry -and $Entry.fingerprint -and $Entry.fingerprint -eq $Fingerprint)
 }
 
+function Test-XinxinApplicationBlocked([System.Exception]$Failure) {
+  # A blocked optional gateway must not prevent the loopback desktop app from
+  # opening. Do not suppress port/configuration errors or change OS policy.
+  for ($depth = 0; $Failure -and $depth -lt 16; $depth++) {
+    if ($Failure -is [System.ComponentModel.Win32Exception] -and $Failure.NativeErrorCode -eq 4551) { return $true }
+    $Failure = $Failure.InnerException
+  }
+  return $false
+}
+
 function Test-XinxinManagedPort([int]$ProcessId, [int]$Port) {
   # Windows venv python.exe may be a launcher whose child owns the socket.
   $root = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue

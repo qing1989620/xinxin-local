@@ -29,6 +29,8 @@ def test_grading_never_erases_mathematical_or_code_meaning(expected, given):
     ("4", "$4$"), ("1/2", "0.5"), (r"\frac{1}{2}", "0.500"),
     (r"$-\dfrac{3}{4}$", "−0.75"), ("1.2", "1.20"), ("50%", ".5"),
     ("1e-3", "0.001"), ("(-2)", "-2"), (r"\(x^{2}\)", "x^{2}"),
+    (r"\frac12", ".5"), (r"-\frac1{2}", "-0.5"), (r"\dfrac{3}4", ".75"),
+    (r"\tfrac{-3}4", "-0.75"), (r"- \frac12", "-0.5"),
 ])
 def test_exact_numbers_and_math_presentation_can_be_equivalent(expected, given):
     assert check_fill(json.dumps([expected]), given)
@@ -134,7 +136,7 @@ def test_missing_or_malformed_blind_solutions_cannot_bypass_review(value):
         quality.parse_solutions(value, 1)
 
 
-@pytest.mark.parametrize("independent,expected", [("-1/2", False), ("0.5", True), (r"\frac12", True)])
+@pytest.mark.parametrize("independent,expected", [("-1/2", False), ("0.5", True), (r"\frac12", True), (r"-\frac12", False), (r"-\dfrac1{2}", False)])
 def test_numeric_blank_disagreement_overrides_a_rubber_stamped_review(independent, expected):
     candidate = question("合成极限材料", "求数列极限 ___。", "fill") | {"answer": '["1/2"]'}
     class Gateway:
@@ -150,6 +152,12 @@ def test_numeric_blank_disagreement_overrides_a_rubber_stamped_review(independen
             return {"content": json.dumps(value)}
     decisions = asyncio.run(review_batch(Gateway(), {"content": "合成极限材料"}, {}, [candidate], []))
     assert decisions[0][0] is expected
+
+
+@pytest.mark.parametrize("value", [r"\frac123", r"\frac1{0}", r"\frac{1}0", r"\frac{1e101}2"])
+def test_latex_fraction_shorthand_keeps_argument_boundaries_and_numeric_limits(value):
+    from app.learning_answers import number
+    assert number(value) is None
 
 
 def test_each_proof_step_is_required_and_a_failed_step_cannot_be_overruled():

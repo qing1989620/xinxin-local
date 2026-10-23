@@ -254,6 +254,10 @@ if($NoGateway){
     New-Item -ItemType Directory -Force -Path $env:XINXIN_LOG_DIR | Out-Null
     Start-XinxinService 'gateway' $caddyExe @('run','--config',$caddyfilePath,'--adapter','caddyfile','--envfile',$gatewayEnvFile) $projectPath $GatewayPort $gatewayReady ((Get-XinxinFileHash $caddyfilePath) + ":$GatewayPort")
     $gatewayStarted=$true
+  }catch{
+    if(-not(Test-XinxinApplicationBlocked $_.Exception)){throw}
+    Write-Host '[!] Windows 应用控制策略阻止了 Caddy；本机服务已就绪，桌面仍可使用。' -ForegroundColor Yellow
+    Write-Host '    手机/局域网网关暂不可用；请由系统管理员核对 Caddy 的运行许可。未修改安全策略。'
   }finally{$env:XINXIN_LOG_DIR=$oldLogDir;$env:XINXIN_GATEWAY_PORT=$oldPort}
 }
 

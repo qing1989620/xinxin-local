@@ -35,3 +35,22 @@ Write-Output 'ownership checks passed'
     result = subprocess.run([shutil.which("powershell.exe"), "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script), "-Helpers", str(helper)], capture_output=True, timeout=20)
     assert result.returncode == 0, result.stdout.decode(errors="replace") + result.stderr.decode(errors="replace")
     assert b"ownership checks passed" in result.stdout
+
+
+@pytest.mark.skipif(os.name != "nt" or not shutil.which("powershell.exe"), reason="Windows application control")
+def test_only_application_control_error_allows_optional_gateway_degradation(tmp_path):
+    helper = Path(__file__).resolve().parents[2] / "desktop/Local-ServiceState.ps1"
+    script = tmp_path / "policy.ps1"
+    script.write_text('''param([string]$Helpers)
+$ErrorActionPreference='Stop'
+. $Helpers
+$blocked=New-Object System.ComponentModel.Win32Exception(4551)
+if(-not(Test-XinxinApplicationBlocked $blocked)){throw 'Blocked gateway was not recognized'}
+$wrapped=New-Object System.InvalidOperationException('wrapper',$blocked)
+if(-not(Test-XinxinApplicationBlocked $wrapped)){throw 'Wrapped application control failure was not recognized'}
+$denied=New-Object System.ComponentModel.Win32Exception(5)
+if(Test-XinxinApplicationBlocked $denied){throw 'Unrelated access error was hidden'}
+if(Test-XinxinApplicationBlocked (New-Object System.Exception('Bad gateway configuration'))){throw 'Configuration error was hidden'}
+''', encoding="utf-8-sig")
+    result = subprocess.run([shutil.which("powershell.exe"), "-NoProfile", "-File", str(script), str(helper)], capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stdout + result.stderr

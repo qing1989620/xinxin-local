@@ -8,7 +8,10 @@ from fractions import Fraction
 NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d{1,3})?"
 DECIMAL = re.compile(NUMBER)
 FRACTION = re.compile(rf"({NUMBER})\s*/\s*({NUMBER})")
-LATEX_FRACTION = re.compile(rf"([+-]?)\\(?:d|t)?frac\s*\{{\s*({NUMBER})\s*\}}\s*\{{\s*({NUMBER})\s*\}}")
+LATEX_FRACTION = re.compile(
+    rf"([+-]?)\s*\\(?:d|t)?frac\s*(?:\{{\s*({NUMBER})\s*\}}|([0-9]))"
+    rf"\s*(?:\{{\s*({NUMBER})\s*\}}|([0-9]))"
+)
 
 
 def unwrapped(value):
@@ -37,7 +40,9 @@ def number(value):
         elif match := FRACTION.fullmatch(text):
             result = Fraction(match[1]) / Fraction(match[2])
         elif match := LATEX_FRACTION.fullmatch(text):
-            result = Fraction(match[2]) / Fraction(match[3])
+            # TeX consumes one digit per unbraced argument: \frac12 is 1/2,
+            # while \frac123 has an extra token and must not become 12/3.
+            result = Fraction(match[2] or match[3]) / Fraction(match[4] or match[5])
             if match[1] == "-":
                 result = -result
         else:
