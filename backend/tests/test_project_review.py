@@ -278,6 +278,25 @@ def test_semantic_redaction_does_not_expose_the_tail_of_known_multiword_credenti
         assert "syntheticAlpha" not in public and "syntheticBeta" not in public
 
 
+@pytest.mark.parametrize("rotate_after_start", [False, True])
+def test_stream_uses_current_and_retained_credentials_with_real_manager(client, rotate_after_start):
+    manager, auth = client.app.state.manager, client.app.state.auth
+    known = "syntheticAlpha password"
+    auth.set_secret("audit_sentinel", known)
+    for split in range(len(known) + 1):
+        stream = PublicText(manager.redact, manager.secret_forms)
+        if rotate_after_start:
+            auth.set_secret("audit_sentinel", "syntheticNew credential")
+        text = known + ": syntheticBeta"
+        public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
+        assert "syntheticAlpha" not in public and "syntheticBeta" not in public
+        auth.set_secret("audit_sentinel", known)
+    stream = PublicText(manager.redact, manager.secret_forms)
+    auth.set_secret("audit_sentinel", "syntheticCurrent credential")
+    public = stream.feed("syntheticCurrent ") + stream.feed("credential") + stream.finish()
+    assert "syntheticCurrent" not in public
+
+
 def test_old_password_login_cannot_issue_after_completed_password_change(client, monkeypatch):
     auth = client.app.state.auth
     entered, release, blocked = threading.Event(), threading.Event(), threading.Event()

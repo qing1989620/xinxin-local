@@ -774,7 +774,7 @@ class TaskManager:
             return public_text.sanitize(value, limit=limit)
         try:
             run = self.store.one("SELECT * FROM runs WHERE id=?", (ident,))
-            public_text = PublicText(self.redact, self.secret_forms())
+            public_text = PublicText(self.redact, self.secret_forms)
             if flag.is_set():
                 raise asyncio.CancelledError()
             self.store.execute(

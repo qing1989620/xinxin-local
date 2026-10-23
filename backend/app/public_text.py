@@ -31,6 +31,24 @@ def credential_fields(text):
         yield match.start(), match.end(), end
 
 
+def quoted_strings(text):
+    """Yield quoted units, including an unfinished string or escape at the end."""
+    cursor = 0
+    while (start := text.find('"', cursor)) >= 0:
+        end = start + 1
+        while end < len(text):
+            if text[end] == "\\":
+                end += 2
+            elif text[end] == '"':
+                end += 1
+                break
+            else:
+                end += 1
+        end = min(end, len(text))
+        yield start, end
+        cursor = end
+
+
 def redact_text(text, forms=(), limit=None):
     """Merge sensitive spans in the original text before replacing any bytes.
 
@@ -45,10 +63,19 @@ def redact_text(text, forms=(), limit=None):
         text, flags=re.S,
     ):
         spans.append((match.start(), match.end(), "[redacted private key]"))
-    for match in re.finditer(_BEARER + r"[^\s,;]+", text):
-        spans.append((match.start(), match.end(), "[redacted]"))
-    for match in re.finditer(_ASSIGNMENT + r"([^\s,;]+)", text):
-        spans.append((match.start(3), match.end(3), "[redacted]"))
+    quotes = list(quoted_strings(text))
+    for pattern, group in ((_BEARER + r"[^\s,;]+", 0),
+                           (_ASSIGNMENT + r"([^\s,;]+)", 3)):
+        for match in re.finditer(pattern, text):
+            start, end = match.start(group), match.end(group)
+            # A token inside a JSON string must not consume its closing quote
+            # or the surrounding object. Escaped quotes stay within the unit.
+            for left, right in quotes:
+                if left < match.start() < right and text[right - 1] == '"':
+                    end = min(end, right - 1)
+                    break
+            if start < end:
+                spans.append((start, end, "[redacted]"))
     for form in forms:
         if form:
             spans.extend((match.start(), match.end(), "[redacted]")
@@ -73,49 +100,64 @@ def redact_text(text, forms=(), limit=None):
 class PublicText:
     def __init__(self, redact, forms):
         self.redact = redact
-        # Keep the original credentials even if settings rotate during a request.
-        self.forms = sorted(set(forms), key=len, reverse=True)
+        self.current_forms = forms if callable(forms) else None
+        self.forms = [] if self.current_forms else list(forms)
+        self._refresh_forms()
         self.pending = ""
 
+    def _refresh_forms(self):
+        # Accumulate both initial and later credentials during a long task.
+        current = self.current_forms() if self.current_forms else ()
+        self.forms = sorted(set(self.forms) | set(current), key=len, reverse=True)
+
     def sanitize(self, value, limit=None):
+        self._refresh_forms()
         # Preserve the original field names until semantic redaction finishes.
         return self.redact(value, limit=limit, known_forms=self.forms)
 
     def feed(self, delta):
+        self._refresh_forms()
         self.pending += delta
         # ASCII tokens remain pending until a delimiter arrives. CJK text can
         # stream immediately; known Unicode credentials are held below too.
         token = re.search(r"[\x21-\x7e]+$", self.pending)
         cut = token.start() if token else len(self.pending)
+        holds = []
         for form in self.forms:
             start = self.pending.find(form)
             while start >= 0:
-                if start < cut < start + len(form):
-                    cut = start
+                holds.append((start, start + len(form)))
                 start = self.pending.find(form, start + 1)
             # Do not publish a prefix of a known multi-word/escaped credential.
-            for start in range(max(0, len(self.pending) - len(form) + 1), cut):
+            for start in range(max(0, len(self.pending) - len(form) + 1), len(self.pending)):
                 if form.startswith(self.pending[start:]):
-                    cut = start
+                    holds.append((start, len(self.pending) + 1))
                     break
         for pattern in (_ASSIGNMENT + r"[^\s,;]+", _ASSIGNMENT + r"$",
                         _BEARER + r"[^\s,;]+", _BEARER + r"$"):
             for match in re.finditer(pattern, self.pending):
-                if match.start() < cut <= match.end():
-                    cut = match.start()
+                holds.append((match.start(), match.end() + 1))
         for start, _, end in credential_fields(self.pending):
-            if start < cut <= end:
-                cut = start
+            holds.append((start, end + 1))
+        # Keep every quoted value intact, including non-secret JSON envelopes.
+        # Otherwise the next fragment loses the context of escaped characters.
+        holds.extend(quoted_strings(self.pending))
         for match in re.finditer(r'("(?:\\.|[^"\\])*")\s*$', self.pending):
             if _secret_field(match.group(1)):
-                cut = min(cut, match.start())
+                holds.append((match.start(), len(self.pending) + 1))
         # A PEM block can contain arbitrary whitespace. Keep it as a unit so
         # that the existing redactor sees its header and body together.
         for match in re.finditer("-----BEGIN", self.pending):
             start = match.start()
             end = re.search(r"-----END [A-Z ]+-----", self.pending[start:])
-            if end is None or cut < start + end.end():
-                cut = min(cut, start)
+            holds.append((start, len(self.pending) + 1 if end is None else start + end.end()))
+        # All rules observe the same original buffer. A later rule can move the
+        # boundary into an earlier interval, so converge rather than use order.
+        while True:
+            earlier = min((start for start, end in holds if start < cut < end), default=cut)
+            if earlier == cut:
+                break
+            cut = earlier
         if not cut:
             return ""
         value, self.pending = self.pending[:cut], self.pending[cut:]
