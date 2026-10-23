@@ -64,7 +64,7 @@ class ModelGateway:
         self.context_tokens = 0
         self.context_window_tokens = context_window_tokens
 
-    async def apredict(self, messages, tools=None, stream=False, temperature=None, **kwargs):
+    async def apredict(self, messages, tools=None, stream=False, temperature=None, reasoning=False, **kwargs):
         if self.cancelled.is_set():
             raise RuntimeError("任务已取消")
         self.check_budget()
@@ -79,6 +79,13 @@ class ModelGateway:
             "temperature": 0.5 if temperature is None else max(0.0, min(1.0, float(temperature))),
             "thinking": {"type": "disabled"},
         }
+        # Only the documented official endpoint opts into reasoning. Learning
+        # calls have no tools/history of reasoning to replay; generic agent
+        # traffic keeps its existing protocol and provider compatibility.
+        if reasoning and not tools and not stream and urlsplit(self.url).hostname == "api.deepseek.com" and self.model in {"deepseek-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp"}:
+            payload["thinking"] = {"type": "enabled"}
+            payload["reasoning_effort"] = "high"
+            payload.pop("temperature")
         if tools:
             payload["tools"] = tools
         # Inline JPEG base64 is transport data, not text tokens. Counting it as
@@ -116,7 +123,9 @@ class ModelGateway:
             self._usage(data)
             if data["choices"][0].get("finish_reason") in {"length", "content_filter"}:
                 raise RuntimeError("模型输出被截断或中止，请缩小材料范围后重试")
-            return data["choices"][0]["message"]
+            # Study persists final answers and explicit proof checks, never the
+            # provider's internal reasoning trace.
+            return {key: value for key, value in data["choices"][0]["message"].items() if key != "reasoning_content"}
 
     def supports_learning_images(self):
         return urlsplit(self.url).hostname == "api.deepseek.com" and self.model in {

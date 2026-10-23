@@ -11,7 +11,7 @@ from app.learning_studio import validate
 from app.learning_studio import generate_batch, review_batch, canonical_original_quotes
 from app.learning_answers import check_choice, check_fill
 from app.store import uid
-from test_learning_studio import studio, source_list, start, wait, question, add_book
+from test_learning_studio import studio, source_list, start, wait, question, add_book, step_checks
 from test_learning_evidence import add_pdf, analysis, visual_transport
 from test_learning_quality import script
 
@@ -120,7 +120,7 @@ def test_blind_solution_hides_candidate_answers_and_disagreement_never_passes(in
                 value = {"solutions": [{"index": 0, "solvable": True, "answer": independent_answer, "solution": "合成盲解：先独立计算切线斜率，再比对选项。"}]}
             else:
                 assert payload["independent_solutions"][0]["answer"] == independent_answer
-                value = {"reviews": [{"index": 0, "verdict": "accept", "relevant": True, "solvable": True, "correct": True,
+                value = {"reviews": [{"index": 0, "steps": step_checks(payload["questions"][0]), "verdict": "accept", "relevant": True, "solvable": True, "correct": True,
                     "reason": "合成对照：核对导数与切线斜率。", "reasoning_correct": True,
                     "reasoning_check": "合成逐步核对：定义与计算成立。", "independent_match": independent_match}]}
             return {"content": json.dumps(value)}
@@ -132,6 +132,42 @@ def test_blind_solution_hides_candidate_answers_and_disagreement_never_passes(in
 def test_missing_or_malformed_blind_solutions_cannot_bypass_review(value):
     with pytest.raises(ValueError, match="独立求解"):
         quality.parse_solutions(value, 1)
+
+
+@pytest.mark.parametrize("independent,expected", [("-1/2", False), ("0.5", True), (r"\frac12", True)])
+def test_numeric_blank_disagreement_overrides_a_rubber_stamped_review(independent, expected):
+    candidate = question("合成极限材料", "求数列极限 ___。", "fill") | {"answer": '["1/2"]'}
+    class Gateway:
+        async def apredict(self, messages, **kwargs):
+            payload = json.loads(messages[1]["content"])
+            if "学习独立求解协议" in messages[0]["content"]:
+                value = {"solutions": [{"index": 0, "solvable": True, "answer": [independent], "solution": "合成独立计算：先通分并检查分子分母的符号。"}]}
+            else:
+                value = {"reviews": [{"index": 0, "verdict": "accept", "relevant": True, "solvable": True,
+                    "correct": True, "independent_match": True, "reasoning_correct": True,
+                    "reasoning_check": "合成审题器错误地同意所有符号与步骤。", "reason": "合成结论：声称答案正确且一致。",
+                    "steps": step_checks(payload["questions"][0])}]}
+            return {"content": json.dumps(value)}
+    decisions = asyncio.run(review_batch(Gateway(), {"content": "合成极限材料"}, {}, [candidate], []))
+    assert decisions[0][0] is expected
+
+
+def test_each_proof_step_is_required_and_a_failed_step_cannot_be_overruled():
+    candidate = question("合成原文", "证明数列性质。", "short") | {
+        "answer": "先证明数列有界。再证明单调性。", "explanation": "先检查符号；最后应用极限定理。"}
+    steps = quality.reasoning_steps(candidate)
+    assert "".join(step["text"] for step in steps) == candidate["answer"] + candidate["explanation"]
+    checks = [{"index": step["index"], "valid": True, "reason": "合成逐步复算确认该步骤成立。"} for step in steps]
+    row = {"index": 0, "verdict": "accept", "relevant": True, "solvable": True, "correct": True,
+           "reason": "合成审题结论与参考答案一致。", "reasoning_correct": True, "independent_match": True,
+           "reasoning_check": "合成总评声称所有步骤均正确。", "steps": checks}
+    assert quality.parse_reviews({"reviews": [row]}, 1, [len(steps)])[0][0]
+    with pytest.raises(ValueError, match="缺失或重复"):
+        quality.parse_reviews({"reviews": [row | {"steps": checks[:-1]}]}, 1, [len(steps)])
+    with pytest.raises(ValueError, match="缺失或重复"):
+        quality.parse_reviews({"reviews": [row | {"steps": checks[:-1] + checks[:1]}]}, 1, [len(steps)])
+    failed = checks[0] | {"valid": False, "reason": "原句把递增写成递减，不能沿用正确结论放行。"}
+    assert quality.parse_reviews({"reviews": [row | {"steps": [failed, *checks[1:]]}]}, 1, [len(steps)]) == [(False, failed["reason"])]
 
 
 def test_legacy_source_evidence_does_not_erase_spaces_inside_code_strings():
@@ -224,6 +260,28 @@ def test_tutoring_is_scoped_to_current_session_and_earlier_history_is_read_only(
     client.post(f"/api/v1/learning/quiz/{second['id']}/answer", json={"question_id": ident, "answers": ["1.2"]})
     previous = client.get(path + '/tutor', params={"session_id": second["id"], "previous": True}).json()
     assert len(previous["previous_history"]) == 2
+
+
+@pytest.mark.parametrize("mode", ["teacher", "xinxin"])
+def test_tutor_only_receives_reference_after_current_attempt(studio, mode):
+    app, client, book = studio
+    ident = add_question(app, book)
+    payloads = []
+    def respond(request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "先检查题目的条件，再尝试第一步计算。"}}]})
+    app.state.manager.model_transport = httpx.MockTransport(respond)
+    session = quiz(client, book)
+    body = {"mode": mode, "session_id": session["id"]}
+    endpoint = f"/api/v1/learning/questions/{ident}/explain"
+    assert client.post(endpoint, json=body).status_code == 200
+    before = json.loads(payloads[-1]["messages"][1]["content"].split('\n', 1)[1])["question"]
+    assert "answer" not in before and "explanation" not in before and not before["source_quote"]
+    assert payloads[-1]["thinking"] == {"type": "enabled"} and payloads[-1]["max_tokens"] == 12000
+    assert client.post(f"/api/v1/learning/quiz/{session['id']}/answer", json={"question_id": ident, "answers": ["1.2"]}).status_code == 200
+    assert client.post(endpoint, json=body).status_code == 200
+    after = json.loads(payloads[-1]["messages"][1]["content"].split('\n', 1)[1])["question"]
+    assert after["answer"] == '["1.2"]' and after["explanation"] and after["source_quote"]
 
 
 def test_pdf_page_scope_matches_actual_images_cache_and_question_provenance(studio):

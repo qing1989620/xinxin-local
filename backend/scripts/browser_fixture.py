@@ -64,7 +64,7 @@ def create_fixture():
         if messages and "学习出题复核协议" in str(messages[0].get("content")):
             content = messages[1]["content"]
             payload = json.loads(content[0]["text"] if isinstance(content, list) else content)
-            value = {"reviews": [{"index": index, "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
+            value = {"reviews": [{"index": index, "steps": [{"index": step["index"], "valid": True, "reason": "合成逐步核验：条件与推导步骤成立。"} for step in row["reasoning_steps"]], "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
             if any("合成审题缺失" in row.get("stem", "") for row in payload["questions"]):
                 value = {"reviews": []}
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})

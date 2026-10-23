@@ -13,7 +13,7 @@ from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 from app import learning_evidence as evidence, learning_quality as quality, learning_visual as visual
 from app.learning_studio import validate
 from app.model import ModelGateway
-from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response
+from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response, step_checks
 from test_learning_quality import script
 from test_learning_imports import start as import_start, wait_import
 
@@ -198,7 +198,7 @@ def visual_transport(app, *, reading=None, reviewing=None):
         elif "学习独立求解协议" in protocol:
             value, stage = blind_response(payload), "solve"
         elif "学习出题复核协议" in protocol:
-            value = reviewing(payload) if reviewing else {"reviews": [{"index": i, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：导函数为2x，代入3得到6，原图条件一致。"} for i in range(len(payload["questions"]))]}
+            value = reviewing(payload) if reviewing else {"reviews": [{"index": i, "steps": step_checks(payload["questions"][i]), "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：导函数为2x，代入3得到6，原图条件一致。"} for i in range(len(payload["questions"]))]}
             stage = "review"
         else:
             value, stage = {"questions": [question(payload["text"], "求函数 f(x)=x^2 在 x=3 处的导数。") | {"source_ref": "L2-L3", "origin": "original"}]}, "generation"
@@ -365,4 +365,27 @@ def test_truncated_model_output_is_detected_before_question_parsing():
             threading.Event(), transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"choices": [{"message": {"content": '{"questions":['}, "finish_reason": "length"}]})))
         with pytest.raises(RuntimeError, match="截断"):
             await gateway.apredict([{"role": "user", "content": "synthetic input"}])
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("url,model,reasoning,tools,enabled", [
+    ("https://api.deepseek.com/chat/completions", "deepseek-flash", True, None, True),
+    ("https://api.deepseek.com/chat/completions", "deepseek-flash", False, None, False),
+    ("https://api.deepseek.com/chat/completions", "deepseek-flash", True, [{"type": "function"}], False),
+    ("https://other.example/chat/completions", "deepseek-flash", True, None, False),
+    ("https://api.deepseek.com/chat/completions", "custom-model", True, None, False),
+])
+def test_learning_reasoning_is_opt_in_and_never_returns_provider_thoughts(url, model, reasoning, tools, enabled):
+    async def run():
+        seen, usage = [], []
+        def response(request):
+            seen.append(json.loads(request.content))
+            return httpx.Response(200, json={"choices": [{"message": {"content": "final", "reasoning_content": "synthetic private reasoning"}, "finish_reason": "stop"}], "usage": {"total_tokens": 250}})
+        gateway = ModelGateway(url, model, "synthetic-key", usage.append, threading.Event(), transport=httpx.MockTransport(response))
+        result = await gateway.apredict([{"role": "user", "content": "合成数学核验"}], reasoning=reasoning, tools=tools)
+        assert seen[0]["thinking"]["type"] == ("enabled" if enabled else "disabled")
+        assert ("reasoning_effort" in seen[0]) is enabled
+        assert ("temperature" in seen[0]) is not enabled
+        assert result == {"content": "final"}
+        assert gateway.calls == 1 and gateway.tokens == 250
     asyncio.run(run())

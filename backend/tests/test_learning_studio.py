@@ -52,6 +52,11 @@ def blind_response(payload):
                            "solution": "合成盲解：由导数定义与几何意义，核对切线的斜率和瞬时变化率。"} for index, row in enumerate(payload["questions"])]}
 
 
+def step_checks(question):
+    return [{"index": step["index"], "valid": True, "reason": "合成逐步核对：该步骤的前提及计算成立。"}
+            for step in question["reasoning_steps"]]
+
+
 def model(app, responder):
     async def transport(request):
         messages = json.loads(request.content)["messages"]
@@ -61,7 +66,7 @@ def model(app, responder):
         elif "学习独立求解协议" in messages[0]["content"]:
             result = blind_response(payload)
         elif "学习出题复核协议" in messages[0]["content"]:
-            result = {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}
+            result = {"reviews": [{"index": index, "steps": step_checks(payload["questions"][index]), "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}
         else:
             result = responder(payload)
         if asyncio.iscoroutine(result):

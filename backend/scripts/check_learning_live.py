@@ -34,11 +34,14 @@ def arguments():
     action.add_argument("--pipeline", action="store_true", help="Run the production generation/review/save/recovery loop in the isolated check database")
     action.add_argument("--review-saved", action="store_true", help="Recheck previously saved private questions using the current production critic")
     action.add_argument("--solve-saved", action="store_true", help="Blind-solve private saved questions without showing their answers or explanations")
+    action.add_argument("--http-flow", choices=("generate", "quiz", "verify-quiz", "hints"), help="Exercise actual HTTP routes and durable worker against the isolated database")
+    parser.add_argument("--resume-latest", action="store_true", help="Resume only missing questions via the HTTP route")
+    parser.add_argument("--kinds", nargs="+", choices=("single", "fill", "short"), default=["single", "fill", "short"])
     parser.add_argument("--pages", help="Optional PDF physical page range inside this source, e.g. 4-6")
     parser.add_argument("--count", type=int, choices=range(1, 7), default=3)
-    parser.add_argument("--max-calls", type=int, choices=range(1, 13), default=3)
+    parser.add_argument("--max-calls", type=int, choices=range(0, 31), default=3)
     parser.add_argument("--ledger", type=Path, required=True, help="Private cumulative call ledger for this explicit authorization")
-    parser.add_argument("--ledger-limit", type=int, choices=range(1, 13), default=12, help="Cumulative authorized calls, at most 12")
+    parser.add_argument("--ledger-limit", type=int, choices=range(1, 31), default=12, help="Cumulative explicitly authorized calls, at most 30")
     parser.add_argument("--reuse-check", type=Path, help="Reuse an earlier private check's material analysis")
     return parser.parse_args()
 
@@ -46,6 +49,10 @@ def arguments():
 async def check(args):
     if not args.live or not args.allow_host:
         raise ValueError("未启用真实调用；需要 --live 和已授权的 --allow-host")
+    if args.max_calls == 0 and args.http_flow != "verify-quiz":
+        raise ValueError("零调用只适用于核对既有真实练习记录")
+    if args.resume_latest and args.http_flow != "generate":
+        raise ValueError("补出最新任务必须使用 HTTP 出题检查")
     config = Config.from_env()
     with sqlite3.connect(config.data_dir.joinpath("xinxin.sqlite3").as_uri() + "?mode=ro", uri=True) as owner:
         owner.row_factory = sqlite3.Row
@@ -103,14 +110,37 @@ async def check(args):
     flag = threading.Event()
     def usage(value):
         ledger_path.write_text(encode({"calls": baseline_calls + value["calls"], "tokens": baseline_tokens + value["total_tokens"]}), encoding="utf-8")
-    gateway = ModelGateway(url, model, key, usage, flag, max_calls=args.max_calls, max_tokens=args.max_calls * 16000)
+    trace = []
+    class AuditedGateway(ModelGateway):
+        async def apredict(self, messages, **kwargs):
+            # Keep private mathematical evidence, never credentials or image
+            # base64. Calls are sequential and share one authorization ledger.
+            first = str(messages[0].get("content", ""))
+            stage = next((name for name in ("PDF 原页读取协议", "学习材料分析协议", "学习工作室协议", "学习独立求解协议", "学习出题复核协议") if name in first), "learning interaction")
+            record = {"stage": stage, "request": [{"role": item["role"], "content": [block for block in item["content"] if block.get("type") == "text"] if isinstance(item.get("content"), list) else item.get("content")} for item in messages]}
+            try:
+                reply = await super().apredict(messages, **kwargs)
+                record["reply"] = reply
+                return reply
+            except Exception as error:
+                record["error_type"] = type(error).__name__
+                raise
+            finally:
+                record["calls_after"] = self.calls
+                trace.append(record)
+                store.directory.joinpath("trace-" + str(baseline_calls) + ".private.json").write_text(json.dumps(trace, ensure_ascii=False, indent=2), encoding="utf-8")
+    gateway = AuditedGateway(url, model, key, usage, flag, max_calls=args.max_calls, max_tokens=args.max_calls * 16000)
+    if args.http_flow:
+        from check_learning_http import http_flow
+        isolated = Config(store.directory, "", model=model, model_url=url, api_key=key)
+        return await asyncio.to_thread(http_flow, args, isolated, unit, SourceFile().path(unit["file_id"]))
     print("stage: material analysis", flush=True)
     analysis = await analyze(store, gateway, unit, flag, read_mode=args.read_mode, library=SourceFile())
     if not analysis["eligible"]:
         raise ValueError(analysis["reason"])
     if args.read_mode == "pdf":
         unit |= {"content": analysis["source_text"], "page_spans": analysis["page_spans"], "source_method": "pdf_images"}
-    options = {"kinds": ["single", "fill", "short"], "difficulty": 0, "mode": args.mode, "focus": "",
+    options = {"kinds": args.kinds, "difficulty": 0, "mode": args.mode, "focus": "",
                "count": args.count, "read_mode": args.read_mode, "analyze_only": False, "page_ranges": {}}
     if args.review_saved or args.solve_saved:
         if not args.reuse_check:

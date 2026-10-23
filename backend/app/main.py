@@ -1608,7 +1608,7 @@ def create_app(config=None):
                 raise ValueError("答案数组不能与文字答案或重判同时提交")
             async with learning_request_lock(("grade", session_id, body.question_id)):
                 return await learning.submit_answer(
-                    store, model_gateway(), session_id, body.question_id, body.answer,
+                    store, model_gateway(max_tokens=12000), session_id, body.question_id, body.answer,
                     answers=body.answers, retry_grading=body.retry_grading,
                 )
         except ValueError as error:
@@ -1629,7 +1629,7 @@ def create_app(config=None):
     async def learning_explain(question_id: str, body: ExplainRequest):
         try:
             async with learning_request_lock(("tutor", question_id, body.mode, body.session_id)):
-                return await learning.explain(store, model_gateway(), question_id, body.message, body.mode, body.session_id)
+                return await learning.explain(store, model_gateway(max_tokens=12000), question_id, body.message, body.mode, body.session_id)
         except ValueError as error:
             raise HTTPException(409, str(error))
 

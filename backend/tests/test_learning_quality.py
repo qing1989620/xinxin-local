@@ -13,7 +13,7 @@ from app.document_text import extract_document
 from app.files import FileLibrary, FileTooLarge, MAX_UPLOAD
 from app.learning_studio import sources
 from app.store import Store
-from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response
+from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response, step_checks
 
 
 def script(app, *, analyze=None, generate=None, review=None):
@@ -29,7 +29,7 @@ def script(app, *, analyze=None, generate=None, review=None):
             stage, value = "solve", blind_response(payload)
         elif "学习出题复核协议" in protocol:
             stage = "review"
-            value = review(payload) if review else {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成核对：重新求解后答案与解析一致。"} for index in range(len(payload["questions"]))]}
+            value = review(payload) if review else {"reviews": [{"index": index, "steps": step_checks(payload["questions"][index]), "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成核对：重新求解后答案与解析一致。"} for index in range(len(payload["questions"]))]}
         else:
             stage = "generation"
             value = generate(payload) if generate else [question(payload["text"])]
