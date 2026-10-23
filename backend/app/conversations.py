@@ -92,6 +92,11 @@ def purge_conversation(store, library, ident):
 
 
 def purge_conversations(store, library, idents):
+    with library.lifecycle_lock:
+        return _purge_conversations(store, library, idents)
+
+
+def _purge_conversations(store, library, idents):
     placeholders = selection(store, idents)
     preview = batch_deletion_preview(store, idents)
     workspaces = [(ident, workspace_path(store, ident)[1]) for ident in idents]

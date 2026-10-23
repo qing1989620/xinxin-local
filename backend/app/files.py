@@ -5,6 +5,7 @@ import io
 import json
 import mimetypes
 import re
+import threading
 from pathlib import Path
 
 from .skillnet.index import BM25Index
@@ -44,6 +45,8 @@ class FileLibrary:
         self.root = store.directory / "files"
         self.root.mkdir(exist_ok=True)
         self.previews = store.directory / "previews"
+        # A preview must not publish private bytes after deletion has finished.
+        self.lifecycle_lock = threading.RLock()
         self._repair_paths()
 
     def _repair_paths(self):
@@ -228,6 +231,10 @@ class FileLibrary:
         raise ValueError("文件不可用")
 
     def preview(self, ident, size=1600):
+        with self.lifecycle_lock:
+            return self._preview(ident, size)
+
+    def _preview(self, ident, size):
         """有界预览图：长边不超过 size，JPEG，磁盘缓存按文件 mtime 失效。
 
         返回缓存文件路径；调用方负责以 image/jpeg 输出。非图片返回 None。
@@ -310,6 +317,10 @@ class FileLibrary:
         }
 
     def delete(self, ident):
+        with self.lifecycle_lock:
+            return self._delete(ident)
+
+    def _delete(self, ident):
         target = self.path(ident)
         with self.store.connect(write=True) as db:
             db.execute("DELETE FROM uploads WHERE file_id=?", (ident,))

@@ -11,6 +11,7 @@ from PIL import Image
 from fastapi import HTTPException
 
 from app import imagegen, learning
+from app.conversations import purge_conversation
 from app.learning_studio import validate
 from app.public_text import PublicText
 from app.store import uid
@@ -98,6 +99,55 @@ def test_conversation_deletion_preserves_book_originals_and_removes_exclusive_ca
         assert not store.one(f"SELECT * FROM {table} WHERE file_id=?", (exclusive["id"],))
     assert list(library.previews.glob(shared["id"] + "-*"))
     assert not list(library.previews.glob(exclusive["id"] + "-*"))
+
+
+@pytest.mark.parametrize("mode", ["file", "conversation"])
+def test_inflight_preview_cannot_recreate_private_cache_after_deletion(client, monkeypatch, mode):
+    store, library = client.app.state.store, client.app.state.library
+    cid = client.post("/api/v1/conversations", json={"title": "Synthetic preview lifecycle"}).json()["id"]
+    run = fixture_run(client, cid)
+    content = io.BytesIO()
+    Image.new("RGB", (20, 20), "teal").save(content, "PNG")
+    file = library.save("synthetic-preview.png", content.getvalue(), "image/png", run_id=run)
+    original_path = library.path(file["id"])
+    entered, release, blocked = threading.Event(), threading.Event(), threading.Event()
+    original_save = Image.Image.save
+    original_lock = library.lifecycle_lock
+
+    class ObservedLock:
+        def __enter__(self):
+            if not original_lock.acquire(blocking=False):
+                blocked.set()
+                original_lock.acquire()
+        def __exit__(self, *args):
+            original_lock.release()
+
+    def pause_save(image, target, *args, **kwargs):
+        if str(target).endswith(".tmp"):
+            entered.set()
+            assert release.wait(10)
+        return original_save(image, target, *args, **kwargs)
+
+    library.lifecycle_lock = ObservedLock()
+    monkeypatch.setattr(Image.Image, "save", pause_save)
+    with ThreadPoolExecutor(2) as pool:
+        preview = pool.submit(library.preview, file["id"])
+        try:
+            assert entered.wait(10)
+            deletion = pool.submit(library.delete, file["id"]) if mode == "file" else pool.submit(purge_conversation, store, library, cid)
+            assert blocked.wait(10)
+            assert not deletion.done()
+            assert store.one("SELECT id FROM files WHERE id=?", (file["id"],))
+        finally:
+            release.set()
+        preview.result(timeout=10)
+        result = deletion.result(timeout=10)
+    if mode == "conversation":
+        assert result["deleted"] and not result["cleanup_pending"]
+    assert not original_path.exists()
+    assert not store.one("SELECT id FROM files WHERE id=?", (file["id"],))
+    assert not list(library.previews.glob(file["id"] + "-*"))
+    assert library.preview(file["id"]) is None
 
 
 @pytest.mark.parametrize("stem", [
