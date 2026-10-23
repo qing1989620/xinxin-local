@@ -56,3 +56,17 @@ def test_current_credentials_join_the_snapshot_before_any_delta_is_published():
     public += stream.feed("syntheticOld credential; syntheticAlpha syntheticBeta.")
     public += stream.finish()
     assert not any(word in public for word in ("syntheticOld", "syntheticAlpha", "syntheticBeta"))
+
+
+@pytest.mark.parametrize("text", [
+    '{"output":"prefix\\nBearer syntheticAlpha',
+    '{"output":"Bearer\\u0020syntheticAlpha',
+    '{"output":"中文\\tpassword: syntheticAlpha',
+    '{"output":"Bearer syntheticAlpha\\',
+])
+def test_unfinished_quoted_tails_are_not_released_at_completion(text):
+    assert "syntheticAlpha" not in redact(text)
+    for split in range(len(text) + 1):
+        stream = PublicText(redact, [])
+        public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
+        assert "syntheticAlpha" not in public, (split, public)

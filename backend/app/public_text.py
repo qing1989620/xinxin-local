@@ -60,7 +60,12 @@ def redact_text(text, forms=(), limit=None):
     """
     spans = [(start, end, '"[redacted]"')
              for _, start, end in credential_fields(text)]
-    quotes = [(start, end) for start, end, complete in quoted_strings(text) if complete]
+    units = list(quoted_strings(text))
+    # A cancelled/truncated response cannot supply enough JSON context to
+    # decode its final value. Never release that undecodable private tail.
+    spans.extend((start, end, '"[redacted]"')
+                 for start, end, complete in units if not complete)
+    quotes = [(start, end) for start, end, complete in units if complete]
     for start, end in quotes:
         try:
             decoded = json.loads(text[start:end])

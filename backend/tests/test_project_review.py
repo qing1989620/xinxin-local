@@ -208,6 +208,30 @@ def test_raw_model_credentials_never_reach_events_results_or_checkpoints(client)
         assert key not in json.dumps(store.all(f"SELECT * FROM {table}"))
 
 
+@pytest.mark.parametrize("broken_transport", [False, True])
+def test_incomplete_json_model_tail_is_private_even_when_transport_fails(client, broken_transport):
+    manager, store = client.app.state.manager, client.app.state.store
+    client.put("/api/v1/settings", json={"model_api_key": "synthetic-transport-key"})
+    text = 'Safe prefix. {"output":"prefix\\nBearer syntheticAlpha'
+    packet = ("data: " + json.dumps({"choices": [{"delta": {"content": text}, "finish_reason": None}]}) + "\n\n").encode()
+
+    class BrokenStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield packet
+            raise httpx.ReadError("Synthetic stream failure")
+
+    manager.model_transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, stream=BrokenStream(), headers={"Content-Type": "text/event-stream"},
+    ) if broken_transport else httpx.Response(200, content=frames(content=text).encode()))
+    ident = client.post("/api/v1/runs", json={"task": "Synthetic incomplete response check", "request_key": "synthetic-incomplete-privacy"}).json()["id"]
+    run = wait_run(client, ident)
+    assert run["status"] == ("failed" if broken_transport else "completed")
+    for table in ("events", "messages", "run_context", "runs"):
+        assert "syntheticAlpha" not in json.dumps(store.all(f"SELECT * FROM {table}"))
+    assert any(event["kind"] == ("assistant.progress" if broken_transport else "delta")
+               and "[redacted" in str(event["data"]) for event in store.events(ident))
+
+
 @pytest.mark.parametrize("text", [
     '{"password": "syntheticAlpha syntheticBeta"}',
     'Here is JSON: {"nested": [{"api_key": "syntheticAlpha \\"syntheticBeta\\""}]} Done.',
