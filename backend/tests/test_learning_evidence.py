@@ -114,6 +114,21 @@ def test_analysis_repair_is_bounded_and_receives_actionable_feedback(studio):
     assert [stage for stage, _ in calls] == ["analysis", "analysis"]
 
 
+def test_old_physical_line_analysis_cache_is_not_reused_after_evidence_segmentation(studio):
+    app, client, _ = studio
+    content = "导数的几何意义是函数在该点的切线斜率。" * 30 + "\n1. 求函数 f(x)=x^2 在 x=3 处的导数，并说明计算过程。"
+    book = add_book(client, content)
+    unit = source_list(client, book)[0]
+    old = analysis(exercises=[{"label": "原物理第2行", "source_ref": "L2-L2", "quote": content.splitlines()[1], "solvable": True}])
+    app.state.store.execute("INSERT INTO learning_source_analysis VALUES(?,?,?,?)", (unit["id"], 3, json.dumps(old), 1))
+    calls = script(app, analyze=lambda _: analysis(type="knowledge", knowledge_points=[{"name": "切线斜率", "source_ref": "L1"}], exercises=[]))
+    done = wait(client, start(client, book, [unit], analyze_only=True).json()["job"])
+    assert done["status"] == "completed" and [stage for stage, _ in calls] == ["analysis"]
+    saved = app.state.store.one("SELECT version,data FROM learning_source_analysis WHERE source_id=?", (unit["id"],))
+    assert saved["version"] == quality.VERSION and saved["version"] > 3
+    assert json.loads(saved["data"])["knowledge_points"][0]["quote"] == content[:400]
+
+
 def test_failed_analysis_repair_stops_after_two_calls(studio):
     app, client, book = studio
     calls = script(app, analyze=lambda _: analysis(exercises=[{"label": "错误引用", "source_ref": "L999", "solvable": True}]))
