@@ -129,6 +129,11 @@
     "scripted model not teaching-quality acceptance",
     "device emulation not physical IME/screen reader",
     "component/production audit gaps retained in audit.json",
-    "no GitHub push or main merge"
-  ]
+    "validation snapshot was recorded before GitHub push or main merge"
+  ],
+  "publication_approval": {
+    "date": "2026-10-23",
+    "action": "merge and push to GitHub",
+    "authorized_by": "owner message in this conversation"
+  }
 }
