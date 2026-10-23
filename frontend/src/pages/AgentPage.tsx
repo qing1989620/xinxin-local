@@ -953,7 +953,7 @@ export default function AgentPage() {
                     onTrace={() => setTrace(true)}
                     onOptions={() => setOptions(true)}
                     continuing={busy}
-                    disabled={archived || contextSaving}
+                    disabled={!settings.data || archived || contextSaving}
                     onContinue={() => void submit(watched)}
                   />
                 )}
