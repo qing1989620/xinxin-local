@@ -7,7 +7,8 @@ import json
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
+from weakref import WeakValueDictionary
 
 from fastapi import (
     Depends,
@@ -22,7 +23,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, StreamingResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, model_validator
 
 from .agent import TaskManager
 from .auth import Auth, password_hash, password_matches
@@ -145,6 +146,7 @@ class LearningGeneration(Input):
     mode: Literal["auto", "original", "practice"] = "auto"
     analyze_only: bool = False
     read_mode: Literal["text", "pdf"] = "text"
+    page_ranges: dict[str, tuple[StrictInt, StrictInt]] = Field(default_factory=dict, max_length=40)
 
 
 class QuizStart(Input):
@@ -158,11 +160,14 @@ class QuizStart(Input):
 class QuizAnswer(Input):
     question_id: str = Field(min_length=1, max_length=64)
     answer: str = Field(default="", max_length=4000)
+    answers: list[Annotated[str, Field(max_length=500)]] | None = Field(default=None, min_length=1, max_length=8)
+    retry_grading: bool = False
 
 
 class ExplainRequest(Input):
     message: str = Field(default="", max_length=2000)
     mode: Literal["teacher", "xinxin"] = "teacher"
+    session_id: str = Field(default="", max_length=64)
 
 
 class TrackRef(Input):
@@ -336,6 +341,14 @@ def create_app(config=None):
     router = SkillRouter(store)
     manager = TaskManager(store, auth, config, library, router)
     learning_lock = asyncio.Lock()
+    learning_request_locks = WeakValueDictionary()
+
+    def learning_request_lock(key):
+        lock = learning_request_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            learning_request_locks[key] = lock
+        return lock
 
     def model_gateway(max_tokens: int = 4096):
         """单次调用的模型网关；没配密钥时返回 None，调用方自行降级。"""
@@ -1566,8 +1579,9 @@ def create_app(config=None):
     async def learning_generation_start(book_id: str, body: LearningGeneration):
         try:
             payload = body.model_dump()
-            if "read_mode" not in body.model_fields_set:
-                payload.pop("read_mode")
+            for field in ("read_mode", "page_ranges"):
+                if field not in body.model_fields_set:
+                    payload.pop(field)
             async with learning_lock:
                 return {"job": await learning_studio.start(store, library, manager, book_id, payload)}
         except ValueError as error:
@@ -1590,22 +1604,32 @@ def create_app(config=None):
     @app.post("/api/v1/learning/quiz/{session_id}/answer", dependencies=[Depends(owner)])
     async def learning_answer(session_id: str, body: QuizAnswer):
         try:
-            return await learning.submit_answer(
-                store, model_gateway(), session_id, body.question_id, body.answer
-            )
+            if body.answers is not None and (body.answer or body.retry_grading):
+                raise ValueError("答案数组不能与文字答案或重判同时提交")
+            async with learning_request_lock(("grade", session_id, body.question_id)):
+                return await learning.submit_answer(
+                    store, model_gateway(), session_id, body.question_id, body.answer,
+                    answers=body.answers, retry_grading=body.retry_grading,
+                )
         except ValueError as error:
             raise HTTPException(400, str(error))
 
     @app.get("/api/v1/learning/questions/{question_id}/tutor", dependencies=[Depends(owner)])
-    def learning_tutor_history(question_id: str, mode: Literal["teacher", "xinxin"] = "teacher"):
+    def learning_tutor_history(question_id: str, mode: Literal["teacher", "xinxin"] = "teacher",
+                               session_id: str = Query(default="", max_length=64), previous: bool = False):
         if not store.one("SELECT id FROM questions WHERE id=?", (question_id,)):
             raise HTTPException(404, "题目不存在")
-        return {"history": learning.tutor_history(store, question_id, mode), "mode": mode}
+        attempt = learning.tutor_attempt(store, question_id, session_id)
+        previous_count = store.one("SELECT count(*) n FROM tutor_messages WHERE question_id=? AND mode=? AND session_id!=?", (question_id, mode, session_id))["n"] if session_id else 0
+        previous_history = store.all("SELECT role,content,created FROM tutor_messages WHERE question_id=? AND mode=? AND session_id!=? ORDER BY created,rowid", (question_id, mode, session_id)) if previous and attempt and session_id else []
+        return {"history": learning.tutor_history(store, question_id, mode, session_id), "mode": mode,
+                "previous_count": previous_count, "previous_history": previous_history}
 
     @app.post("/api/v1/learning/questions/{question_id}/explain", dependencies=[Depends(owner)])
     async def learning_explain(question_id: str, body: ExplainRequest):
         try:
-            return await learning.explain(store, model_gateway(), question_id, body.message, body.mode)
+            async with learning_request_lock(("tutor", question_id, body.mode, body.session_id)):
+                return await learning.explain(store, model_gateway(), question_id, body.message, body.mode, body.session_id)
         except ValueError as error:
             raise HTTPException(409, str(error))
 

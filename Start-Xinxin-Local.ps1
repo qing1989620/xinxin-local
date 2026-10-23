@@ -15,12 +15,22 @@ param(
   [int]$BackendPort = 0,     # 0 = 读取 backend/.env 的 XINXIN_PORT
   [int]$FrontendPort = 0,    # 0 = 读取 backend/.env 的 XINXIN_FRONTEND_PORT
   [string]$DataDirectory = '',
-  [string]$RuntimeDirectory = ''
+  [string]$RuntimeDirectory = '',
+  [string]$FrontendBuildDirectory = ''
 )
 $ErrorActionPreference='Stop'
 $projectPath=$PSScriptRoot
 $backendPath=Join-Path $projectPath 'backend'
 $frontendPath=Join-Path $projectPath 'frontend'
+$frontendBuildPath=Join-Path $frontendPath 'dist'
+if($FrontendBuildDirectory){
+  $requestedBuild=[System.IO.Path]::GetFullPath($FrontendBuildDirectory)
+  $testBuildRoot=[System.IO.Path]::GetFullPath((Join-Path $frontendPath '.qa-data')).TrimEnd('\') + '\'
+  if(-not $requestedBuild.StartsWith($testBuildRoot,[System.StringComparison]::OrdinalIgnoreCase)){
+    throw 'Custom frontend builds must stay inside frontend/.qa-data; the existing build was preserved.'
+  }
+  $frontendBuildPath=$requestedBuild
+}
 $runtimePath=Join-Path $projectPath '.runtime'
 if($RuntimeDirectory){$runtimePath=[System.IO.Path]::GetFullPath($RuntimeDirectory)}
 if(-not $DataDirectory){$DataDirectory=Join-Path $backendPath 'data'}
@@ -178,11 +188,11 @@ if($LASTEXITCODE -ne 0 -or -not $backendBuild){throw 'Cannot identify the backen
 
 # 2. 前端依赖与生产构建（缺资产或源码比构建产物新时自动重建）
 function Test-FrontendBuild{
-  $index=Join-Path $frontendPath 'dist/index.html'
+  $index=Join-Path $frontendBuildPath 'index.html'
   if(-not(Test-Path -LiteralPath $index)){return $false}
   $html=Get-Content -LiteralPath $index -Raw
   foreach($m in [regex]::Matches($html,'(?:src|href)="(/assets/[^"]+)"')){
-    if(-not(Test-Path -LiteralPath ($frontendPath + '\dist' + $m.Groups[1].Value))){return $false}
+    if(-not(Test-Path -LiteralPath ($frontendBuildPath + $m.Groups[1].Value))){return $false}
   }
   # 只看 dist 是否存在会漏掉「改了源码但没重建」：产物比源文件旧就必须重建
   $built=(Get-Item -LiteralPath $index).LastWriteTimeUtc
@@ -199,7 +209,7 @@ function Test-FrontendBuild{
 Push-Location -LiteralPath $frontendPath
 try{
   if(-not(Test-Path -LiteralPath 'node_modules/vite/bin/vite.js')){Invoke-XinxinNative 'npm.cmd' @('ci') 'Frontend dependency installation failed'}
-  if(-not(Test-FrontendBuild)){Write-Host 'Building frontend (local edition)...';Invoke-XinxinNative 'npm.cmd' @('run','build') 'Frontend production build failed'}
+  if(-not(Test-FrontendBuild)){Write-Host 'Building frontend (local edition)...';Invoke-XinxinNative 'npm.cmd' @('run','build','--','--outDir',$frontendBuildPath) 'Frontend production build failed'}
 }finally{Pop-Location}
 
 # 3. 启动后端（只绑回环；CORS 额外放行局域网入口，保证手机 app 直连时跨源通过）
@@ -216,8 +226,9 @@ try{
 # 4. 启动前端（只绑回环；preview 代理 /api、/health 到后端）
 $env:XINXIN_BACKEND_PORT="$BackendPort"
 $nodePath=(Get-Command node.exe).Source
-$frontendBuild=(Get-XinxinFileHash (Join-Path $frontendPath 'dist/index.html')) + ":$BackendPort"
-Start-XinxinService 'frontend' $nodePath @('node_modules/vite/bin/vite.js','preview','--host','127.0.0.1','--port',"$FrontendPort",'--strictPort') $frontendPath $FrontendPort $frontendReady $frontendBuild
+$frontendBuild=(Get-XinxinFileHash (Join-Path $frontendBuildPath 'index.html')) + ":$BackendPort"
+if($FrontendBuildDirectory){$frontendBuild += ":$frontendBuildPath"}
+Start-XinxinService 'frontend' $nodePath @('node_modules/vite/bin/vite.js','preview','--outDir',('"' + $frontendBuildPath + '"'),'--host','127.0.0.1','--port',"$FrontendPort",'--strictPort') $frontendPath $FrontendPort $frontendReady $frontendBuild
 
 # 5. 局域网网关（Caddy 纯 HTTP 单入口）：未安装 caddy 则跳过并提示
 $gatewayStarted=$false

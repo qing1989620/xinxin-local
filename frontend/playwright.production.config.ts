@@ -18,7 +18,7 @@ export default defineConfig({
     (base.webServer as { command: string; cwd?: string; url: string }[])[0],
     {
       command:
-        "node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5197",
+        "node node_modules/vite/bin/vite.js preview --outDir .qa-data/preview-dist --host 127.0.0.1 --port 5197",
       env: { XINXIN_BACKEND_PORT: "8017" },
       url: "http://127.0.0.1:5197",
       reuseExistingServer: false,

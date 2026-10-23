@@ -6,6 +6,7 @@ import shutil
 import socket
 import sqlite3
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -21,15 +22,31 @@ def free_port():
 
 
 @pytest.mark.skipif(os.name != "nt" or not POWERSHELL, reason="Windows desktop launcher")
+def test_custom_frontend_build_rejects_paths_outside_test_directory(tmp_path):
+    target = tmp_path / "must-not-build-here"
+    result = subprocess.run(
+        [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "Start-Xinxin-Local.ps1"),
+         "-NoBrowser", "-NoGateway", "-FrontendBuildDirectory", str(target), "-RuntimeDirectory", str(tmp_path / "runtime")],
+        cwd=ROOT, capture_output=True, timeout=15,
+    )
+    assert result.returncode != 0
+    assert b"Custom frontend builds must stay inside frontend/.qa-data" in result.stderr
+    assert not target.exists() and not (tmp_path / "runtime").exists()
+
+
+@pytest.mark.skipif(os.name != "nt" or not POWERSHELL, reason="Windows desktop launcher")
 def test_launcher_reuses_current_build_updates_owned_services_and_preserves_active_tasks(tmp_path):
     if not (ROOT / "backend/.venv/Scripts/python.exe").exists() or not (ROOT / "frontend/node_modules/vite/bin/vite.js").exists():
         pytest.skip("Local runtime dependencies unavailable")
     runtime, data = tmp_path / "runtime", tmp_path / "data"
     backend_port, frontend_port = free_port(), free_port()
+    build = ROOT / "frontend/.qa-data" / ("native-" + uuid.uuid4().hex)
+    owner_index = ROOT / "frontend/dist/index.html"
+    owner_before = owner_index.read_bytes() if owner_index.exists() else None
     manifest = runtime / "processes.json"
     command = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "Start-Xinxin-Local.ps1"),
                "-NoBrowser", "-NoGateway", "-BackendPort", str(backend_port), "-FrontendPort", str(frontend_port),
-               "-RuntimeDirectory", str(runtime), "-DataDirectory", str(data)]
+               "-RuntimeDirectory", str(runtime), "-FrontendBuildDirectory", str(build), "-DataDirectory", str(data)]
 
     def start(selected_data=None):
         # Detached Windows children can inherit capture pipes. Use files so
@@ -53,6 +70,8 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
     try:
         first = start()
         assert first.returncode == 0, first.stdout + first.stderr
+        assert build.joinpath("index.html").exists()
+        assert (owner_index.read_bytes() if owner_index.exists() else None) == owner_before
         before = entries()
         assert before["backend"]["fingerprint"] and before["frontend"]["fingerprint"]
         # Legacy manifests do not have a port; the listener may be the

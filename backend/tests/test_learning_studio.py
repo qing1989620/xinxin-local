@@ -47,14 +47,21 @@ def question(text, stem="导数的几何意义是什么？", kind="single"):
             "answer": "A", "explanation": "导数描述瞬时变化率，在几何上对应切线斜率。", "tags": ["导数"], "difficulty": 2, "source_quote": text.strip()[:40]}
 
 
+def blind_response(payload):
+    return {"solutions": [{"index": index, "solvable": True, "answer": "A" if row["kind"] == "single" else ["切线斜率"] if row["kind"] == "fill" else "切线斜率。",
+                           "solution": "合成盲解：由导数定义与几何意义，核对切线的斜率和瞬时变化率。"} for index, row in enumerate(payload["questions"])]}
+
+
 def model(app, responder):
     async def transport(request):
         messages = json.loads(request.content)["messages"]
         payload = json.loads(messages[1]["content"])
         if "学习材料分析协议" in messages[0]["content"]:
             result = {"type": "knowledge", "summary": "本段解释导数表示瞬时变化率，几何意义为切线斜率。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
-        elif "学习出题复核协议 v2" in messages[0]["content"]:
-            result = {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}
+        elif "学习独立求解协议" in messages[0]["content"]:
+            result = blind_response(payload)
+        elif "学习出题复核协议" in messages[0]["content"]:
+            result = {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：题目条件完整，答案与材料知识一致。"} for index in range(len(payload["questions"]))]}
         else:
             result = responder(payload)
         if asyncio.iscoroutine(result):
@@ -151,7 +158,7 @@ def test_durable_generation_citations_idempotency_and_replay(studio):
     quiz = client.post("/api/v1/learning/quiz", json={"book_id": book["id"]}).json()["session"]
     assert "answer" not in quiz["questions"][0] and not quiz["questions"][0]["source_quote"]
     usage = json.loads(app.state.store.one("SELECT usage FROM runs WHERE id=?", (job["run_id"],))["usage"])
-    assert usage["calls"] == 3 and usage["total_tokens"] == 240
+    assert usage["calls"] == 4 and usage["total_tokens"] == 320
 
 
 @pytest.mark.parametrize("patch", [

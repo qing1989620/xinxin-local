@@ -37,6 +37,8 @@ type Stats = {
   books: number;
   questions: number;
   answered: number;
+  graded?: number;
+  pending?: number;
   correct: number;
   accuracy: number;
   weak_tags: Array<{ tag: string; total: number; wrong: number }>;
@@ -82,7 +84,12 @@ export default function LearningPage() {
     importJob && ["queued", "running", "cancelling"].includes(importJob.status),
   );
   useEffect(() => {
-    if (lastImport.data) setImportJob(lastImport.data.job);
+    if (
+      lastImport.data &&
+      (!initiatedImport.current ||
+        initiatedImport.current === lastImport.data.job?.id)
+    )
+      setImportJob(lastImport.data.job);
   }, [lastImport.data]);
   useEffect(() => {
     if (!importJob || !preparing) return;
@@ -99,6 +106,10 @@ export default function LearningPage() {
         if (!controller.signal.aborted) {
           setImportJob(value.job);
           setImportError("");
+          if (value.job.status === "completed") {
+            books.reload();
+            stats.reload();
+          }
         }
       } catch (error) {
         if (!controller.signal.aborted)
@@ -171,6 +182,7 @@ export default function LearningPage() {
       acknowledgeRequest("study-import");
       initiatedImport.current = created.job.id;
       setImportJob(created.job);
+      setImportError("");
       setAdding(false);
       setFileId("");
       setSubject("");
@@ -287,10 +299,14 @@ export default function LearningPage() {
           [
             "04",
             "作答正确率",
-            summary && summary.answered
+            summary && (summary.graded ?? summary.answered)
               ? Math.round(summary.accuracy * 100)
               : undefined,
-            summary?.answered ? "%" : "待练习",
+            (summary?.graded ?? summary?.answered)
+              ? "%"
+              : summary?.pending
+                ? "待核对"
+                : "待练习",
           ],
         ].map(([number, label, value, unit]) => (
           <div key={String(number)}>
@@ -346,7 +362,11 @@ export default function LearningPage() {
                   void post(`/runs/${importJob.run_id}/cancel`, {})
                     .then(() =>
                       setImportJob((value) =>
-                        value ? { ...value, status: "cancelling" } : null,
+                        value &&
+                        value.id === importJob.id &&
+                        ["queued", "running"].includes(value.status)
+                          ? { ...value, status: "cancelling" }
+                          : value,
                       ),
                     )
                     .catch((error) => toast(error.message, true))

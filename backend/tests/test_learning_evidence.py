@@ -13,7 +13,7 @@ from pypdf.generic import DictionaryObject, NameObject, DecodedStreamObject
 from app import learning_evidence as evidence, learning_quality as quality, learning_visual as visual
 from app.learning_studio import validate
 from app.model import ModelGateway
-from test_learning_studio import studio, add_book, source_list, start, wait, question
+from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response
 from test_learning_quality import script
 from test_learning_imports import start as import_start, wait_import
 
@@ -161,7 +161,7 @@ def test_parenthesized_short_exercise_reaches_generation_and_review(studio, numb
             {"source_ref": "L1", "options": [], "answer": ["7"], "explanation": "先求导得到 f'(x)=2x+3，代入 x=2 得到7。"}])
     done = wait(client, start(client, book, source_list(client, book)[:1], kinds=["fill"]).json()["job"])
     assert done["status"] == "completed" and done["created_count"] == 1
-    assert [stage for stage, _ in calls] == ["analysis", "generation", "review"]
+    assert [stage for stage, _ in calls] == ["analysis", "generation", "solve", "review"]
 
 
 def add_pdf(client, pages=2):
@@ -195,8 +195,10 @@ def visual_transport(app, *, reading=None, reviewing=None):
             stage = "reading"
         elif "学习材料分析协议" in protocol:
             value, stage = analysis(), "analysis"
+        elif "学习独立求解协议" in protocol:
+            value, stage = blind_response(payload), "solve"
         elif "学习出题复核协议" in protocol:
-            value = reviewing(payload) if reviewing else {"reviews": [{"index": i, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：导函数为2x，代入3得到6，原图条件一致。"} for i in range(len(payload["questions"]))]}
+            value = reviewing(payload) if reviewing else {"reviews": [{"index": i, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：导函数为2x，代入3得到6，原图条件一致。"} for i in range(len(payload["questions"]))]}
             stage = "review"
         else:
             value, stage = {"questions": [question(payload["text"], "求函数 f(x)=x^2 在 x=3 处的导数。") | {"source_ref": "L2-L3", "origin": "original"}]}, "generation"
@@ -215,10 +217,10 @@ def test_visual_questions_keep_original_ocr_and_are_reviewed_against_images(stud
     calls = visual_transport(app)
     done = wait(client, start(client, book, [unit], read_mode="pdf").json()["job"])
     assert done["status"] == "completed" and done["created_count"] == 1
-    assert [stage for stage, *_ in calls] == ["reading", "analysis", "generation", "review"]
+    assert [stage for stage, *_ in calls] == ["reading", "analysis", "generation", "solve", "review"]
     for stage, _, blocks in calls:
         images = [block for block in blocks if block["type"] == "image_url"]
-        if stage in {"reading", "review"}:
+        if stage in {"reading", "solve", "review"}:
             assert images
             assert base64.b64decode(images[0]["image_url"]["url"].split(",", 1)[1]).startswith(b"\xff\xd8")
     row = app.state.store.one("SELECT * FROM questions WHERE book_id=?", (book["id"],))
@@ -303,7 +305,7 @@ def test_visual_critic_rejection_never_enters_question_bank(studio):
     app, client, _ = studio
     book, unit = add_pdf(client)
     calls = visual_transport(app, reviewing=lambda _: {"reviews": [{"index": 0, "verdict": "reject", "relevant": True,
-        "solvable": True, "correct": False, "reason": "合成审题：对照原图发现题干公式不一致，拒绝入库。"}]})
+        "solvable": True, "correct": False, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：对照原图发现题干公式不一致，拒绝入库。"}]})
     done = wait(client, start(client, book, [unit], read_mode="pdf").json()["job"])
     assert done["status"] == "failed" and done["created_count"] == 0
     assert not app.state.store.one("SELECT id FROM questions WHERE book_id=?", (book["id"],))

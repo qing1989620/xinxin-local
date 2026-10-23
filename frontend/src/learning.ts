@@ -34,6 +34,7 @@ export type MaterialAnalysis = {
   source_method?: "text" | "pdf_images";
   source_text?: string;
   read_pages?: number[];
+  page_scope?: [number, number];
   knowledge_points: Array<{ name: string; quote: string }>;
   exercises: Array<{ label: string; quote: string; solvable: boolean }>;
 };
@@ -73,6 +74,7 @@ export type SourceListing = {
     eligible: number;
     knowledge_points: number;
     exercises: number;
+    partial_sources?: number;
   };
 };
 export type ImportJob = {
@@ -109,6 +111,7 @@ export type Generation = {
     mode?: "auto" | "original" | "practice";
     analyze_only?: boolean;
     read_mode?: "text" | "pdf";
+    page_ranges?: Record<string, [number, number]>;
   };
   items: Array<{
     source_id: string;

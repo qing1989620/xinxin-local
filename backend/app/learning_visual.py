@@ -35,6 +35,22 @@ def page_range(unit):
     return list(range(start, end + 1))
 
 
+def narrow_source(unit, selected=None):
+    if selected is None:
+        return unit
+    if (not isinstance(selected, (list, tuple)) or len(selected) != 2 or
+        any(type(page) is not int for page in selected)):
+        raise ValueError("精读范围需要起止两个实际 PDF 页码")
+    start, end = selected
+    original_start, original_end = unit.get("page_from"), unit.get("page_to")
+    if (type(original_start) is not int or type(original_end) is not int or
+        not original_start <= start <= end <= original_end):
+        raise ValueError("精读页段必须位于所选片段的实际 PDF 范围内")
+    result = unit | {"page_from": start, "page_to": end}
+    page_range(result)
+    return result
+
+
 def pdf_path(store, library, unit):
     book = store.one("SELECT file_id FROM books WHERE id=?", (unit["book_id"],))
     if not book or not book["file_id"]:
@@ -152,4 +168,5 @@ async def read_source(store, library, gateway, unit, flag, progress=None):
     if not parts:
         raise ValueError("选中原页未识别出可读正文；请核对原文件或改用清晰版本")
     return {"content": "".join(parts), "source_method": "pdf_images", "page_spans": spans,
-            "reading_warnings": warnings, "read_pages": [span["page"] for span in spans]}
+            "reading_warnings": warnings, "read_pages": [span["page"] for span in spans],
+            "page_scope": [pages[0], pages[-1]]}

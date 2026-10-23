@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.config import Config
 from app.learning import split_chapters
 from app.main import create_app
+from test_learning_studio import blind_response
 
 
 def setup(tmp_path):
@@ -64,9 +65,11 @@ def mock_model(content, sink=None):
         if "学习材料分析协议" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
             response_content = json.dumps({"type": "knowledge", "summary": "本段说明导数刻画瞬时变化率，几何意义为切线斜率。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}, ensure_ascii=False)
-        elif "学习出题复核协议 v2" in messages[0]["content"]:
+        elif "学习独立求解协议" in messages[0]["content"]:
+            response_content = json.dumps(blind_response(json.loads(messages[1]["content"])))
+        elif "学习出题复核协议" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
-            response_content = json.dumps({"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成审题：题干完整，答案与解析一致。"} for index in range(len(payload["questions"]))]})
+            response_content = json.dumps({"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：题干完整，答案与解析一致。"} for index in range(len(payload["questions"]))]})
         elif "学习工作室协议" in messages[0]["content"]:
             payload = json.loads(messages[1]["content"])
             try:

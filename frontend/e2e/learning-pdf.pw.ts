@@ -1,34 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
-
-function syntheticPdf() {
-  const text =
-    "Learning example: the derivative of x squared is twice x. Compute the derivative at x=3 and explain the tangent slope. ";
-  const stream = `BT /F1 12 Tf 25 740 Td (${text}) Tj 0 -30 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R >>",
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>",
-    `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-  let content = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((object, index) => {
-    offsets.push(Buffer.byteLength(content));
-    content += `${index + 1} 0 obj\n${object}\nendobj\n`;
-  });
-  const xref = Buffer.byteLength(content);
-  content += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  content += offsets
-    .slice(1)
-    .map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`)
-    .join("");
-  content += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(content);
-}
+import { syntheticPdf } from "./support/pdf";
 
 async function panel(page: Page, name: string) {
   const navigation = page.getByRole("navigation", { name: "工作室面板" });
@@ -106,7 +78,9 @@ test("PDF 原页预览、明确选择图片读取、部分证据恢复与题目�
     page.getByRole("region", { name: "当前片段总结" }),
   ).toContainText("合成原页");
   await page
-    .getByText("已保留有效内容 · 跳过 1 条分析项 · 查看跳过与待核对项", { exact: true })
+    .getByText("已保留有效内容 · 跳过 1 条分析项 · 查看跳过与待核对项", {
+      exact: true,
+    })
     .click();
   await expect(
     page.getByRole("region", { name: "当前片段总结" }),

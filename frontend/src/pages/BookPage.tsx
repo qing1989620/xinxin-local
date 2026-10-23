@@ -39,6 +39,14 @@ import { MathText } from "../components/MathText";
 import { StudySource } from "../components/StudySource";
 import { StudyPdfPages } from "../components/StudyPdfPages";
 import {
+  pageRange,
+  rangeIssue,
+  scopePages,
+  imageReadingIssue,
+  selectStudyBatch,
+  type PageRanges,
+} from "../studyScope";
+import {
   isGenerating,
   KIND_LABEL,
   wordCount,
@@ -77,33 +85,6 @@ const STATES: Record<string, string> = {
   reviewing: "复核答案",
 };
 
-function pageCount(scope: SourceUnit[]) {
-  return scope.reduce(
-    (sum, unit) =>
-      sum +
-      (unit.page_from && unit.page_to ? unit.page_to - unit.page_from + 1 : 0),
-    0,
-  );
-}
-
-function imageReadingIssue(
-  scope: SourceUnit[],
-  capability: SourceListing["image_reading"],
-) {
-  if (!capability?.available)
-    return capability?.reason || "此资料暂不支持原页读取";
-  if (
-    scope.some(
-      (unit) =>
-        !unit.page_from || !unit.page_to || unit.page_to - unit.page_from >= 24,
-    )
-  )
-    return "有片段缺少可靠页码或超过 24 页，请缩小选择范围。";
-  return pageCount(scope) > capability.max_pages
-    ? `一次最多读取 ${capability.max_pages} 个 PDF 原页，请减少选择范围。`
-    : "";
-}
-
 export default function BookRoute() {
   const { id = "" } = useParams();
   return <BookPage key={id} />;
@@ -130,6 +111,7 @@ function BookPage() {
   const [previewRetry, setPreviewRetry] = useState(0);
   const [count, setCount] = useState(12);
   const [readMode, setReadMode] = useState<"text" | "pdf">("text");
+  const [pageRanges, setPageRanges] = useState<PageRanges>({});
   const [showPdf, setShowPdf] = useState(false);
   const [generationMode, setGenerationMode] = useState<
     "auto" | "original" | "practice"
@@ -188,6 +170,7 @@ function BookPage() {
         setFocus(previous.options.focus);
         setGenerationMode(previous.options.mode ?? "auto");
         setReadMode(previous.options.read_mode ?? "text");
+        setPageRanges(previous.options.page_ranges ?? {});
         if (isGenerating(previous))
           setSelected(previous.items.map((item) => item.source_id));
       }
@@ -269,21 +252,25 @@ function BookPage() {
   const selectedScope = (units.data?.sources ?? []).filter((unit) =>
     selected.includes(unit.id),
   );
-  const selectedPages = pageCount(selectedScope);
+  const selectedPages = scopePages(selectedScope, pageRanges);
   const remainingItems =
-    job?.items.filter((item) => item.target > item.created_count) ?? [];
+    job?.items.filter((item) =>
+      job.options.analyze_only
+        ? item.status !== "completed"
+        : item.target > item.created_count,
+    ) ?? [];
   const resumeScope = (units.data?.sources ?? []).filter((unit) =>
     remainingItems.some((item) => item.source_id === unit.id),
   );
   const readingError =
     readMode === "pdf"
-      ? imageReadingIssue(selectedScope, units.data?.image_reading)
+      ? imageReadingIssue(selectedScope, units.data?.image_reading, pageRanges)
       : "";
   const resumeReadingError =
     readMode === "pdf"
       ? resumeScope.length !== remainingItems.length
         ? "缺题来源尚未加载，请稍后重试。"
-        : imageReadingIssue(resumeScope, units.data?.image_reading)
+        : imageReadingIssue(resumeScope, units.data?.image_reading, pageRanges)
       : "";
   const bank = useMemo(
     () =>
@@ -293,15 +280,15 @@ function BookPage() {
     [questions.data, filter],
   );
 
-  function toggle(unit: {
-    id: string;
-    eligible?: boolean;
-    text_eligible?: boolean;
-  }) {
-    if ((unit.text_eligible ?? unit.eligible) === false && readMode !== "pdf")
-      return;
+  function toggle(unit: SourceUnit) {
     if (selected.includes(unit.id))
       setSelected((value) => value.filter((ident) => ident !== unit.id));
+    else if (
+      readMode === "pdf"
+        ? Boolean(rangeIssue(unit, pageRanges))
+        : (unit.text_eligible ?? unit.eligible) === false
+    )
+      return;
     else if (selected.length < limit)
       setSelected((value) => [...value, unit.id]);
     else toast(`一次最多选择 ${limit} 个片段`, true);
@@ -323,6 +310,7 @@ function BookPage() {
         mode: generationMode,
         analyze_only: analyzeOnly,
         read_mode: readMode,
+        page_ranges: readMode === "pdf" ? pageRanges : {},
       };
       const key = await stableRequestKey(namespace, payload);
       const value = await post<{ job: Generation }>(
@@ -342,20 +330,36 @@ function BookPage() {
     }
   }
   function selectScope(onlyUnanalyzed = false) {
-    const eligible = (units.data?.sources ?? []).filter(
-      (unit) =>
-        (readMode === "pdf"
-          ? Boolean(
-              unit.page_from &&
-              unit.page_to &&
-              unit.page_to - unit.page_from < 24,
-            )
-          : (unit.text_eligible ?? unit.eligible) !== false) &&
-        (!onlyUnanalyzed || !unit.analysis),
+    const chosen = selectStudyBatch(
+      units.data?.sources ?? [],
+      count,
+      limit,
+      questionLimit,
+      readMode,
+      units.data?.image_reading,
+      pageRanges,
+      onlyUnanalyzed,
     );
-    setSelected(eligible.slice(0, limit).map((unit) => unit.id));
-    if (eligible.length > limit)
-      toast(`已选前 ${limit} 个片段，可分批覆盖其余内容`);
+    setSelected(chosen.map((unit) => unit.id));
+    toast(
+      chosen.length
+        ? `已按题量与原页上限选好 ${chosen.length} 个片段，可分批处理其余材料`
+        : "当前方式没有未处理的可用范围，请核对原页或调整精读范围",
+      !chosen.length,
+    );
+  }
+  function focusThreePages() {
+    if (!preview?.page_from || !preview.page_to) return;
+    setReadMode("pdf");
+    setPageRanges((value) => ({
+      ...value,
+      [preview.id]: [
+        preview.page_from!,
+        Math.min(preview.page_from! + 2, preview.page_to!),
+      ],
+    }));
+    setSelected([preview.id]);
+    setPane("settings");
   }
   async function reread() {
     if (!data.file_id || generationBusy.current) return;
@@ -461,6 +465,8 @@ function BookPage() {
   const duplicates =
     job?.items.reduce((total, item) => total + item.duplicates, 0) ?? 0;
   const analysis = preview?.analysis;
+  const previewRange = preview ? pageRange(preview, pageRanges) : [0, 0];
+  const previewRangeIssue = preview ? rangeIssue(preview, pageRanges) : "";
   const coverage = units.data?.coverage;
   const analyzedUnits =
     units.data?.sources.filter((unit) => unit.analysis) ?? [];
@@ -547,6 +553,12 @@ function BookPage() {
             识别提示：{data.extraction.warning}
           </p>
         )}
+        {Boolean(coverage?.partial_sources) && (
+          <p className="study-extraction-warning" role="status">
+            其中 {coverage!.partial_sources}{" "}
+            个片段仅分析了部分原页或仍有未读页，请按标注的范围使用总结。
+          </p>
+        )}
         {analyzedUnits.length > 0 && (
           <details className="study-summary-index">
             <summary>查看已分析材料的总结 · {analyzedUnits.length} 段</summary>
@@ -564,6 +576,12 @@ function BookPage() {
                     <ArrowRight size={13} />
                   </button>
                   <p>{unit.analysis!.summary}</p>
+                  {unit.analysis!.page_scope && (
+                    <p className="hint">
+                      本次精读：PDF 第 {unit.analysis!.page_scope[0]}–
+                      {unit.analysis!.page_scope[1]} 页
+                    </p>
+                  )}
                   <span>
                     {unit
                       .analysis!.knowledge_points.map((point) => point.name)
@@ -583,6 +601,18 @@ function BookPage() {
           </details>
         )}
         <div className="study-understanding-actions">
+          {readMode === "text" &&
+            units.data?.image_reading?.available &&
+            preview?.page_from && (
+              <button
+                className="text-button"
+                disabled={active || busy}
+                onClick={focusThreePages}
+              >
+                <FileText size={14} />
+                先精读当前片段的 3 个原页
+              </button>
+            )}
           <button
             className="text-button"
             disabled={
@@ -679,12 +709,11 @@ function BookPage() {
                           disabled={
                             active ||
                             busy ||
-                            (readMode === "pdf"
-                              ? !unit.page_from ||
-                                !unit.page_to ||
-                                unit.page_to - unit.page_from >= 24
-                              : (unit.text_eligible ?? unit.eligible) ===
-                                false) ||
+                            (!selected.includes(unit.id) &&
+                              (readMode === "pdf"
+                                ? Boolean(rangeIssue(unit, pageRanges))
+                                : (unit.text_eligible ?? unit.eligible) ===
+                                  false)) ||
                             (!selected.includes(unit.id) &&
                               selected.length >= limit)
                           }
@@ -704,7 +733,16 @@ function BookPage() {
                         <small>
                           {wordCount(unit.chars)} · {unit.question_count} 题
                           {unit.type_label ? ` · ${unit.type_label}` : ""}
-                          {unit.eligible === false ? " · 已排除" : ""}
+                          {(
+                            readMode === "pdf"
+                              ? Boolean(rangeIssue(unit, pageRanges))
+                              : (unit.text_eligible ?? unit.eligible) === false
+                          )
+                            ? " · 当前方式不可用"
+                            : ""}
+                          {readMode === "pdf" && pageRanges[unit.id]
+                            ? ` · 精读 ${pageRanges[unit.id][0]}–${pageRanges[unit.id][1]} 页`
+                            : ""}
                         </small>
                       </button>
                     </div>
@@ -764,8 +802,7 @@ function BookPage() {
                 <h2>{chapterTitle}</h2>
                 {units.data?.image_reading?.pdf &&
                   preview.page_from &&
-                  preview.page_to &&
-                  preview.page_to - preview.page_from < 24 && (
+                  preview.page_to && (
                     <div
                       className="study-reading-switch"
                       role="group"
@@ -787,18 +824,21 @@ function BookPage() {
                       </button>
                     </div>
                   )}
-                {showPdf &&
-                preview.page_from &&
-                preview.page_to &&
-                preview.page_to - preview.page_from < 24 ? (
-                  <StudyPdfPages
-                    key={preview.id}
-                    id={preview.id}
-                    pages={Array.from(
-                      { length: preview.page_to - preview.page_from + 1 },
-                      (_, index) => preview.page_from! + index,
-                    )}
-                  />
+                {showPdf && preview.page_from && preview.page_to ? (
+                  previewRangeIssue ? (
+                    <p className="study-extraction-warning">
+                      {previewRangeIssue}，可在出题设置中调整精读范围。
+                    </p>
+                  ) : (
+                    <StudyPdfPages
+                      key={preview.id}
+                      id={preview.id}
+                      pages={Array.from(
+                        { length: previewRange[1] - previewRange[0] + 1 },
+                        (_, index) => previewRange[0] + index,
+                      )}
+                    />
+                  )
                 ) : (
                   <div className="study-paper-text">
                     <MathText text={analysis?.source_text ?? preview.content} />
@@ -816,7 +856,11 @@ function BookPage() {
                     <p>{analysis.summary}</p>
                     {analysis.source_method === "pdf_images" && (
                       <p className="hint">
-                        依据 PDF 原页读取；公式仍需对照原图核对。
+                        依据 PDF 原页读取
+                        {analysis.page_scope
+                          ? `：第 ${analysis.page_scope[0]}–${analysis.page_scope[1]} 页`
+                          : ""}
+                        ；公式仍需对照原图核对。
                       </p>
                     )}
                     {Boolean(
@@ -906,8 +950,11 @@ function BookPage() {
                   disabled={
                     active ||
                     busy ||
-                    (readMode !== "pdf" &&
-                      (preview.text_eligible ?? preview.eligible) === false) ||
+                    (!selected.includes(preview.id) &&
+                      (readMode === "pdf"
+                        ? Boolean(previewRangeIssue)
+                        : (preview.text_eligible ?? preview.eligible) ===
+                          false)) ||
                     (!selected.includes(preview.id) && selected.length >= limit)
                   }
                   onClick={() => toggle(preview)}
@@ -975,6 +1022,87 @@ function BookPage() {
                 <p className="hint">{units.data?.image_reading?.reason}</p>
               )}
             </div>
+            {readMode === "pdf" && preview?.page_from && preview.page_to && (
+              <section
+                className="study-page-range"
+                aria-label="当前片段精读范围"
+              >
+                <p className="study-label">
+                  精读页段 <small>{preview.label}</small>
+                </p>
+                <p className="hint">
+                  只发送此页段；目录中可切换要调整的片段。未设置的片段读取完整范围。
+                </p>
+                <div className="study-page-range-inputs">
+                  <label>
+                    起始原页
+                    <input
+                      type="number"
+                      aria-label="精读起始页"
+                      min={preview.page_from}
+                      max={preview.page_to}
+                      value={previewRange[0]}
+                      onChange={(event) =>
+                        setPageRanges((value) => ({
+                          ...value,
+                          [preview.id]: [
+                            Number(event.target.value),
+                            previewRange[1],
+                          ],
+                        }))
+                      }
+                    />
+                  </label>
+                  <span>—</span>
+                  <label>
+                    结束原页
+                    <input
+                      type="number"
+                      aria-label="精读结束页"
+                      min={preview.page_from}
+                      max={preview.page_to}
+                      value={previewRange[1]}
+                      onChange={(event) =>
+                        setPageRanges((value) => ({
+                          ...value,
+                          [preview.id]: [
+                            previewRange[0],
+                            Number(event.target.value),
+                          ],
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+                <div className="study-understanding-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={focusThreePages}
+                  >
+                    先读 3 页
+                  </button>
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() =>
+                      setPageRanges((value) => {
+                        const next = { ...value };
+                        delete next[preview.id];
+                        return next;
+                      })
+                    }
+                  >
+                    恢复整段
+                  </button>
+                </div>
+                {previewRangeIssue && (
+                  <p role="alert" className="study-extraction-warning">
+                    {previewRangeIssue}
+                  </p>
+                )}
+              </section>
+            )}
             <div className="study-config-row">
               <label htmlFor="study-count">每个片段</label>
               <select
@@ -1066,7 +1194,11 @@ function BookPage() {
             </div>
           </fieldset>
           <div className="study-estimate">
-            <span>本次计划</span>
+            <span>
+              {generationMode === "original"
+                ? "本次上限 · 以完整新原题为准"
+                : "本次计划"}
+            </span>
             <strong>
               {selected.length * count}
               <small>道题</small>
@@ -1077,6 +1209,25 @@ function BookPage() {
                 : "先在左侧勾选出题片段"}
             </p>
           </div>
+          <section className="study-preflight" aria-label="出题前检查">
+            <p className="study-label">出题前，确认这三件事</p>
+            <p>
+              {selected.length
+                ? `已选 ${selected.length} 个片段${readMode === "pdf" ? ` · ${selectedPages} 个不重复原页` : " · 识别文字"}`
+                : "先选一段完整知识或练习，再开始。"}
+            </p>
+            <p>
+              {generationMode === "original"
+                ? "只整理未入库的完整原题；数量少于上限时按实际材料完成。"
+                : "原题与知识变式分开标注；错误答案和缺条件题会被拦截。"}
+            </p>
+            <p>
+              {Boolean(data.extraction?.uncertain_pages?.length) &&
+              readMode === "text"
+                ? "这份 PDF 有识别待核对页，建议先精读 3 个原页验证公式。"
+                : "先总结可检查学科与知识点；总结仅代表已分析范围。"}
+            </p>
+          </section>
           <button
             className="button primary study-generate"
             disabled={
@@ -1128,7 +1279,8 @@ function BookPage() {
           )}
           <p className="study-model-note">
             选中材料会发送给已配置的模型，按每批最多 3
-            题生成并另行审题。提高题量会增加时间与模型用量；未通过复核的题不入库，AI
+            题生成，再隐藏候选答案独立求解、对照审题。每批最多 3
+            次模型调用，另计材料读取；提高题量会增加时间与模型用量。未通过复核的题不入库，AI
             结论仍需核对。
           </p>
         </aside>
@@ -1177,6 +1329,15 @@ function BookPage() {
                   <Square size={12} />
                   停止出题
                 </button>
+              ) : job.options.analyze_only && job.status !== "completed" ? (
+                <button
+                  className="button secondary small"
+                  disabled={busy || Boolean(resumeReadingError)}
+                  onClick={() => void generate(true, true)}
+                >
+                  <RotateCcw size={14} />
+                  重试未完成的总结
+                </button>
               ) : job.options.analyze_only ? (
                 <a
                   className="button secondary small"
@@ -1194,7 +1355,7 @@ function BookPage() {
                   <RotateCcw size={14} />
                   补出缺少的题
                   {readMode === "pdf"
-                    ? ` · 原页 ${pageCount(resumeScope)} 页`
+                    ? ` · 原页 ${scopePages(resumeScope, pageRanges)} 页`
                     : ""}
                 </button>
               ) : (

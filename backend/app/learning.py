@@ -14,10 +14,13 @@ import re
 import time
 from pathlib import Path
 
+import httpx
+
 from .music import atmosphere
 from .persona import IDENTITY
 from .store import clean_text, uid
 from .learning_quality import MIN_MATERIAL_CHARS, TOC_ROW
+from .learning_answers import check_choice as _check_choice, check_fill as _check_fill, expected_blanks
 
 MAX_CHAPTER_CHARS = 24_000
 MAX_CHAPTERS = 500
@@ -294,12 +297,6 @@ def _hash(stem: str, kind: str, book_id: str = "") -> str:
     return hashlib.sha256((book_id + "|" + kind + "|" + _clean_stem(stem)).encode("utf-8")).hexdigest()
 
 
-def _normalize_answer(value: str) -> str:
-    text = str(value or "").strip().lower()
-    text = re.sub(r"[\s,，。；;：:、．.“”\"'（）()《》\[\]]", "", text)
-    return text
-
-
 def question_row(store, question_id: str) -> dict:
     row = store.one("SELECT * FROM questions WHERE id=?", (question_id,))
     if not row:
@@ -328,6 +325,8 @@ def format_question(row: dict, reveal: bool = True) -> dict:
     if reveal:
         data["answer"] = row["answer"]
         data["explanation"] = row["explanation"]
+    if row["kind"] == "fill":
+        data["blank_count"] = max(1, min(8, len(expected_blanks(row["answer"]))))
     return data
 
 
@@ -449,54 +448,29 @@ def quiz_state(store, session_id: str) -> dict:
     }
 
 
-def _check_choice(expected: str, given: str) -> bool:
-    return _normalize_answer(expected)[:1] == _normalize_answer(given)[:1]
-
-
-def _check_fill(expected: str, given: str) -> bool:
-    try:
-        blanks = json.loads(expected)
-    except ValueError:
-        blanks = [expected]
-    if not isinstance(blanks, list):
-        blanks = [str(blanks)]
-    parts = [
-        part
-        for part in re.split(r"[;；|]", given or "")
-        if part.strip()
-    ]
-    if len(parts) != len(blanks):
-        # 用户可能用逗号分隔多个空
-        parts = [part for part in re.split(r"[,，、]", given or "") if part.strip()]
-    if len(parts) != len(blanks):
-        return False
-    return all(
-        _normalize_answer(left) == _normalize_answer(right)
-        for left, right in zip(blanks, parts)
-    )
-
-
 async def grade_short(gateway, question: dict, answer: str) -> dict:
     if gateway is None:
         return {"status": "unknown", "reason": "没有配置模型，主观题需要自己对照参考答案"}
-    message = await gateway.apredict(
-        [
-            {"role": "system", "content": GRADE_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "stem": question["stem"],
-                        "reference": question["answer"],
-                        "student": answer,
-                    },
-                    ensure_ascii=False,
-                ),
-            },
-        ],
-        stream=False,
-        temperature=0.1,
-    )
+    messages = [
+        {"role": "system", "content": GRADE_PROMPT},
+        {
+            "role": "user",
+            "content": json.dumps(
+                {
+                    "stem": question["stem"],
+                    "reference": question["answer"],
+                    "student": answer,
+                },
+                ensure_ascii=False,
+            ),
+        },
+    ]
+    try:
+        message = await gateway.apredict(messages, stream=False, temperature=0.1)
+    except (RuntimeError, ValueError, KeyError, TypeError, httpx.HTTPError):
+        return {"status": "unknown", "reason": "判分暂未完成，作答已保留，可稍后重试判分"}
+    if not isinstance(message, dict):
+        return {"status": "unknown", "reason": "判分未返回有效结果，可对照参考答案或重试判分"}
     text = str(message.get("content") or "")
     start, end = text.find("{"), text.rfind("}")
     if start < 0 or end <= start:
@@ -505,20 +479,20 @@ async def grade_short(gateway, question: dict, answer: str) -> dict:
         payload = json.loads(text[start : end + 1])
     except ValueError:
         return {"status": "unknown", "reason": "判分结果解析失败，请自己对照参考答案"}
+    if not isinstance(payload, dict) or not isinstance(payload.get("reason"), str) or not payload["reason"].strip():
+        return {"status": "unknown", "reason": "判分缺少可靠依据，可对照参考答案或重试判分"}
     verdict = str(payload.get("verdict") or "").strip()
     status = {"correct": "correct", "partial": "partial", "wrong": "wrong"}.get(verdict, "unknown")
     return {"status": status, "reason": clean_text(str(payload.get("reason") or ""))[:400]}
 
 
 async def submit_answer(
-    store, gateway, session_id: str, question_id: str, answer: str
+    store, gateway, session_id: str, question_id: str, answer: str, *, answers=None, retry_grading=False
 ) -> dict:
     answer = clean_text(str(answer or ""))
     session = store.one("SELECT * FROM quiz_sessions WHERE id=?", (session_id,))
     if not session:
         raise ValueError("练习不存在")
-    if session["status"] != "active":
-        raise ValueError("这次练习已经结束了")
     row = store.one("SELECT * FROM questions WHERE id=?", (question_id,))
     if not row:
         raise ValueError("题目不存在")
@@ -529,13 +503,26 @@ async def submit_answer(
     if not exists:
         raise ValueError("这道题不在本次练习里")
     question = format_question(row)
+    prior = store.one("SELECT * FROM quiz_answers WHERE session_id=? AND question_id=? ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1", (session_id, question_id))
+    if retry_grading:
+        if not prior or prior["status"] != "unknown" or question["kind"] != "short":
+            raise ValueError("只有待核对的简答题可以重试判分")
+        answer, answers = prior["answer"], None
+    elif session["status"] != "active":
+        raise ValueError("这次练习已经结束了")
+    if answers is not None:
+        if question["kind"] != "fill" or not 1 <= len(answers) <= 8 or not all(isinstance(value, str) and value.strip() and len(value) <= 500 for value in answers):
+            raise ValueError("请按空位填写完整的填空答案")
+        if len(answers) != len(expected_blanks(question["answer"])):
+            raise ValueError("填写的答案数量与空位不一致")
+        answer = json.dumps(answers, ensure_ascii=False)
     status, method, reason = "wrong", "exact", ""
     if not str(answer or "").strip():
         status, method, reason = "unknown", "exact", "没有作答"
     elif question["kind"] == "single":
         status = "correct" if _check_choice(question["answer"], answer) else "wrong"
     elif question["kind"] == "fill":
-        status = "correct" if _check_fill(question["answer"], answer) else "wrong"
+        status = "correct" if _check_fill(question["answer"], answer, answers) else "wrong"
     else:
         graded = await grade_short(gateway, question, answer)
         status, method, reason = graded["status"], "ai", graded["reason"]
@@ -545,11 +532,15 @@ async def submit_answer(
     now = int(time.time())
     with store.connect(write=True) as db:
         current = db.execute("SELECT status FROM quiz_sessions WHERE id=?", (session_id,)).fetchone()
-        if not current or current["status"] != "active":
+        if not current or (current["status"] != "active" and not retry_grading):
             raise ValueError("练习已结束或被删除，请重新打开")
         if not db.execute("SELECT q.id FROM questions q JOIN quiz_session_questions sq ON sq.question_id=q.id WHERE q.id=? AND sq.session_id=?", (question_id, session_id)).fetchone():
             raise ValueError("题目已不在本次练习中")
         existing = db.execute("SELECT id FROM quiz_answers WHERE session_id=? AND question_id=? ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1", (session_id, question_id)).fetchone()
+        if retry_grading:
+            retry = db.execute("SELECT status,answer FROM quiz_answers WHERE id=?", (prior["id"],)).fetchone()
+            if not retry or retry["status"] != "unknown" or retry["answer"] != answer:
+                raise ValueError("原作答已更新，请刷新后重试")
         sequence = db.execute("SELECT coalesce(max(attempt_seq),0)+1 AS value FROM quiz_answers").fetchone()["value"]
         if existing:
             db.execute("UPDATE quiz_answers SET answer=?,status=?,grade_method=?,ai_reason=?,created=?,attempt_seq=? WHERE id=?", (str(answer or ""), status, method, reason, now, sequence, existing["id"]))
@@ -572,18 +563,26 @@ async def submit_answer(
 # ----------------------------------------------------------------------
 # 讲题
 # ----------------------------------------------------------------------
-def tutor_history(store, question_id: str, mode: str = "teacher") -> list[dict]:
+def tutor_attempt(store, question_id, session_id=""):
+    if session_id and not store.one("SELECT 1 FROM quiz_session_questions WHERE session_id=? AND question_id=?", (session_id, question_id)):
+        raise ValueError("这道题不属于本次练习")
+    condition, values = (" AND session_id=?", (question_id, session_id)) if session_id else ("", (question_id,))
+    return store.one("SELECT answer,status,ai_reason FROM quiz_answers WHERE question_id=?" + condition + " ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1", values)
+
+
+def tutor_history(store, question_id: str, mode: str = "teacher", session_id="") -> list[dict]:
     if mode not in ("teacher", "xinxin"):
         raise ValueError("未知辅导模式")
+    condition, values = (" AND session_id=?", (question_id, mode, session_id)) if session_id else ("", (question_id, mode))
     rows = store.all(
         "SELECT role,content,created FROM tutor_messages WHERE question_id=? AND mode=?"
-        " ORDER BY created,rowid",
-        (question_id, mode),
+        + condition + " ORDER BY created,rowid",
+        values,
     )
     return [dict(row) for row in rows]
 
 
-async def explain(store, gateway, question_id: str, message: str = "", mode: str = "teacher") -> dict:
+async def explain(store, gateway, question_id: str, message: str = "", mode: str = "teacher", session_id="") -> dict:
     if mode not in ("teacher", "xinxin"):
         raise ValueError("未知辅导模式")
     if gateway is None:
@@ -592,11 +591,8 @@ async def explain(store, gateway, question_id: str, message: str = "", mode: str
     if not row:
         raise ValueError("题目不存在")
     question = format_question(row)
-    history = tutor_history(store, question_id, mode)[-TUTOR_HISTORY:]
-    attempt = store.one(
-        "SELECT answer,status,ai_reason FROM quiz_answers WHERE question_id=? ORDER BY attempt_seq DESC,created DESC,rowid DESC LIMIT 1",
-        (question_id,),
-    )
+    attempt = tutor_attempt(store, question_id, session_id)
+    history = tutor_history(store, question_id, mode, session_id)[-TUTOR_HISTORY:]
     greeting = "这道题怎么想？"
     user_text = clean_text(((message or "").strip() or greeting)[:2000])
     prompt = TUTOR_PROMPT
@@ -625,8 +621,11 @@ async def explain(store, gateway, question_id: str, message: str = "", mode: str
     for item in history:
         transcript.append({"role": item["role"], "content": item["content"]})
     transcript.append({"role": "user", "content": user_text})
-    reply = await gateway.apredict(transcript, stream=False, temperature=0.5)
-    content = clean_text(str(reply.get("content") or "").strip()[:6000])
+    try:
+        reply = await gateway.apredict(transcript, stream=False, temperature=0.5)
+    except (RuntimeError, ValueError, KeyError, TypeError, httpx.HTTPError):
+        raise ValueError("讲解暂未完成，追问草稿已保留，请稍后重试") from None
+    content = clean_text(str(reply.get("content") or "").strip()[:6000]) if isinstance(reply, dict) else ""
     if not content:
         raise ValueError("这次没有收到讲解，请再试一次")
     # 完整一轮成功后原子保存，模型失败/空回复不留下孤立的用户消息。
@@ -635,19 +634,16 @@ async def explain(store, gateway, question_id: str, message: str = "", mode: str
             raise ValueError("题目已被删除")
         created = int(time.time())
         db.executemany(
-            "INSERT INTO tutor_messages(id,question_id,role,content,created,mode) VALUES(?,?,?,?,?,?)",
+            "INSERT INTO tutor_messages(id,question_id,role,content,created,mode,session_id) VALUES(?,?,?,?,?,?,?)",
             [
-                (uid(), question_id, "user", user_text, created, mode),
-                (uid(), question_id, "assistant", content, created, mode),
+                (uid(), question_id, "user", user_text, created, mode, session_id),
+                (uid(), question_id, "assistant", content, created, mode, session_id),
             ],
         )
-    public_question = dict(question)
-    if not attempt:
-        public_question.pop("answer", None)
-        public_question.pop("explanation", None)
+    public_question = format_question(row, reveal=attempt is not None)
     return {
         "reply": content,
-        "history": tutor_history(store, question_id, mode),
+        "history": tutor_history(store, question_id, mode, session_id),
         "question": public_question,
         "mode": mode,
     }
@@ -662,6 +658,7 @@ def stats(store) -> dict:
         "SELECT count(*) AS total,"
         " sum(CASE WHEN status='correct' THEN 1 ELSE 0 END) AS ok,"
         " sum(CASE WHEN status='wrong' THEN 1 ELSE 0 END) AS bad"
+        ", sum(CASE WHEN status='unknown' THEN 1 ELSE 0 END) AS pending"
         " FROM quiz_answers"
     )
     tags: dict[str, dict] = {}
@@ -682,12 +679,16 @@ def stats(store) -> dict:
     weak = sorted(tags.values(), key=lambda item: (-item["wrong"], item["tag"]))[:8]
     total = int(totals["total"] or 0)
     ok = int(totals["ok"] or 0)
+    pending = int(totals["pending"] or 0)
+    graded = total - pending
     return {
         "books": len(books),
         "questions": int(store.one("SELECT count(*) AS c FROM questions WHERE review!='excluded'")["c"] or 0),
         "answered": total,
         "correct": ok,
-        "accuracy": round(ok / total, 4) if total else 0,
+        "graded": graded,
+        "pending": pending,
+        "accuracy": round(ok / graded, 4) if graded else 0,
         "weak_tags": [item for item in weak if item["wrong"] > 0],
         "recent": [
             {

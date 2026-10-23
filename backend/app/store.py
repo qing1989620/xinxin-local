@@ -123,6 +123,9 @@ class Store:
                 db.execute(
                     "ALTER TABLE tutor_messages ADD COLUMN mode TEXT NOT NULL DEFAULT 'teacher'"
                 )
+            if "session_id" not in {row["name"] for row in db.execute("PRAGMA table_info(tutor_messages)")}:
+                db.execute("ALTER TABLE tutor_messages ADD COLUMN session_id TEXT NOT NULL DEFAULT ''")
+            db.execute("CREATE INDEX IF NOT EXISTS tutor_messages_session ON tutor_messages(question_id,mode,session_id,created)")
             for column, declaration in {
                 "source_id": "TEXT",
                 "source_quote": "TEXT NOT NULL DEFAULT ''",

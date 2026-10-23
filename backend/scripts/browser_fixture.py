@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from app.config import Config
 from app.main import create_app
+from app.learning import GRADE_PROMPT
 
 
 def create_fixture():
@@ -33,9 +34,17 @@ def create_fixture():
     client.headers["Authorization"] = "Bearer " + response.json()["token"]
     client.put("/api/v1/settings", json={"model_api_key": "synthetic-offline-key"}).raise_for_status()
 
+    grade_calls = {}
     async def respond(_request):
         body = json.loads(_request.content)
         messages = body.get("messages", [])
+        if messages and messages[0].get("content") == GRADE_PROMPT:
+            payload = json.loads(messages[1]["content"])
+            key = payload["stem"]
+            grade_calls[key] = grade_calls.get(key, 0) + 1
+            if "合成待核对" in key and grade_calls[key] == 1:
+                return httpx.Response(503, text="synthetic grading outage")
+            return httpx.Response(200, json={"choices": [{"message": {"content": '{"verdict":"correct","reason":"合成核对：回答包含所需知识点，概念一致。"}'}}], "usage": {"total_tokens": 80}})
         if messages and "PDF 原页读取协议" in str(messages[0].get("content")):
             payload = json.loads(messages[1]["content"][0]["text"])
             value = {"pages": [{"page": page, "readable": True, "text": "1. 已知函数 f(x)=x^2，求 x=3 处的导数，并解释该点切线斜率。\nA. 6 B. 3 C. 9 D. 2", "reason": ""} for page in payload["physical_pages"]]}
@@ -46,10 +55,16 @@ def create_fixture():
             if payload["text"].startswith("PDF 物理"):
                 value = {"type": "exercises", "summary": "合成原页包含导数计算原题，代入自变量求导数，并解释切线斜率。", "knowledge_points": [{"name": "导数", "source_ref": "L2-L3"}, {"name": "无效条目", "source_ref": "L999"}], "exercises": [{"label": "原题 1", "source_ref": "L2-L3", "solvable": True}]}
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
-        if messages and "学习出题复核协议 v2" in str(messages[0].get("content")):
+        if messages and "学习独立求解协议" in str(messages[0].get("content")):
             content = messages[1]["content"]
             payload = json.loads(content[0]["text"] if isinstance(content, list) else content)
-            value = {"reviews": [{"index": index, "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
+            value = {"solutions": [{"index": index, "solvable": True, "answer": "A" if row["kind"] == "single" else ["(0,1)", "A;B"] if "合成逐空" in row["stem"] else ["切线斜率"] if row["kind"] == "fill" else "切线斜率。",
+                "solution": "合成盲解：核对定义与函数变化率，导数对应于该点的切线斜率。"} for index, row in enumerate(payload["questions"])]}
+            return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
+        if messages and "学习出题复核协议" in str(messages[0].get("content")):
+            content = messages[1]["content"]
+            payload = json.loads(content[0]["text"] if isinstance(content, list) else content)
+            value = {"reviews": [{"index": index, "verdict": "reject" if row.get("answer") == "B" else "accept", "relevant": True, "solvable": True, "correct": row.get("answer") != "B", "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成审题：答案错误，拒绝入库。" if row.get("answer") == "B" else "合成审题：核对题意与答案一致，条件完整可解。"} for index, row in enumerate(payload["questions"])]}
             if any("合成审题缺失" in row.get("stem", "") for row in payload["questions"]):
                 value = {"reviews": []}
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(value, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
@@ -79,6 +94,11 @@ def create_fixture():
                     row["stem"] = "合成审题缺失：" + row["stem"]
                 if payload["analysis"].get("source_method") == "pdf_images":
                     row["source_ref"] = "L2-L3"
+                row["origin"] = "original" if payload["mode"] == "original" else "practice"
+                if "合成逐空" in payload["focus"]:
+                    row |= {"kind": "fill", "stem": f"合成逐空练习 {signature}-{index + 1}：区间 ___；代码字符串 ___。", "answer": ["(0,1)", "A;B"]}
+                if "合成待核对" in payload["focus"]:
+                    row |= {"kind": "short", "stem": "合成待核对 " + signature + "：解释导数的几何意义。", "answer": "切线斜率。"}
                 rows.append(row)
             return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": json.dumps(rows, ensure_ascii=False)}}], "usage": {"total_tokens": 80}})
         latest_user = next((index for index in range(len(messages) - 1, -1, -1) if messages[index].get("role") == "user"), -1)

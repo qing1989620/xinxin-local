@@ -17,9 +17,10 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cryptography.fernet import Fernet
 from app.config import Config
-from app.learning_studio import analyze, generate_batch, review_batch
+from app.learning_studio import analyze, execute, generate_batch, review_batch, snapshot, solve_blind
+from app import learning_visual as visual
 from app.model import ModelGateway
-from app.store import Store, encode, now
+from app.store import Store, encode, now, uid
 
 
 def arguments():
@@ -28,10 +29,16 @@ def arguments():
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--allow-host", default="")
     parser.add_argument("--read-mode", choices=("text", "pdf"), default="text")
+    parser.add_argument("--mode", choices=("auto", "original", "practice"), default="auto")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--pipeline", action="store_true", help="Run the production generation/review/save/recovery loop in the isolated check database")
+    action.add_argument("--review-saved", action="store_true", help="Recheck previously saved private questions using the current production critic")
+    action.add_argument("--solve-saved", action="store_true", help="Blind-solve private saved questions without showing their answers or explanations")
     parser.add_argument("--pages", help="Optional PDF physical page range inside this source, e.g. 4-6")
     parser.add_argument("--count", type=int, choices=range(1, 7), default=3)
     parser.add_argument("--max-calls", type=int, choices=range(1, 13), default=3)
-    parser.add_argument("--ledger", type=Path, required=True, help="Private cumulative call ledger; limit is 12 across checks")
+    parser.add_argument("--ledger", type=Path, required=True, help="Private cumulative call ledger for this explicit authorization")
+    parser.add_argument("--ledger-limit", type=int, choices=range(1, 13), default=12, help="Cumulative authorized calls, at most 12")
     parser.add_argument("--reuse-check", type=Path, help="Reuse an earlier private check's material analysis")
     return parser.parse_args()
 
@@ -73,8 +80,8 @@ async def check(args):
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {"calls": 0, "tokens": 0}
     baseline_calls, baseline_tokens = ledger["calls"], ledger["tokens"]
-    if baseline_calls + args.max_calls > 12:
-        raise ValueError("本次检查将超过已授权的累计 12 次调用上限")
+    if baseline_calls + args.max_calls > args.ledger_limit:
+        raise ValueError(f"本次检查将超过已授权的累计 {args.ledger_limit} 次调用上限")
     check_path = args.reuse_check.resolve() if args.reuse_check else ledger_path.parent / ("check-" + str(now()))
     if not check_path.is_relative_to(private_root.resolve()) or (args.reuse_check and not (check_path / "xinxin.sqlite3").is_file()):
         raise ValueError("复用检查必须位于 backend/.qa-data 且数据库已存在")
@@ -103,10 +110,55 @@ async def check(args):
         raise ValueError(analysis["reason"])
     if args.read_mode == "pdf":
         unit |= {"content": analysis["source_text"], "page_spans": analysis["page_spans"], "source_method": "pdf_images"}
+    options = {"kinds": ["single", "fill", "short"], "difficulty": 0, "mode": args.mode, "focus": "",
+               "count": args.count, "read_mode": args.read_mode, "analyze_only": False, "page_ranges": {}}
+    if args.review_saved or args.solve_saved:
+        if not args.reuse_check:
+            raise ValueError("复核既有题目必须指定隔离诊断目录")
+        candidates = store.all("SELECT * FROM questions WHERE source_id=? ORDER BY created,rowid", (unit["id"],))
+        if not 1 <= len(candidates) <= 6:
+            raise ValueError("仅可复核隔离目录中的 1～6 道题")
+        for row in candidates:
+            for key in ("options", "tags", "source_pages"):
+                row[key] = json.loads(row[key])
+        if args.solve_saved:
+            images = await visual.image_messages(SourceFile().path(unit["file_id"]), sorted({page for row in candidates for page in row["source_pages"]}), flag) if args.read_mode == "pdf" else []
+            solutions = await solve_blind(gateway, unit, candidates, images)
+            store.directory.joinpath("blind-" + str(now()) + ".private.json").write_text(json.dumps(solutions, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(encode({"blind_solved": len(solutions), "solvable": sum(row["solvable"] for row in solutions),
+                          "calls": gateway.calls, "tokens": gateway.tokens, "owner_database_written": False}))
+            return 0
+        print("stage: current independent review of saved private questions", flush=True)
+        decisions = await review_batch(gateway, unit, analysis, candidates, [], store=store, library=SourceFile(), flag=flag)
+        store.directory.joinpath("recheck-" + str(now()) + ".private.json").write_text(json.dumps({"questions": candidates, "reviews": decisions}, ensure_ascii=False, indent=2), encoding="utf-8")
+        accepted = sum(decision[0] for decision in decisions)
+        print(encode({"reviewed": len(candidates), "accepted": accepted, "rejected": len(candidates) - accepted,
+                      "calls": gateway.calls, "tokens": gateway.tokens, "owner_database_written": False}))
+        return 0
+    if args.pipeline:
+        job_id, run_id = uid(), uid()
+        with store.connect(write=True) as db:
+            db.execute("INSERT INTO runs(id,conversation_id,task,status,permission,max_calls,max_seconds,created,updated) VALUES(?,?,?,'running','read',?,900,?,?)",
+                       (run_id, "private-check", "隔离真实出题验证", args.max_calls, now(), now()))
+            db.execute("INSERT INTO learning_generations VALUES(?,?,?,?,?,?,?)", (job_id, unit["book_id"], run_id, job_id, job_id, encode(options), now()))
+            db.execute("INSERT INTO learning_generation_items(job_id,source_id,target) VALUES(?,?,?)", (job_id, unit["id"], args.count))
+        print("stage: production generation, review and incremental save", flush=True)
+        await execute(store, gateway, job_id, run_id, flag, library=SourceFile())
+        store.execute("UPDATE runs SET status='completed' WHERE id=?", (run_id,))
+        job = snapshot(store, job_id)
+        saved = store.all("SELECT kind,stem,answer,explanation,source_quote,source_pages,origin FROM questions WHERE generation_id=?", (job_id,))
+        result = json.dumps({"analysis": analysis, "job": job, "accepted_questions": saved}, ensure_ascii=False, indent=2)
+        store.directory.joinpath("results-" + job_id + ".private.json").write_text(result, encoding="utf-8")
+        store.directory.joinpath("results.private.json").write_text(result, encoding="utf-8")
+        print(encode({"mode": args.read_mode, "generation_mode": args.mode, "pipeline": True,
+            "status": job["status"], "target": job["target"], "accepted": job["created_count"],
+            "exercises": len(analysis["exercises"]), "calls": gateway.calls, "tokens": gateway.tokens,
+            "owner_database_written": False}))
+        return 0 if saved else 1
     reasons = []
     print("stage: question generation", flush=True)
     candidates, rejected, duplicates = await generate_batch(gateway, unit, analysis,
-        {"kinds": ["single", "fill", "short"], "difficulty": 0, "mode": "auto", "focus": ""}, args.count, [], reasons, [])
+        options, args.count, [], reasons, [])
     store.directory.joinpath("candidates.private.json").write_text(json.dumps(candidates, ensure_ascii=False, indent=2), encoding="utf-8")
     print("stage: independent review; candidates=" + str(len(candidates)), flush=True)
     decisions = await review_batch(gateway, unit, analysis, candidates, [], store=store, library=SourceFile(), flag=flag) if candidates else []

@@ -4,7 +4,12 @@ import { getBlob } from "../api";
 import { ErrorState, Loading } from "../ui";
 
 export function StudyPdfPages({ id, pages }: { id: string; pages: number[] }) {
-  const [index, setIndex] = useState(0);
+  const scope = id + ":" + pages.join(",");
+  const [cursor, setCursor] = useState({ scope, index: 0 });
+  const index =
+    cursor.scope === scope
+      ? Math.min(cursor.index, Math.max(0, pages.length - 1))
+      : 0;
   const [image, setImage] = useState("");
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -40,7 +45,7 @@ export function StudyPdfPages({ id, pages }: { id: string; pages: number[] }) {
             className="icon-button"
             aria-label="上一原页"
             disabled={index === 0}
-            onClick={() => setIndex((value) => value - 1)}
+            onClick={() => setCursor({ scope, index: index - 1 })}
           >
             <ChevronLeft size={17} />
           </button>
@@ -51,7 +56,7 @@ export function StudyPdfPages({ id, pages }: { id: string; pages: number[] }) {
             className="icon-button"
             aria-label="下一原页"
             disabled={index >= pages.length - 1}
-            onClick={() => setIndex((value) => value + 1)}
+            onClick={() => setCursor({ scope, index: index + 1 })}
           >
             <ChevronRight size={17} />
           </button>

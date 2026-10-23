@@ -13,7 +13,7 @@ from app.document_text import extract_document
 from app.files import FileLibrary, FileTooLarge, MAX_UPLOAD
 from app.learning_studio import sources
 from app.store import Store
-from test_learning_studio import studio, add_book, source_list, start, wait, question
+from test_learning_studio import studio, add_book, source_list, start, wait, question, blind_response
 
 
 def script(app, *, analyze=None, generate=None, review=None):
@@ -25,9 +25,11 @@ def script(app, *, analyze=None, generate=None, review=None):
         if "学习材料分析协议" in protocol:
             stage = "analysis"
             value = analyze(payload) if analyze else {"type": "knowledge", "summary": "材料解释导数表示瞬时变化率，以及切线斜率的几何意义。", "knowledge_points": [{"name": "导数", "quote": payload["text"].strip()[:60]}], "exercises": []}
+        elif "学习独立求解协议" in protocol:
+            stage, value = "solve", blind_response(payload)
         elif "学习出题复核协议" in protocol:
             stage = "review"
-            value = review(payload) if review else {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "reason": "合成核对：重新求解后答案与解析一致。"} for index in range(len(payload["questions"]))]}
+            value = review(payload) if review else {"reviews": [{"index": index, "verdict": "accept", "relevant": True, "solvable": True, "correct": True, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "合成核对：重新求解后答案与解析一致。"} for index in range(len(payload["questions"]))]}
         else:
             stage = "generation"
             value = generate(payload) if generate else [question(payload["text"])]
@@ -111,6 +113,7 @@ def test_default_twelve_and_twenty_four_questions_are_batched_and_reviewed(studi
     assert job["status"] == "completed" and job["created_count"] == 24
     assert [kind for kind, _ in calls].count("analysis") == 1
     assert [kind for kind, _ in calls].count("generation") == 8
+    assert [kind for kind, _ in calls].count("solve") == 8
     assert [kind for kind, _ in calls].count("review") == 8
     assert max(value["count"] for kind, value in calls if kind == "generation") == 3
     saved = client.get(f"/api/v1/learning/questions?book_id={book['id']}").json()["questions"]
@@ -123,7 +126,7 @@ def test_default_twelve_and_twenty_four_questions_are_batched_and_reviewed(studi
 def test_critic_rejection_or_invalid_response_never_enters_bank(studio, failure):
     app, client, book = studio
     def review(payload):
-        row = {"index": 0, "verdict": "reject", "relevant": True, "solvable": True, "correct": False, "reason": "独立计算发现答案错误，应当拒绝入库。"}
+        row = {"index": 0, "verdict": "reject", "relevant": True, "solvable": True, "correct": False, "independent_match": True, "reasoning_correct": True, "reasoning_check": "合成逐步核对：计算、前提及推理方向与解析一致。", "reason": "独立计算发现答案错误，应当拒绝入库。"}
         return {"reviews": [] if failure == "missing" else [row, row] if failure == "duplicate" else [row]} if failure != "malformed" else ["not an object"]
     script(app, review=review)
     job = wait(client, start(client, book, source_list(client, book)[:1]).json()["job"])

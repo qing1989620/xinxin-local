@@ -162,8 +162,8 @@ def test_empty_model_reply_keeps_history_unchanged(workspace, mode):
 def test_model_failure_does_not_save_half_a_tutor_turn(workspace):
     app, client = workspace
     model(app, status=503)
-    with pytest.raises(RuntimeError):
-        client.post("/api/v1/learning/questions/q1/explain", json={"mode": "xinxin"})
+    response = client.post("/api/v1/learning/questions/q1/explain", json={"mode": "xinxin"})
+    assert response.status_code == 409 and "请稍后重试" in response.json()["detail"]
     assert tutor_history(app.state.store, "q1", "xinxin") == []
 
 
