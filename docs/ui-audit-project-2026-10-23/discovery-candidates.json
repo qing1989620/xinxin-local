@@ -1,0 +1,1020 @@
+{
+  "project_root": "./frontend",
+  "discovery_level": "heuristic_candidates_only",
+  "files_listed": 151,
+  "packages": [
+    {
+      "path": "package.json",
+      "name": "xinxin-frontend",
+      "framework_versions": {
+        "@playwright/test": "1.64.1",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+        "react-router-dom": "^7.18.4",
+        "typescript": "~5.9.3",
+        "vite": "^7.2.4",
+        "vitest": "^4.1.10"
+      },
+      "script_names": [
+        "build",
+        "cap:add",
+        "cap:sync",
+        "dev",
+        "preview",
+        "test",
+        "test:build",
+        "test:e2e",
+        "typecheck"
+      ],
+      "package_manager": "not declared"
+    }
+  ],
+  "route_source_candidates": [
+    {
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\TasksPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\sphereRenderer.ts",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\SkillSphere.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\SkillsPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\skillOrigin.ts",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\SkillNetTrace.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\RunFailureNotice.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\QuizPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\MusicPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\MemoryGrant.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\lunarGeometry.ts",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\LearningPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\ImageStudio.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\HistoricalActivity.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\GalleryExplorer.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\FilesPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\EmailSettings.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\Dashboard.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\ContentPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\BookPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\AgentPage.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\AgentInspector.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    },
+    {
+      "path": "src\\pages\\AgentActivity.tsx",
+      "kind": "candidate route, layout or route-state source; inspect actual framework semantics"
+    }
+  ],
+  "path_literal_candidates": [
+    {
+      "value": "/favicon.svg",
+      "path": "index.html",
+      "line": 15,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning/quiz/${session.id}",
+      "path": "e2e\\learning-experience.pw.ts",
+      "line": 241,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning/books/${done.book_id}",
+      "path": "e2e\\learning-experience.pw.ts",
+      "line": 385,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/",
+      "path": "src\\ErrorBoundary.tsx",
+      "line": 51,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/",
+      "path": "src\\App.tsx",
+      "line": 264,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/",
+      "path": "src\\App.tsx",
+      "line": 741,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/settings",
+      "path": "src\\App.tsx",
+      "line": 818,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/",
+      "path": "src\\App.tsx",
+      "line": 923,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/agent",
+      "path": "src\\App.tsx",
+      "line": 924,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/tasks",
+      "path": "src\\App.tsx",
+      "line": 925,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/files",
+      "path": "src\\App.tsx",
+      "line": 926,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/servers",
+      "path": "src\\App.tsx",
+      "line": 927,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/skills",
+      "path": "src\\App.tsx",
+      "line": 928,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/content/*",
+      "path": "src\\App.tsx",
+      "line": 929,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/tools",
+      "path": "src\\App.tsx",
+      "line": 930,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/music",
+      "path": "src\\App.tsx",
+      "line": 931,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning",
+      "path": "src\\App.tsx",
+      "line": 932,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning/books/:id",
+      "path": "src\\App.tsx",
+      "line": 933,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning/quiz/:id",
+      "path": "src\\App.tsx",
+      "line": 934,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/memories",
+      "path": "src\\App.tsx",
+      "line": 935,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/schedules",
+      "path": "src\\App.tsx",
+      "line": 936,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/settings",
+      "path": "src\\App.tsx",
+      "line": 938,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/",
+      "path": "src\\App.tsx",
+      "line": 979,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/agent",
+      "path": "src\\App.tsx",
+      "line": 983,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/tasks",
+      "path": "src\\App.tsx",
+      "line": 987,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/learning",
+      "path": "e2e\\music-learning.pw.ts",
+      "line": 561,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    },
+    {
+      "value": "/skills",
+      "path": "src\\pages\\SkillNetTrace.tsx",
+      "line": 131,
+      "kind": "literal path/navigation candidate, may be a link rather than route declaration"
+    }
+  ],
+  "component_declaration_candidates": [
+    {
+      "name": "SkillSphere",
+      "path": "tests\\sphere.test.tsx",
+      "line": 142,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SkillSphere",
+      "path": "tests\\sphere.test.tsx",
+      "line": 184,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "UploadRequest",
+      "path": "tests\\api.test.ts",
+      "line": 27,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ErrorBoundary",
+      "path": "src\\ErrorBoundary.tsx",
+      "line": 13,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ImageNode",
+      "path": "src\\editor.tsx",
+      "line": 25,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PrivateImageExtension",
+      "path": "src\\editor.tsx",
+      "line": 41,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "RichEditor",
+      "path": "src\\editor.tsx",
+      "line": 64,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "STORAGE_KEY",
+      "path": "src\\conversationLocation.ts",
+      "line": 5,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Context",
+      "path": "src\\Uploads.tsx",
+      "line": 31,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "UploadProvider",
+      "path": "src\\Uploads.tsx",
+      "line": 33,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "UploadQueue",
+      "path": "src\\Uploads.tsx",
+      "line": 142,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToastStateContext",
+      "path": "src\\ui.tsx",
+      "line": 21,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToastContext",
+      "path": "src\\ui.tsx",
+      "line": 25,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToastProvider",
+      "path": "src\\ui.tsx",
+      "line": 37,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToastNotice",
+      "path": "src\\ui.tsx",
+      "line": 58,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Dialog",
+      "path": "src\\ui.tsx",
+      "line": 86,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Empty",
+      "path": "src\\ui.tsx",
+      "line": 165,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Loading",
+      "path": "src\\ui.tsx",
+      "line": 185,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PageHeader",
+      "path": "src\\ui.tsx",
+      "line": 193,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Status",
+      "path": "src\\ui.tsx",
+      "line": 218,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PrivateImage",
+      "path": "src\\ui.tsx",
+      "line": 235,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MarkdownImage",
+      "path": "src\\ui.tsx",
+      "line": 311,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ErrorState",
+      "path": "src\\ui.tsx",
+      "line": 354,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PREFIX",
+      "path": "src\\studyDrafts.ts",
+      "line": 1,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MAX_DRAFT_LENGTH",
+      "path": "src\\studyDrafts.ts",
+      "line": 2,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ResourcePicker",
+      "path": "src\\ResourcePicker.tsx",
+      "line": 15,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "StudySource",
+      "path": "src\\components\\StudySource.tsx",
+      "line": 9,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "StudyPdfPages",
+      "path": "src\\components\\StudyPdfPages.tsx",
+      "line": 6,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MathText",
+      "path": "src\\components\\MathText.tsx",
+      "line": 6,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "COLORS",
+      "path": "src\\components\\FunctionPlot.tsx",
+      "line": 12,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PADDING",
+      "path": "src\\components\\FunctionPlot.tsx",
+      "line": 13,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SAMPLES",
+      "path": "src\\components\\FunctionPlot.tsx",
+      "line": 14,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "FunctionPlot",
+      "path": "src\\components\\FunctionPlot.tsx",
+      "line": 56,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AgentPage",
+      "path": "src\\App.tsx",
+      "line": 78,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TasksPage",
+      "path": "src\\App.tsx",
+      "line": 79,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "FilesPage",
+      "path": "src\\App.tsx",
+      "line": 80,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MusicPage",
+      "path": "src\\App.tsx",
+      "line": 81,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "LearningPage",
+      "path": "src\\App.tsx",
+      "line": 82,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "BookPage",
+      "path": "src\\App.tsx",
+      "line": 83,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "QuizPage",
+      "path": "src\\App.tsx",
+      "line": 84,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SkillsPage",
+      "path": "src\\App.tsx",
+      "line": 85,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ServersPage",
+      "path": "src\\App.tsx",
+      "line": 86,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MemoriesPage",
+      "path": "src\\App.tsx",
+      "line": 91,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SchedulesPage",
+      "path": "src\\App.tsx",
+      "line": 96,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SettingsPage",
+      "path": "src\\App.tsx",
+      "line": 101,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToolsPage",
+      "path": "src\\App.tsx",
+      "line": 106,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ContentPage",
+      "path": "src\\App.tsx",
+      "line": 111,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PageSearch",
+      "path": "src\\App.tsx",
+      "line": 131,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AuthScreen",
+      "path": "src\\App.tsx",
+      "line": 186,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "App",
+      "path": "src\\App.tsx",
+      "line": 483,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ApiError",
+      "path": "src\\api.ts",
+      "line": 183,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MAX_UPLOAD_BYTES",
+      "path": "src\\api.ts",
+      "line": 273,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "KIND_LABEL",
+      "path": "src\\learning.ts",
+      "line": 128,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Context",
+      "path": "src\\musicPlayer.tsx",
+      "line": 46,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MusicPlayerProvider",
+      "path": "src\\musicPlayer.tsx",
+      "line": 49,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MiniPlayer",
+      "path": "src\\musicPlayer.tsx",
+      "line": 354,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "CONSTANTS",
+      "path": "src\\lib\\mathExpr.ts",
+      "line": 20,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "UNARY",
+      "path": "src\\lib\\mathExpr.ts",
+      "line": 27,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "BINARY",
+      "path": "src\\lib\\mathExpr.ts",
+      "line": 52,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Parser",
+      "path": "src\\lib\\mathExpr.ts",
+      "line": 132,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TIME_TAG",
+      "path": "src\\lib\\lrc.ts",
+      "line": 10,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ServersPage",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 54,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MemoriesPage",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 367,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SchedulesPage",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 530,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AddressRow",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 796,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SettingsPage",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 831,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ToolsPage",
+      "path": "src\\pages\\WorkspacePages.tsx",
+      "line": 1179,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TaskDetailShell",
+      "path": "src\\pages\\TasksPage.tsx",
+      "line": 35,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TasksPage",
+      "path": "src\\pages\\TasksPage.tsx",
+      "line": 52,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TAU",
+      "path": "src\\pages\\sphereRenderer.ts",
+      "line": 23,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "EDGE_STYLE",
+      "path": "src\\pages\\sphereRenderer.ts",
+      "line": 24,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ARC_STEPS",
+      "path": "src\\pages\\sphereRenderer.ts",
+      "line": 32,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ACTIVITY_INTERVAL",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 69,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "DIRECTORY_CAP",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 71,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ZOOM_MIN",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 72,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ZOOM_MAX",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 73,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "RELATION_LABEL",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 74,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SkillSphere",
+      "path": "src\\pages\\SkillSphere.tsx",
+      "line": 84,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "LIBRARY_CAP",
+      "path": "src\\pages\\SkillsPage.tsx",
+      "line": 87,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "GENERATIONS",
+      "path": "src\\pages\\SkillsPage.tsx",
+      "line": 88,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SkillsPage",
+      "path": "src\\pages\\SkillsPage.tsx",
+      "line": 97,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ORIGIN_LABEL",
+      "path": "src\\pages\\skillOrigin.ts",
+      "line": 34,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SkillNetTrace",
+      "path": "src\\pages\\SkillNetTrace.tsx",
+      "line": 8,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "RunFailureNotice",
+      "path": "src\\pages\\RunFailureNotice.tsx",
+      "line": 31,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "STATUS_TEXT",
+      "path": "src\\pages\\QuizPage.tsx",
+      "line": 64,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "RichAnswer",
+      "path": "src\\pages\\QuizPage.tsx",
+      "line": 71,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "QuizPage",
+      "path": "src\\pages\\QuizPage.tsx",
+      "line": 106,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SOURCES",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 80,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "INFLUENCE_LEVELS",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 87,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MOOD_PHRASE",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 114,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Equalizer",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 143,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "TrackList",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 158,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MusicPage",
+      "path": "src\\pages\\MusicPage.tsx",
+      "line": 265,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "MemoryGrant",
+      "path": "src\\pages\\MemoryGrant.tsx",
+      "line": 1,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "INITIAL_CAMERA",
+      "path": "src\\pages\\lunarGeometry.ts",
+      "line": 3,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "PRESETS",
+      "path": "src\\pages\\LearningPage.tsx",
+      "line": 53,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "BOOK_EXT",
+      "path": "src\\pages\\LearningPage.tsx",
+      "line": 59,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "LearningPage",
+      "path": "src\\pages\\LearningPage.tsx",
+      "line": 61,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "SIZES",
+      "path": "src\\pages\\ImageStudio.tsx",
+      "line": 43,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ImageThumb",
+      "path": "src\\pages\\ImageStudio.tsx",
+      "line": 50,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ImageStudio",
+      "path": "src\\pages\\ImageStudio.tsx",
+      "line": 86,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "HistoricalActivity",
+      "path": "src\\pages\\HistoricalActivity.tsx",
+      "line": 6,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "GalleryExplorer",
+      "path": "src\\pages\\GalleryExplorer.tsx",
+      "line": 36,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "FilesPage",
+      "path": "src\\pages\\FilesPage.tsx",
+      "line": 28,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "STATUS_LABEL",
+      "path": "src\\pages\\EmailSettings.tsx",
+      "line": 45,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "EmailSettings",
+      "path": "src\\pages\\EmailSettings.tsx",
+      "line": 53,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "Dashboard",
+      "path": "src\\pages\\Dashboard.tsx",
+      "line": 67,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ContentPage",
+      "path": "src\\pages\\ContentPage.tsx",
+      "line": 46,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "LockKeyholeIcon",
+      "path": "src\\pages\\ContentPage.tsx",
+      "line": 574,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "CollectionArticles",
+      "path": "src\\pages\\ContentPage.tsx",
+      "line": 577,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ResumeForm",
+      "path": "src\\pages\\ContentPage.tsx",
+      "line": 593,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "ResumeDocument",
+      "path": "src\\pages\\ContentPage.tsx",
+      "line": 878,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "STATES",
+      "path": "src\\pages\\BookPage.tsx",
+      "line": 73,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "BookRoute",
+      "path": "src\\pages\\BookPage.tsx",
+      "line": 88,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "BookPage",
+      "path": "src\\pages\\BookPage.tsx",
+      "line": 93,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AgentPage",
+      "path": "src\\pages\\AgentPage.tsx",
+      "line": 116,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AgentInspector",
+      "path": "src\\pages\\AgentInspector.tsx",
+      "line": 49,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    },
+    {
+      "name": "AgentActivity",
+      "path": "src\\pages\\AgentActivity.tsx",
+      "line": 55,
+      "kind": "capitalized declaration candidate, may not be a rendered component"
+    }
+  ],
+  "configuration_candidates": [
+    "vitest.config.ts",
+    "vite.config.ts",
+    "tsconfig.json",
+    "playwright.production.config.ts",
+    "playwright.config.ts",
+    "capacitor.config.ts"
+  ],
+  "skipped": [],
+  "warnings": [],
+  "must_reconcile": [
+    "Resolve framework routes, dynamic parameters, aliases, guards, redirects, flags, nested and parallel routes.",
+    "Inspect runtime navigation and pages reachable only through dialogs, roles, tenant settings or deep links.",
+    "Map rendered UI instances, including conditionally rendered and inline components.",
+    "Do not use this file as proof that all routes or components have been discovered or reviewed."
+  ]
+}

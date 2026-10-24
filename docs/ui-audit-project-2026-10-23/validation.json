@@ -1,0 +1,12 @@
+{
+  "schema_valid": true,
+  "plan_complete": true,
+  "audit_coverage_closed": false,
+  "production_gates_satisfied": false,
+  "errors": [],
+  "warnings": [],
+  "source_ref": "2a1fdf602091f04d481c2f51ebdd186e65fce2dc",
+  "plan_exit": 0,
+  "complete_exit": 2,
+  "ready_exit": 2
+}
