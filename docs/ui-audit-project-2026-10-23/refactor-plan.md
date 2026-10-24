@@ -2,6 +2,8 @@
 
 保留HTTP分层与既有页面状态所有者，按确证反例修复。verified只指所列场景；真实网关、实体设备和外部交付的blocked不作通过。
 
+10月24日增量：TASK-047（中文/混合语言4551识别及真实隔离服务回归）verified；TASK-048（正式快捷方式实际开窗、重复点击及关闭重开）blocked，原因是自动审批拒绝代为执行，待主人反馈。对应FND-026为fixed_unverified，详见[桌面报告](../desktop-startup-2026-10-24.md)与audit.json。
+
 | 任务 | 阶段 / 状态 | 范围 | 位置 | 依赖 | 场景 |
 | --- | --- | --- | --- | --- | --- |
 | TASK-001 登录与初始化布局/窗口统一与本地验证 | 2 / verified | PAGE-001, CMP-001, CMP-002, CMP-003, CMP-004, CMP-005 | frontend/src/App.tsx: AuthScreen; frontend/src/polish.css |  | SCN-001 |

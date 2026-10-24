@@ -8,9 +8,9 @@
     "review_depth": "full",
     "access_mode": "source_runtime",
     "baseline": {
-      "source_ref": "2a1fdf602091f04d481c2f51ebdd186e65fce2dc",
-      "runtime_ref": "Final isolated backend/browser/production plus activated loopback build; Caddy blocked; no push",
-      "observed_at": "2026-10-24T01:16:59.935347+00:00"
+      "source_ref": "71e46ce",
+      "runtime_ref": "Desktop localized startup: 8 real Windows regressions passed; previous full-suite source 2a1fdf6 unchanged outside desktop/tests; actual shortcut window blocked by automatic approval",
+      "observed_at": "2026-10-24T02:26:47.240621+00:00"
     },
     "inventory_status": "reconciled",
     "inventory_sources": [
@@ -5522,6 +5522,93 @@
         "FND-025"
       ],
       "reason": "实体手机和真实外部模型另列。"
+    },
+    {
+      "id": "SCN-055",
+      "title": "中文桌面调用路径在可选网关受阻后保留本机服务",
+      "page_ids": [
+        "PAGE-028",
+        "PAGE-029"
+      ],
+      "instance_ids": [
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "preconditions": [
+        "Windows PowerShell 5.1；独立数据/端口/进程；中文UI语言"
+      ],
+      "steps": [
+        "原代码运行新增localized回归，确认失败",
+        "修复后运行三文件桌面回归；真实启动中文全流重定向调用；核对地址及服务PID"
+      ],
+      "expected": [
+        "8项通过；Caddy 4551仅降级网关；不吞其他错误；本机服务保留且LAN不误报"
+      ],
+      "context": {
+        "role": "single local owner / synthetic test owner",
+        "data": "isolated temporary database, build and runtime manifest",
+        "network": "real loopback HTTP; no model calls or external writes",
+        "viewport": "Windows PowerShell 5.1; native window pending",
+        "input": "CLI regression; actual shortcut click pending",
+        "lifecycle": "localized startup, reuse, blocked gateway; actual window retry pending"
+      },
+      "risk": "high",
+      "status": "passed",
+      "evidence_ids": [
+        "EV-053",
+        "EV-054"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "reason": "证据限实际本机服务和脚本行为；不代表快捷方式开窗。"
+    },
+    {
+      "id": "SCN-056",
+      "title": "正式桌面快捷方式实际开窗及重复点击",
+      "page_ids": [
+        "PAGE-028",
+        "PAGE-029"
+      ],
+      "instance_ids": [
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "preconditions": [
+        "本机服务已就绪；正式数据已私有备份；不更改系统策略"
+      ],
+      "steps": [
+        "双击桌面Xinxin快捷方式",
+        "确认出现可用的本机应用窗口",
+        "重复点击激活同一应用；关闭重开"
+      ],
+      "expected": [
+        "不再因可选网关受阻而进入错误窗口；可用且不重复开窗"
+      ],
+      "context": {
+        "role": "single local owner / synthetic test owner",
+        "data": "isolated temporary database, build and runtime manifest",
+        "network": "real loopback HTTP; no model calls or external writes",
+        "viewport": "Windows PowerShell 5.1; native window pending",
+        "input": "CLI regression; actual shortcut click pending",
+        "lifecycle": "localized startup, reuse, blocked gateway; actual window retry pending"
+      },
+      "risk": "high",
+      "status": "blocked",
+      "evidence_ids": [
+        "EV-055",
+        "EV-056"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "reason": "直接执行快捷方式被自动审批策略阻止；已请求主人重新双击确认，未收到结果；不宣称完成开窗验收。"
     }
   ],
   "evidence": [
@@ -5977,6 +6064,51 @@
       "baseline_ref": "2a1fdf602091f04d481c2f51ebdd186e65fce2dc",
       "summary": "新私有备份后确认0活动任务，默认Local受管启用最终修复；8010/5180 build匹配源码，HTML及入口资产逐字节匹配dist，12关键表逐行摘要不变，quick_check ok。Caddy仍4551，LAN地址为空。未推送。",
       "review_key": "owner-activation-complete"
+    },
+    {
+      "id": "EV-053",
+      "kind": "runtime",
+      "locator": ".runtime/desktop.log; .runtime/desktop-error.html; .qa-data/desktop-localized-policy-probe.ps1",
+      "summary": "10:13至10:16桌面启动三次失败，中文InvalidOperationException丢失原生4551错误码；原helper只匹配英文完整消息。真实只读诊断确认8010/5180健康、8080无网关。新中文回归在旧helper上失败；两个UI语言的Caddy version启动均被系统4551阻止。",
+      "observed_at": "2026-10-24T02:26:47.240621+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "ev-053-desktop-localized"
+    },
+    {
+      "id": "EV-054",
+      "kind": "test",
+      "locator": "backend/.qa-data/desktop-startup-20261024.{log,xml}; backend/.qa-data/desktop-startup-native-20261024.log",
+      "summary": "本次桌面三文件8 passed、0 skipped，69.11s。覆盖中英/混合语言、嵌套异常及非4551不吞错；中文UI和与桌面相同的全流重定向运行隔离真实本机服务，Caddy被阻止后回环地址可用、LAN为空、既有前后端PID不变。另涵盖构建/进程/数据归属、活动任务和崩溃恢复保护。",
+      "observed_at": "2026-10-24T02:26:47.240621+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "ev-054-desktop-localized"
+    },
+    {
+      "id": "EV-055",
+      "kind": "runtime",
+      "locator": "backend/.qa-data/desktop-launch-backup-20261024/; backend/.qa-data/desktop-launch-20261024-{baseline,enabled}.private.json",
+      "summary": "本次追加完整私有备份并验证归档，正式库quick_check通过、0活动任务；前后端指纹、HTML和资源匹配。修复及隔离测试前后12关键表摘要一致。未通过此证据宣称桌面窗口实际打开。",
+      "observed_at": "2026-10-24T02:26:47.240621+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "ev-055-desktop-localized"
+    },
+    {
+      "id": "EV-056",
+      "kind": "runtime",
+      "locator": "current thread: rejected Start-Process C:/Users/qing/Desktop/Xinxin.lnk; pending user shortcut verification",
+      "summary": "自动审批拒绝直接执行桌面快捷方式，返回blocked by policy；未换方式重试。已向主人询问重新双击后的结果，尚未得到答复。实际桌面开窗、重复点击、关闭重开保留blocked，不拿脚本和健康检查替代。",
+      "observed_at": "2026-10-24T02:26:47.240621+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "ev-056-desktop-localized"
+    },
+    {
+      "id": "EV-057",
+      "kind": "source",
+      "locator": "docs/ui-audit-project-2026-10-23/code-review.md; independent Standards and Spec messages",
+      "observed_at": "2026-10-24T02:29:22.655213+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "desktop-localized-independent-review",
+      "summary": "固定3b1d3e3至71e46ce独立双轴：Standards硬违规0/Fowler0，Spec源码确认缺陷0/范围扩张0；Spec独立真实PS5.1合成25项正反例通过。该轴提出实际开窗待核验及README/报告待补，文档已补、SCN-056仍blocked。"
     }
   ],
   "checks": [
@@ -31981,6 +32113,44 @@
         "FND-011"
       ],
       "reason": ""
+    },
+    {
+      "id": "CHK-2047",
+      "scope": "project",
+      "target_id": "PRJ-001",
+      "dimension": "reproducibility",
+      "question": "中英及混合语言4551能否在桌面相同调用方式中正确降级且保留本机服务？",
+      "status": "passed",
+      "evidence_ids": [
+        "EV-053",
+        "EV-054"
+      ],
+      "scenario_ids": [
+        "SCN-055"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "reason": "真实中文UI、独立服务及全流重定向通过；其他错误不降级。"
+    },
+    {
+      "id": "CHK-2048",
+      "scope": "project",
+      "target_id": "PRJ-001",
+      "dimension": "reproducibility",
+      "question": "正式桌面快捷方式是否实际打开可用窗口且支持重复点击？",
+      "status": "blocked",
+      "evidence_ids": [
+        "EV-055",
+        "EV-056"
+      ],
+      "scenario_ids": [
+        "SCN-056"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "reason": "自动审批阻止直接执行快捷方式，主人实际结果待确认。"
     }
   ],
   "findings": [
@@ -33367,6 +33537,66 @@
         "EV-046",
         "EV-042",
         "EV-051"
+      ]
+    },
+    {
+      "id": "FND-026",
+      "title": "中文桌面启动未识别可选网关4551，导致本机软件被阻断",
+      "category": "behavior / localized startup",
+      "severity": "P1",
+      "confidence": "confirmed",
+      "status": "fixed_unverified",
+      "owner": "Codex / desktop",
+      "page_ids": [
+        "PAGE-028",
+        "PAGE-029"
+      ],
+      "instance_ids": [
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "definition_ids": [
+        "DEF-123",
+        "DEF-124",
+        "DEF-125",
+        "DEF-126",
+        "DEF-127"
+      ],
+      "check_ids": [
+        "CHK-2047",
+        "CHK-2048"
+      ],
+      "scenario_ids": [
+        "SCN-055",
+        "SCN-056"
+      ],
+      "evidence_ids": [
+        "EV-053"
+      ],
+      "actual": "桌面双击收到中文应用控制异常，helper只匹配英文，因此本机前后端健康仍展示启动失败。",
+      "expected": "已就绪本机服务可供桌面使用，可选网关4551单独降级。",
+      "impact": "用户点击桌面软件无法进入，反复启动只出现错误页。",
+      "root_cause": "终端和Explorer语言不同，旧测试仅包含英文异常；PS5.1 Start-Process转换丢失原生错误码。",
+      "root_cause_confidence": "confirmed",
+      "remediation": "保留4551错误码识别，严格匹配4种中英/混合语言完整消息；保持其他错误失败及系统策略不变。",
+      "regression_test": "backend/tests/test_desktop_{ownership,updates,native_output}.py；真实快捷方式结果待确认。",
+      "reproduction": {
+        "preconditions": [
+          "Windows中文版从桌面启动；Caddy被系统4551阻止；回环服务健康"
+        ],
+        "steps": [
+          "双击Xinxin快捷方式",
+          "观察中文错误页和desktop.log"
+        ]
+      },
+      "resolution_evidence_ids": [
+        "EV-054",
+        "EV-055",
+        "EV-056",
+        "EV-057"
       ]
     }
   ],
@@ -38979,16 +39209,22 @@
         "desktop/assets/starting.html: starting.html; 可观察区域 品牌和启动阶段",
         "归属接口：静态starting.html，桌面启动器持有服务阶段"
       ],
-      "finding_ids": [],
+      "finding_ids": [
+        "FND-026"
+      ],
       "task_ids": [
-        "TASK-028"
+        "TASK-028",
+        "TASK-047",
+        "TASK-048"
       ],
       "acceptance_criteria": [
         "桌面启动窗口 / 品牌和启动阶段保留现有入口/语义并采用全站主题",
         "源码核对与实际交互证据分开；缺少运行证据的分支不计通过"
       ],
       "regression_scenario_ids": [
-        "SCN-028"
+        "SCN-028",
+        "SCN-055",
+        "SCN-056"
       ]
     },
     {
@@ -39000,16 +39236,22 @@
         "desktop/assets/starting.html: starting.html; 可观察区域 等待时间与关闭说明",
         "归属接口：静态starting.html，桌面启动器持有服务阶段"
       ],
-      "finding_ids": [],
+      "finding_ids": [
+        "FND-026"
+      ],
       "task_ids": [
-        "TASK-028"
+        "TASK-028",
+        "TASK-047",
+        "TASK-048"
       ],
       "acceptance_criteria": [
         "桌面启动窗口 / 等待时间与关闭说明保留现有入口/语义并采用全站主题",
         "源码核对与实际交互证据分开；缺少运行证据的分支不计通过"
       ],
       "regression_scenario_ids": [
-        "SCN-028"
+        "SCN-028",
+        "SCN-055",
+        "SCN-056"
       ]
     },
     {
@@ -39021,16 +39263,22 @@
         "desktop/assets/error-template.html: error-template.html; 可观察区域 失败标题和原因",
         "归属接口：静态error-template.html，脱敏日志与恢复说明"
       ],
-      "finding_ids": [],
+      "finding_ids": [
+        "FND-026"
+      ],
       "task_ids": [
-        "TASK-029"
+        "TASK-029",
+        "TASK-047",
+        "TASK-048"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 失败标题和原因保留现有入口/语义并采用全站主题",
         "源码核对与实际交互证据分开；缺少运行证据的分支不计通过"
       ],
       "regression_scenario_ids": [
-        "SCN-029"
+        "SCN-029",
+        "SCN-055",
+        "SCN-056"
       ]
     },
     {
@@ -39042,16 +39290,22 @@
         "desktop/assets/error-template.html: error-template.html; 可观察区域 脱敏日志及路径",
         "归属接口：静态error-template.html，脱敏日志与恢复说明"
       ],
-      "finding_ids": [],
+      "finding_ids": [
+        "FND-026"
+      ],
       "task_ids": [
-        "TASK-029"
+        "TASK-029",
+        "TASK-047",
+        "TASK-048"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 脱敏日志及路径保留现有入口/语义并采用全站主题",
         "源码核对与实际交互证据分开；缺少运行证据的分支不计通过"
       ],
       "regression_scenario_ids": [
-        "SCN-029"
+        "SCN-029",
+        "SCN-055",
+        "SCN-056"
       ]
     },
     {
@@ -39063,16 +39317,22 @@
         "desktop/assets/error-template.html: error-template.html; 可观察区域 恢复操作指引",
         "归属接口：静态error-template.html，脱敏日志与恢复说明"
       ],
-      "finding_ids": [],
+      "finding_ids": [
+        "FND-026"
+      ],
       "task_ids": [
-        "TASK-029"
+        "TASK-029",
+        "TASK-047",
+        "TASK-048"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 恢复操作指引保留现有入口/语义并采用全站主题",
         "源码核对与实际交互证据分开；缺少运行证据的分支不计通过"
       ],
       "regression_scenario_ids": [
-        "SCN-029"
+        "SCN-029",
+        "SCN-055",
+        "SCN-056"
       ]
     }
   ],
@@ -40962,6 +41222,93 @@
         "EV-046",
         "EV-042"
       ]
+    },
+    {
+      "id": "TASK-047",
+      "title": "修复中英文桌面应用控制错误识别并回归真实本机启动",
+      "phase": 3,
+      "owner": "Codex / desktop",
+      "scope_ids": [
+        "PRJ-001",
+        "PAGE-028",
+        "PAGE-029",
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "depends_on": [],
+      "change_locations": [
+        "desktop/Local-ServiceState.ps1",
+        "backend/tests/test_desktop_ownership.py",
+        "backend/tests/test_desktop_updates.py"
+      ],
+      "implementation_steps": [
+        "严格识别4551及中英混合完整消息",
+        "新增中文真实调用回归，保留其他失败及数据/任务保护"
+      ],
+      "acceptance_criteria": [
+        "8项桌面回归通过；隔离实际服务不因可选网关4551退出；LAN为空"
+      ],
+      "verification_scenario_ids": [
+        "SCN-055"
+      ],
+      "rollback": "仅反向源码补丁；正式数据不迁移。",
+      "risk": "normal",
+      "status": "verified",
+      "evidence_ids": [
+        "EV-053",
+        "EV-054",
+        "EV-055"
+      ]
+    },
+    {
+      "id": "TASK-048",
+      "title": "确认正式桌面快捷方式实际开窗和重复点击",
+      "phase": 4,
+      "owner": "Codex / owner device",
+      "scope_ids": [
+        "PRJ-001",
+        "PAGE-028",
+        "PAGE-029",
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "finding_ids": [
+        "FND-026"
+      ],
+      "depends_on": [
+        "TASK-047"
+      ],
+      "change_locations": [
+        "desktop/Xinxin-Desktop.ps1",
+        ".runtime/desktop.log",
+        "desktop Xinxin shortcut"
+      ],
+      "implementation_steps": [
+        "在允许的操作流程实际双击",
+        "核对应用入口及重复点击/关闭重开结果，保留数据"
+      ],
+      "acceptance_criteria": [
+        "真实窗口可用并激活单实例，有实际证据后再关闭FND-026"
+      ],
+      "verification_scenario_ids": [
+        "SCN-056"
+      ],
+      "rollback": "不修改快捷方式目标或正式数据；保留已备份数据和诊断日志。",
+      "risk": "normal",
+      "status": "blocked",
+      "evidence_ids": [
+        "EV-055",
+        "EV-056"
+      ]
     }
   ],
   "release_gates": [
@@ -40969,7 +41316,7 @@
       "id": "GATE-001",
       "name": "核心旅程、异常恢复及关键可访问性已验证",
       "required": true,
-      "status": "passed",
+      "status": "blocked",
       "evidence_ids": [
         "EV-029",
         "EV-030",
@@ -40980,9 +41327,12 @@
         "EV-046",
         "EV-047",
         "EV-051",
-        "EV-052"
+        "EV-052",
+        "EV-054",
+        "EV-055",
+        "EV-056"
       ],
-      "reason": "限已声明的源码/隔离运行支持范围；其他门槛和未验证场景不因此消失。"
+      "reason": "中文可选网关降级已通过真实本机服务回归；实际桌面快捷方式开窗被自动审批策略阻止、待主人确认。Caddy真实网关及其余既有未验证项仍保留。"
     },
     {
       "id": "GATE-002",
@@ -41089,9 +41439,12 @@
         "EV-046",
         "EV-047",
         "EV-051",
-        "EV-052"
+        "EV-052",
+        "EV-054",
+        "EV-055",
+        "EV-056"
       ],
-      "reason": "最终修复已在本机受管启用并验证数据保全；真实Caddy上传与自定义上游仍被4551阻止，发布门槛未满足。"
+      "reason": "中文可选网关降级已通过真实本机服务回归；实际桌面快捷方式开窗被自动审批策略阻止、待主人确认。Caddy真实网关及其余既有未验证项仍保留。"
     },
     {
       "id": "GATE-008",
@@ -41136,17 +41489,20 @@
     "completed_batches": [
       "最终完整后端520通过、1项原生Caddy4551；前端78单元/类型构建、完整浏览器143与生产2通过。",
       "固定头独立双轴源码确认项关闭；所有中间失败和边界补丁记录保留。",
-      "新私有备份后受管启用，12关键表不变；尚未合并或推送。"
+      "新私有备份后受管启用，12关键表不变；尚未合并或推送。",
+      "桌面中文4551根因已修复，新增失败复现及8项回归；正式数据12表一致，未推送。"
     ],
     "next_actions": [
+      "确认主人重新双击桌面Xinxin的结果，实际开窗/重复点击/关闭重开后更新SCN-056及FND-026。",
       "通过系统允许流程恢复Caddy后，真实验证256MiB/超限/清理及自定义上游。",
       "按台账补实体手机/读屏、真实外部交付及长期使用证据；不擅增模型预算。",
       "所有必要门槛满足后复核数据和远端更新，再整合普通推送。"
     ],
     "unresolved_access": [
       "Windows应用控制4551拒绝Caddy。",
-      "未连接实体设备/读屏；不增加已耗尽的模型调用，不执行真实邮件/SSH。"
+      "未连接实体设备/读屏；不增加已耗尽的模型调用，不执行真实邮件/SSH。",
+      "自动审批阻止直接执行桌面快捷方式；真实开窗待主人反馈，不换方式绕过。"
     ],
-    "last_updated": "2026-10-24T01:16:59.935347+00:00"
+    "last_updated": "2026-10-24T02:26:47.240621+00:00"
   }
 }

@@ -1,12 +1,44 @@
 {
   "schema_valid": true,
-  "plan_complete": true,
-  "audit_coverage_closed": false,
-  "production_gates_satisfied": false,
   "errors": [],
   "warnings": [],
-  "source_ref": "2a1fdf602091f04d481c2f51ebdd186e65fce2dc",
-  "plan_exit": 0,
-  "complete_exit": 2,
-  "ready_exit": 2
+  "counts": {
+    "pages_in_scope": 29,
+    "pages_excluded": 0,
+    "definitions": 132,
+    "instances_in_scope": 136,
+    "checks": {
+      "blocked": 7,
+      "passed": 1219
+    },
+    "scenarios": {
+      "blocked": 5,
+      "passed": 51
+    },
+    "findings": {
+      "P1": 9,
+      "P2": 17
+    },
+    "component_plans": 136,
+    "tasks": 48
+  },
+  "gaps": {
+    "missing_dimensions": [],
+    "pages_without_instances": [],
+    "pages_without_scenarios": [],
+    "instances_without_scenarios": [],
+    "high_risk_instances_without_high_risk_scenarios": [],
+    "definitions_without_blueprints": [],
+    "instances_without_plans": [],
+    "findings_without_tasks": []
+  },
+  "critical_unresolved": [
+    "FND-009",
+    "FND-021",
+    "FND-026"
+  ],
+  "audit_coverage_closed": false,
+  "plan_complete": true,
+  "production_gates_satisfied": false,
+  "disclaimer": "Mechanical validation of declared scope and records only; no application execution or security certification."
 }
