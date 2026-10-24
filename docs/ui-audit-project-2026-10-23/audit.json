@@ -9,7 +9,7 @@
     "access_mode": "source_runtime",
     "baseline": {
       "source_ref": "71e46ce",
-      "runtime_ref": "Desktop localized startup: 8 real Windows regressions passed; previous full-suite source 2a1fdf6 unchanged outside desktop/tests; actual shortcut window blocked by automatic approval",
+      "runtime_ref": "Desktop localized startup: 8 Windows regressions passed; owner confirms actual desktop opens; repeat/reopen pending; Caddy blocked; no push",
       "observed_at": "2026-10-24T02:26:47.240621+00:00"
     },
     "inventory_status": "reconciled",
@@ -5568,7 +5568,7 @@
     },
     {
       "id": "SCN-056",
-      "title": "正式桌面快捷方式实际开窗及重复点击",
+      "title": "正式桌面应用重复点击及关闭重开",
       "page_ids": [
         "PAGE-028",
         "PAGE-029"
@@ -5584,12 +5584,11 @@
         "本机服务已就绪；正式数据已私有备份；不更改系统策略"
       ],
       "steps": [
-        "双击桌面Xinxin快捷方式",
-        "确认出现可用的本机应用窗口",
-        "重复点击激活同一应用；关闭重开"
+        "重复点击快捷方式确认激活同一应用",
+        "关闭应用窗口，再次打开"
       ],
       "expected": [
-        "不再因可选网关受阻而进入错误窗口；可用且不重复开窗"
+        "不重复开窗，关闭后仍可重新打开"
       ],
       "context": {
         "role": "single local owner / synthetic test owner",
@@ -5603,12 +5602,54 @@
       "status": "blocked",
       "evidence_ids": [
         "EV-055",
-        "EV-056"
+        "EV-056",
+        "EV-058"
+      ],
+      "finding_ids": [],
+      "reason": "实际首次开窗已由主人确认，记录在SCN-057；重复点击和关闭重开没有反馈，保持待验证。"
+    },
+    {
+      "id": "SCN-057",
+      "title": "主人确认正式桌面快捷方式已正常打开",
+      "page_ids": [
+        "PAGE-028",
+        "PAGE-029"
+      ],
+      "instance_ids": [
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "preconditions": [
+        "本机服务已就绪；正式数据已私有备份；不更改系统策略"
+      ],
+      "steps": [
+        "收到主人对重新双击桌面Xinxin的明确反馈"
+      ],
+      "expected": [
+        "桌面应用能正常打开"
+      ],
+      "context": {
+        "role": "single local owner / synthetic test owner",
+        "data": "isolated temporary database, build and runtime manifest",
+        "network": "real loopback HTTP; no model calls or external writes",
+        "viewport": "Windows PowerShell 5.1; native window pending",
+        "input": "owner-reported manual shortcut launch",
+        "lifecycle": "localized startup, reuse, blocked gateway; actual window retry pending"
+      },
+      "risk": "high",
+      "status": "passed",
+      "evidence_ids": [
+        "EV-054",
+        "EV-055",
+        "EV-058"
       ],
       "finding_ids": [
         "FND-026"
       ],
-      "reason": "直接执行快捷方式被自动审批策略阻止；已请求主人重新双击确认，未收到结果；不宣称完成开窗验收。"
+      "reason": "主人明确报告已能正常打开；只确认这次开窗，不认证其他窗口生命周期。"
     }
   ],
   "evidence": [
@@ -6109,6 +6150,15 @@
       "baseline_ref": "71e46ce",
       "review_key": "desktop-localized-independent-review",
       "summary": "固定3b1d3e3至71e46ce独立双轴：Standards硬违规0/Fowler0，Spec源码确认缺陷0/范围扩张0；Spec独立真实PS5.1合成25项正反例通过。该轴提出实际开窗待核验及README/报告待补，文档已补、SCN-056仍blocked。"
+    },
+    {
+      "id": "EV-058",
+      "kind": "runtime",
+      "locator": "current thread: owner reply to desktop shortcut verification",
+      "observed_at": "2026-10-24T02:32:58.136181+00:00",
+      "baseline_ref": "71e46ce",
+      "review_key": "owner-reported-desktop-opening",
+      "summary": "主人回应重新双击桌面Xinxin后的实际表现：“已能正常打开”。此证据为主人手工确认，不是自动开窗日志/截图；不扩展到重复点击激活、关闭重开或Caddy网关。"
     }
   ],
   "checks": [
@@ -32138,19 +32188,36 @@
       "scope": "project",
       "target_id": "PRJ-001",
       "dimension": "reproducibility",
-      "question": "正式桌面快捷方式是否实际打开可用窗口且支持重复点击？",
+      "question": "正式桌面应用是否支持重复点击激活和关闭重开？",
       "status": "blocked",
       "evidence_ids": [
         "EV-055",
-        "EV-056"
+        "EV-056",
+        "EV-058"
       ],
       "scenario_ids": [
         "SCN-056"
       ],
+      "finding_ids": [],
+      "reason": "首次实际开窗已确认；重复点击和关闭重开不在此次反馈范围。"
+    },
+    {
+      "id": "CHK-2049",
+      "scope": "project",
+      "target_id": "PRJ-001",
+      "dimension": "reproducibility",
+      "question": "主人是否确认桌面快捷方式已正常打开？",
+      "status": "passed",
+      "evidence_ids": [
+        "EV-058"
+      ],
+      "scenario_ids": [
+        "SCN-057"
+      ],
       "finding_ids": [
         "FND-026"
       ],
-      "reason": "自动审批阻止直接执行快捷方式，主人实际结果待确认。"
+      "reason": "主人手工确认，非自动开窗验收。"
     }
   ],
   "findings": [
@@ -33545,7 +33612,7 @@
       "category": "behavior / localized startup",
       "severity": "P1",
       "confidence": "confirmed",
-      "status": "fixed_unverified",
+      "status": "resolved",
       "owner": "Codex / desktop",
       "page_ids": [
         "PAGE-028",
@@ -33567,11 +33634,11 @@
       ],
       "check_ids": [
         "CHK-2047",
-        "CHK-2048"
+        "CHK-2049"
       ],
       "scenario_ids": [
         "SCN-055",
-        "SCN-056"
+        "SCN-057"
       ],
       "evidence_ids": [
         "EV-053"
@@ -33582,7 +33649,7 @@
       "root_cause": "终端和Explorer语言不同，旧测试仅包含英文异常；PS5.1 Start-Process转换丢失原生错误码。",
       "root_cause_confidence": "confirmed",
       "remediation": "保留4551错误码识别，严格匹配4种中英/混合语言完整消息；保持其他错误失败及系统策略不变。",
-      "regression_test": "backend/tests/test_desktop_{ownership,updates,native_output}.py；真实快捷方式结果待确认。",
+      "regression_test": "8项桌面回归通过；主人确认实际桌面已正常打开。重复点击/关闭重开另列SCN-056待验证。",
       "reproduction": {
         "preconditions": [
           "Windows中文版从桌面启动；Caddy被系统4551阻止；回环服务健康"
@@ -33596,7 +33663,8 @@
         "EV-054",
         "EV-055",
         "EV-056",
-        "EV-057"
+        "EV-057",
+        "EV-058"
       ]
     }
   ],
@@ -39215,7 +39283,8 @@
       "task_ids": [
         "TASK-028",
         "TASK-047",
-        "TASK-048"
+        "TASK-048",
+        "TASK-049"
       ],
       "acceptance_criteria": [
         "桌面启动窗口 / 品牌和启动阶段保留现有入口/语义并采用全站主题",
@@ -39224,7 +39293,8 @@
       "regression_scenario_ids": [
         "SCN-028",
         "SCN-055",
-        "SCN-056"
+        "SCN-056",
+        "SCN-057"
       ]
     },
     {
@@ -39242,7 +39312,8 @@
       "task_ids": [
         "TASK-028",
         "TASK-047",
-        "TASK-048"
+        "TASK-048",
+        "TASK-049"
       ],
       "acceptance_criteria": [
         "桌面启动窗口 / 等待时间与关闭说明保留现有入口/语义并采用全站主题",
@@ -39251,7 +39322,8 @@
       "regression_scenario_ids": [
         "SCN-028",
         "SCN-055",
-        "SCN-056"
+        "SCN-056",
+        "SCN-057"
       ]
     },
     {
@@ -39269,7 +39341,8 @@
       "task_ids": [
         "TASK-029",
         "TASK-047",
-        "TASK-048"
+        "TASK-048",
+        "TASK-049"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 失败标题和原因保留现有入口/语义并采用全站主题",
@@ -39278,7 +39351,8 @@
       "regression_scenario_ids": [
         "SCN-029",
         "SCN-055",
-        "SCN-056"
+        "SCN-056",
+        "SCN-057"
       ]
     },
     {
@@ -39296,7 +39370,8 @@
       "task_ids": [
         "TASK-029",
         "TASK-047",
-        "TASK-048"
+        "TASK-048",
+        "TASK-049"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 脱敏日志及路径保留现有入口/语义并采用全站主题",
@@ -39305,7 +39380,8 @@
       "regression_scenario_ids": [
         "SCN-029",
         "SCN-055",
-        "SCN-056"
+        "SCN-056",
+        "SCN-057"
       ]
     },
     {
@@ -39323,7 +39399,8 @@
       "task_ids": [
         "TASK-029",
         "TASK-047",
-        "TASK-048"
+        "TASK-048",
+        "TASK-049"
       ],
       "acceptance_criteria": [
         "桌面错误窗口 / 恢复操作指引保留现有入口/语义并采用全站主题",
@@ -39332,7 +39409,8 @@
       "regression_scenario_ids": [
         "SCN-029",
         "SCN-055",
-        "SCN-056"
+        "SCN-056",
+        "SCN-057"
       ]
     }
   ],
@@ -41268,7 +41346,7 @@
     },
     {
       "id": "TASK-048",
-      "title": "确认正式桌面快捷方式实际开窗和重复点击",
+      "title": "确认正式桌面快捷方式实际开窗",
       "phase": 4,
       "owner": "Codex / owner device",
       "scope_ids": [
@@ -41293,11 +41371,52 @@
         "desktop Xinxin shortcut"
       ],
       "implementation_steps": [
-        "在允许的操作流程实际双击",
-        "核对应用入口及重复点击/关闭重开结果，保留数据"
+        "取得主人重新双击桌面应用的实际结果"
       ],
       "acceptance_criteria": [
-        "真实窗口可用并激活单实例，有实际证据后再关闭FND-026"
+        "主人确认已正常打开"
+      ],
+      "verification_scenario_ids": [
+        "SCN-057"
+      ],
+      "rollback": "不修改快捷方式目标或正式数据；保留已备份数据和诊断日志。",
+      "risk": "normal",
+      "status": "verified",
+      "evidence_ids": [
+        "EV-055",
+        "EV-056",
+        "EV-058"
+      ]
+    },
+    {
+      "id": "TASK-049",
+      "title": "核验桌面重复点击激活与关闭重开",
+      "phase": 4,
+      "owner": "Codex / owner device",
+      "scope_ids": [
+        "PRJ-001",
+        "PAGE-028",
+        "PAGE-029",
+        "CMP-127",
+        "CMP-128",
+        "CMP-129",
+        "CMP-130",
+        "CMP-131"
+      ],
+      "finding_ids": [],
+      "depends_on": [
+        "TASK-048"
+      ],
+      "change_locations": [
+        "desktop/Xinxin-Desktop.ps1",
+        ".runtime/desktop.log",
+        "desktop Xinxin shortcut"
+      ],
+      "implementation_steps": [
+        "在系统允许流程核验重复点击及关闭重开，不关闭或绕过安全策略"
+      ],
+      "acceptance_criteria": [
+        "确认同一应用激活及关闭后可重开，有独立实际证据"
       ],
       "verification_scenario_ids": [
         "SCN-056"
@@ -41307,7 +41426,8 @@
       "status": "blocked",
       "evidence_ids": [
         "EV-055",
-        "EV-056"
+        "EV-056",
+        "EV-058"
       ]
     }
   ],
@@ -41316,7 +41436,7 @@
       "id": "GATE-001",
       "name": "核心旅程、异常恢复及关键可访问性已验证",
       "required": true,
-      "status": "blocked",
+      "status": "passed",
       "evidence_ids": [
         "EV-029",
         "EV-030",
@@ -41330,9 +41450,10 @@
         "EV-052",
         "EV-054",
         "EV-055",
-        "EV-056"
+        "EV-056",
+        "EV-058"
       ],
-      "reason": "中文可选网关降级已通过真实本机服务回归；实际桌面快捷方式开窗被自动审批策略阻止、待主人确认。Caddy真实网关及其余既有未验证项仍保留。"
+      "reason": "已声明核心旅程回归及主人报告的桌面实际开窗通过；重复点击/关闭重开及其他既有门槛仍独立保留，不扩展本条范围。"
     },
     {
       "id": "GATE-002",
@@ -41442,9 +41563,10 @@
         "EV-052",
         "EV-054",
         "EV-055",
-        "EV-056"
+        "EV-056",
+        "EV-058"
       ],
-      "reason": "中文可选网关降级已通过真实本机服务回归；实际桌面快捷方式开窗被自动审批策略阻止、待主人确认。Caddy真实网关及其余既有未验证项仍保留。"
+      "reason": "主人已确认桌面正常打开；重复点击/关闭重开及真实Caddy等既有发布条件仍未验收。"
     },
     {
       "id": "GATE-008",
@@ -41490,10 +41612,11 @@
       "最终完整后端520通过、1项原生Caddy4551；前端78单元/类型构建、完整浏览器143与生产2通过。",
       "固定头独立双轴源码确认项关闭；所有中间失败和边界补丁记录保留。",
       "新私有备份后受管启用，12关键表不变；尚未合并或推送。",
-      "桌面中文4551根因已修复，新增失败复现及8项回归；正式数据12表一致，未推送。"
+      "桌面中文4551根因已修复，新增失败复现及8项回归；正式数据12表一致，未推送。",
+      "主人手工确认桌面已正常打开，FND-026关闭；不扩展为重复点击/关闭重开通过。"
     ],
     "next_actions": [
-      "确认主人重新双击桌面Xinxin的结果，实际开窗/重复点击/关闭重开后更新SCN-056及FND-026。",
+      "按允许流程另验重复点击/关闭重开（SCN-056/TASK-049）；首次开窗已在SCN-057通过。",
       "通过系统允许流程恢复Caddy后，真实验证256MiB/超限/清理及自定义上游。",
       "按台账补实体手机/读屏、真实外部交付及长期使用证据；不擅增模型预算。",
       "所有必要门槛满足后复核数据和远端更新，再整合普通推送。"
@@ -41501,8 +41624,8 @@
     "unresolved_access": [
       "Windows应用控制4551拒绝Caddy。",
       "未连接实体设备/读屏；不增加已耗尽的模型调用，不执行真实邮件/SSH。",
-      "自动审批阻止直接执行桌面快捷方式；真实开窗待主人反馈，不换方式绕过。"
+      "自动审批曾拒绝代为执行桌面快捷方式；主人已确认正常打开，重复点击/关闭重开尚无实际证据。"
     ],
-    "last_updated": "2026-10-24T02:26:47.240621+00:00"
+    "last_updated": "2026-10-24T02:32:58.136181+00:00"
   }
 }

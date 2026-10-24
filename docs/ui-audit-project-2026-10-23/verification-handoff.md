@@ -2,7 +2,7 @@
 
 前轮完整回归代码头 `2a1fdf6`；当前桌面增量头见下段，整体状态见 [主报告](review.md)。以下“通过”只对应实际执行命令及其条件。
 
-10月24日桌面增量头`71e46ce`：中英文/混合语言应用控制4551识别已修复。`python -m pytest tests/test_desktop_updates.py tests/test_desktop_ownership.py tests/test_desktop_native_output.py -q --disable-warnings`：8 passed、0 skipped，包含中文UI/全流重定向下的真实隔离服务启动。自动审批拒绝直接执行桌面快捷方式，未换方式重试；先确认主人重新双击的实际开窗、重复点击及关闭重开，再更新SCN-056/FND-026/TASK-048和核心入口门槛。前轮全量结果不能代替这项实际窗口验收。[增量报告](../desktop-startup-2026-10-24.md)。
+10月24日桌面增量头`71e46ce`：中英文/混合语言应用控制4551识别已修复。`python -m pytest tests/test_desktop_updates.py tests/test_desktop_ownership.py tests/test_desktop_native_output.py -q --disable-warnings`：8 passed、0 skipped，包含中文UI/全流重定向下的真实隔离服务启动。自动审批曾拒绝代为执行快捷方式，未换方式重试；随后主人明确报告桌面已能正常打开（EV-058），SCN-057/TASK-048通过、FND-026关闭。后续仅需另验重复点击激活及关闭重开（SCN-056/TASK-049）；网关等既有门槛保持。证据类型是主人手工确认，前轮全量结果不代替实际开窗。[增量报告](../desktop-startup-2026-10-24.md)。
 
 | 位置 | 命令 | 当前结果 / 证据 |
 | --- | --- | --- |

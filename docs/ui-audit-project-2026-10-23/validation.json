@@ -9,18 +9,18 @@
     "instances_in_scope": 136,
     "checks": {
       "blocked": 7,
-      "passed": 1219
+      "passed": 1220
     },
     "scenarios": {
       "blocked": 5,
-      "passed": 51
+      "passed": 52
     },
     "findings": {
       "P1": 9,
       "P2": 17
     },
     "component_plans": 136,
-    "tasks": 48
+    "tasks": 49
   },
   "gaps": {
     "missing_dimensions": [],
@@ -34,8 +34,7 @@
   },
   "critical_unresolved": [
     "FND-009",
-    "FND-021",
-    "FND-026"
+    "FND-021"
   ],
   "audit_coverage_closed": false,
   "plan_complete": true,
