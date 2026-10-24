@@ -47,6 +47,14 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
     command = [POWERSHELL, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "Start-Xinxin-Local.ps1"),
                "-NoBrowser", "-NoGateway", "-BackendPort", str(backend_port), "-FrontendPort", str(frontend_port),
                "-RuntimeDirectory", str(runtime), "-FrontendBuildDirectory", str(build), "-DataDirectory", str(data)]
+    localized_caller = tmp_path / "desktop-caller.ps1"
+    localized_log = tmp_path / "desktop-start.log"
+    localized_caller.write_text('''param([string]$Start,[string]$Runtime,[string]$Build,[string]$Data,[int]$BackendPort,[int]$FrontendPort,[int]$GatewayPort,[string]$Log)
+$ErrorActionPreference='Stop'
+[System.Threading.Thread]::CurrentThread.CurrentUICulture=[System.Globalization.CultureInfo]::GetCultureInfo('zh-CN')
+# Same all-stream redirection as Start-LocalStack, with isolated service paths.
+& $Start -NoBrowser -BackendPort $BackendPort -FrontendPort $FrontendPort -GatewayPort $GatewayPort -RuntimeDirectory $Runtime -FrontendBuildDirectory $Build -DataDirectory $Data *>> $Log
+''', encoding="utf-8-sig")
 
     def start(selected_data=None):
         # Detached Windows children can inherit capture pipes. Use files so
@@ -74,6 +82,26 @@ def test_launcher_reuses_current_build_updates_owned_services_and_preserves_acti
         assert (owner_index.read_bytes() if owner_index.exists() else None) == owner_before
         before = entries()
         assert before["backend"]["fingerprint"] and before["frontend"]["fingerprint"]
+        # Exercise the real caller language and redirection, rather than only
+        # the English exception shape produced by the test runner's locale.
+        gateway_port = free_port()
+        with (tmp_path / "localized.out").open("wb") as stdout, (tmp_path / "localized.err").open("wb") as stderr:
+            localized = subprocess.run(
+                [POWERSHELL, "-NoProfile", "-File", str(localized_caller), str(ROOT / "Start-Xinxin-Local.ps1"),
+                 str(runtime), str(build), str(data), str(backend_port), str(frontend_port), str(gateway_port), str(localized_log)],
+                cwd=ROOT, stdout=stdout, stderr=stderr, timeout=90,
+            )
+        assert localized.returncode == 0, (tmp_path / "localized.err").read_bytes()
+        localized_text = localized_log.read_text(encoding="utf-16")
+        assert "Xinxin本地版 已启动" in localized_text
+        addresses = json.loads((runtime / "addresses.json").read_text(encoding="utf-8-sig"))
+        assert addresses["local"] == f"http://127.0.0.1:{frontend_port}"
+        if "Windows 应用控制策略阻止了 Caddy" in localized_text:
+            assert addresses["lan"] == "" and "gateway" not in entries()
+        else:
+            assert "gateway" in entries(), localized_text
+        assert entries()["backend"]["id"] == before["backend"]["id"]
+        assert entries()["frontend"]["id"] == before["frontend"]["id"]
         # Legacy manifests do not have a port; the listener may be the
         # Windows venv launcher's child rather than the recorded parent PID.
         without_port = json.loads(manifest.read_text(encoding="utf-8-sig"))

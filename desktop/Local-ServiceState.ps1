@@ -30,13 +30,20 @@ function Test-XinxinManagedBuild($Entry, [string]$Fingerprint) {
 function Test-XinxinApplicationBlocked([System.Exception]$Failure) {
   # A blocked optional gateway must not prevent the loopback desktop app from
   # opening. Do not suppress port/configuration errors or change OS policy.
+  # Explorer can launch Chinese PowerShell while a terminal uses English.
+  # PowerShell localizes its wrapper separately from the native error text;
+  # accept only these exact 4551 messages, including mixed-language wrappers.
+  $blockedMessages = @(
+    'This command cannot be run due to the error: An Application Control policy has blocked this file.',
+    'This command cannot be run due to the error: 应用程序控制策略已阻止此文件。.',
+    '由于出现以下错误，无法运行此命令: An Application Control policy has blocked this file。',
+    '由于出现以下错误，无法运行此命令: 应用程序控制策略已阻止此文件。。'
+  )
   for ($depth = 0; $Failure -and $depth -lt 16; $depth++) {
     if ($Failure -is [System.ComponentModel.Win32Exception] -and $Failure.NativeErrorCode -eq 4551) { return $true }
     # Windows PowerShell 5.1 Start-Process replaces this Win32Exception with
     # an InvalidOperationException and drops NativeErrorCode/InnerException.
-    # Match only its observed full application-control message, never a generic
-    # access-denied/configuration failure.
-    if ($Failure -is [System.InvalidOperationException] -and $Failure.Message.Trim() -eq 'This command cannot be run due to the error: An Application Control policy has blocked this file.') { return $true }
+    if ($Failure -is [System.InvalidOperationException] -and $blockedMessages -ccontains $Failure.Message.Trim()) { return $true }
     $Failure = $Failure.InnerException
   }
   return $false
