@@ -65,12 +65,17 @@ def redact_text(text, forms=(), limit=None):
     # decode its final value. Never release that undecodable private tail.
     spans.extend((start, end, '"[redacted]"')
                  for start, end, complete in units if not complete)
-    quotes = [(start, end) for start, end, complete in units if complete]
-    for start, end in quotes:
+    quotes = []
+    for start, end, complete in units:
+        if not complete:
+            continue
         try:
             decoded = json.loads(text[start:end])
         except ValueError:
+            # Ordinary quoted prose may contain literal newlines or Windows
+            # paths. It must still pass the raw credential rules below.
             continue
+        quotes.append((start, end))
         # JSON escaping can hide whitespace and word boundaries from a regex.
         # Decode a complete string first, then encode its cleaned value once.
         cleaned = redact_text(decoded, forms)

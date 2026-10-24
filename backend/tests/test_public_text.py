@@ -70,3 +70,30 @@ def test_unfinished_quoted_tails_are_not_released_at_completion(text):
         stream = PublicText(redact, [])
         public = stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish()
         assert "syntheticAlpha" not in public, (split, public)
+
+
+@pytest.mark.parametrize("shape", ["valid", "invalid", "unfinished"])
+@pytest.mark.parametrize("value, private", [
+    ("prefix\nBearer syntheticAlpha", "syntheticAlpha"),
+    ("prefix\tpassword: syntheticAlpha", "syntheticAlpha"),
+    ("prefix\nsk-syntheticPrivateValue123", "sk-syntheticPrivateValue123"),
+    ("prefix\n-----BEGIN PRIVATE KEY-----\nSYNTHETIC_PRIVATE_BODY\n-----END PRIVATE KEY-----", "SYNTHETIC_PRIVATE_BODY"),
+])
+def test_each_quoted_state_still_applies_credential_rules(shape, value, private):
+    text = '"' + value + '"' if shape == "invalid" else json.dumps(value)
+    if shape == "unfinished":
+        text = text[:-1]
+    assert private not in redact(text)
+    for first in range(len(text) + 1):
+        for second in range(first, len(text) + 1):
+            stream = PublicText(redact, [])
+            public = (stream.feed(text[:first]) + stream.feed(text[first:second])
+                      + stream.feed(text[second:]) + stream.finish())
+            assert private not in public, (shape, first, second, public)
+
+
+def test_plain_quoted_windows_paths_do_not_require_json_escaping():
+    text = r'Open "C:\Users\synthetic\book.pdf" next.'
+    for split in range(len(text) + 1):
+        stream = PublicText(redact, [])
+        assert stream.feed(text[:split]) + stream.feed(text[split:]) + stream.finish() == text

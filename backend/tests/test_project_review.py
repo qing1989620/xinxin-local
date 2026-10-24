@@ -209,10 +209,14 @@ def test_raw_model_credentials_never_reach_events_results_or_checkpoints(client)
 
 
 @pytest.mark.parametrize("broken_transport", [False, True])
-def test_incomplete_json_model_tail_is_private_even_when_transport_fails(client, broken_transport):
+@pytest.mark.parametrize("text", [
+    'Safe prefix. {"output":"prefix\\nBearer syntheticAlpha',
+    'Safe prefix. "prefix\nBearer syntheticAlpha"',
+    'Safe prefix. "prefix\tpassword: syntheticAlpha"',
+])
+def test_incomplete_json_model_tail_is_private_even_when_transport_fails(client, broken_transport, text):
     manager, store = client.app.state.manager, client.app.state.store
     client.put("/api/v1/settings", json={"model_api_key": "synthetic-transport-key"})
-    text = 'Safe prefix. {"output":"prefix\\nBearer syntheticAlpha'
     packet = ("data: " + json.dumps({"choices": [{"delta": {"content": text}, "finish_reason": None}]}) + "\n\n").encode()
 
     class BrokenStream(httpx.AsyncByteStream):
